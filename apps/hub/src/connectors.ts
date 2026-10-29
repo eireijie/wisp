@@ -188,13 +188,26 @@ export class ConnectorStore {
     else this.db.prepare("DELETE FROM agent_connectors WHERE agent_id = ? AND connector_id = ?").run(agentId, connectorId);
   }
 
-  /** Connectors the agent has: given to it, or on for every agent in its workspace. */
+  /**
+   * Connectors the agent has: given to it, or on for every agent in its workspace. One on for every
+   * agent that holds secrets (values, a literal header, a sign-in) only reaches agents on its
+   * creator's own devices (a VM counts as its device), like a model connection.
+   */
   private forAgentRows(agentId: string): ConnectorRow[] {
-    return this.db
+    const rows = this.db
       .prepare(
-        "SELECT c.* FROM connectors c WHERE c.id IN (SELECT connector_id FROM agent_connectors WHERE agent_id = ?) OR (c.all_agents = 1 AND c.workspace_id = (SELECT workspace_id FROM agents WHERE id = ?)) ORDER BY c.created_at",
+        "SELECT c.*, c.id IN (SELECT connector_id FROM agent_connectors WHERE agent_id = ?) AS given FROM connectors c WHERE c.id IN (SELECT connector_id FROM agent_connectors WHERE agent_id = ?) OR (c.all_agents = 1 AND c.workspace_id = (SELECT workspace_id FROM agents WHERE id = ?)) ORDER BY c.created_at",
       )
-      .all(agentId, agentId) as ConnectorRow[];
+      .all(agentId, agentId, agentId) as (ConnectorRow & { given: number })[];
+    const deviceOwner = (this.db.prepare("SELECT n.owner_id FROM agents a JOIN nodes n ON n.id = a.node_id WHERE a.id = ?").get(agentId) as { owner_id: string | null } | undefined)?.owner_id ?? null;
+    return rows.filter((r) => r.given || !this.holdsSecrets(r) || (!!r.created_by && r.created_by === deviceOwner)).map(({ given: _given, ...r }) => r);
+  }
+
+  /** Whether a connector carries anything secret: a value, a header that isn't only `{{KEY}}`s, or a sign-in. */
+  private holdsSecrets(r: ConnectorRow): boolean {
+    if (Object.keys(JSON.parse(r.env_json)).length) return true;
+    if (Object.values(JSON.parse(r.headers_json) as Record<string, string>).some(literalHeader)) return true;
+    return !!this.db.prepare("SELECT 1 FROM connector_auth WHERE connector_id = ? AND tokens_json IS NOT NULL").get(r.id);
   }
 
   /** The agent's enabled connectors, as people see them. */
@@ -297,9 +310,9 @@ export class SkillStore {
     return r && this.view(r);
   }
 
-  /** A slug not yet used in the workspace. */
-  freeSlug(workspaceId: string, base: string): string {
-    const taken = new Set([...BUILTIN_SKILL_SLUGS, ...(this.db.prepare("SELECT slug FROM skills WHERE workspace_id = ?").all(workspaceId) as { slug: string }[]).map((r) => r.slug)]);
+  /** A slug not yet used in the workspace (nor in `reserved`, names "/" already means something else by). */
+  freeSlug(workspaceId: string, base: string, reserved: Iterable<string> = []): string {
+    const taken = new Set([...BUILTIN_SKILL_SLUGS, ...reserved, ...(this.db.prepare("SELECT slug FROM skills WHERE workspace_id = ?").all(workspaceId) as { slug: string }[]).map((r) => r.slug)]);
     let s = base;
     for (let i = 2; taken.has(s); i++) s = `${base}-${i}`;
     return s;
@@ -337,6 +350,11 @@ export class SkillStore {
     return r && this.view(r);
   }
 
+  /** The skills an agent learned. */
+  learnedBy(workspaceId: string, agentId: string): Skill[] {
+    return (this.db.prepare("SELECT * FROM skills WHERE workspace_id = ? AND source = 'learned' AND learned_by = ? ORDER BY created_at").all(workspaceId, agentId) as SkillRow[]).map((r) => this.view(r));
+  }
+
   /** Every-agent skills in the workspace. */
   allAgentsIn(workspaceId: string): Skill[] {
     return (this.db.prepare("SELECT * FROM skills WHERE workspace_id = ? AND all_agents = 1 ORDER BY name COLLATE NOCASE").all(workspaceId) as SkillRow[]).map((r) => this.view(r));
@@ -371,7 +389,7 @@ export class SkillStore {
     return [
       `## Your skills`,
       `You have these skills: step-by-step instructions for kinds of work. When a request matches one, read its SKILL.md first (memory_read) and follow it.`,
-      ...skills.map((s) => `- ${s.name} (me/skills/${s.slug}/SKILL.md): ${s.description}`),
+      ...skills.map((s) => `- ${oneLine(s.name)} (me/skills/${s.slug}/SKILL.md): ${oneLine(s.description)}`),
       opts.learn ? `\n${LEARN_NOTE}` : "",
     ]
       .filter(Boolean)
@@ -379,18 +397,25 @@ export class SkillStore {
   }
 }
 
+/** Text on one line, so a name or description can't add lines of its own to a prompt. */
+const oneLine = (s: string) => s.replace(/\s*[\r\n\u2028\u2029]+\s*/g, " ").trim();
+
 /** How agents learn skills on their own (when the workspace has that on). */
 export const LEARN_NOTE =
   "After you finish a task you'd likely be asked to do again (several steps, a particular site or app, the person's preferences), save how with skill_save: short numbered steps with the specifics that mattered and where to stop and ask a person. Before a task, if one of your skills fits, read it and follow it; if the steps changed, save it again under the same name. Never save one-off answers or anything secret (passwords, keys, card numbers).";
 
 /**
- * Whether text looks like it holds a secret: an API key or token (sk-…, ghp_…, github_pat_…), a
- * card number (13–19 digits that pass the Luhn check), or a "password:" line. Learned skills can't.
+ * Whether text looks like it holds a secret: an API key or token (sk-…, ghp_…, Stripe, AWS, Slack,
+ * Google, a private key, a JWT), a card number (15–19 digits that pass the Luhn check), or a
+ * "password:" / "token:" / "api key:" line. Learned skills can't.
  */
 export function holdsSecret(text: string): boolean {
-  if (/\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/.test(text)) return true;
-  if (/^[\s>*-]*(?:\*\*)?(?:password|passwd|pwd|passcode)(?:\*\*)?\s*[:=]\s*\S/im.test(text)) return true;
-  for (const m of text.matchAll(/(?<![\d-])\d(?:[ -]?\d){12,18}(?![\d-])/g)) if (luhn(m[0].replace(/\D/g, ""))) return true;
+  if (/\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|(?:sk_live|sk_test|rk_live)_[A-Za-z0-9]|AKIA[0-9A-Z]{16}|xox[abprs]-|AIza[0-9A-Za-z_-]{35}|eyJ[\w-]+\.[\w-]+\.[\w-]+)/.test(text)) return true;
+  if (/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(text)) return true;
+  // a line naming a secret and giving it ("password: …", "- **API key** = …", "GitHub token: …")
+  if (/^[\s>*-]*(?:\d+[.)]\s*)?(?:\*\*)?(?:[A-Za-z]+\s+){0,3}(?:password|passwd|pwd|passcode|token|api[_ -]?key|secret|pin)(?:\*\*)?\s*[:=]\s*\S/im.test(text)) return true;
+  // 15–19 digits, maybe in groups split by one space or dash (shorter numbers are order numbers, timestamps)
+  for (const m of text.matchAll(/(?<![\d-])\d(?:[ -]?\d){14,18}(?![\d-])/g)) if (luhn(m[0].replace(/\D/g, ""))) return true;
   return false;
 }
 

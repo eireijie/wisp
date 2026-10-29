@@ -805,6 +805,7 @@ final class Store {
     case "changes_changed":
       Task { try? await refreshChanges() }
     case "skills_changed":
+      SlashMenuModel.forget()
       Task { try? await refreshSkills(); try? await refreshConnectors() }
     case "model_connections_changed":
       modelsVersion += 1

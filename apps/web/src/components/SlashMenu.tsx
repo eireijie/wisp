@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { harnessLabel, type Agent, type AgentCommand } from "@wisp/core";
 import { api } from "../api.ts";
-import type { ChannelInfo } from "../store.ts";
+import { useStore, type ChannelInfo } from "../store.ts";
 import type { ChannelMember } from "./Channels.tsx";
 import { agentVar, cx } from "./ui.tsx";
 
@@ -53,7 +53,12 @@ export function orderSlashRows(rows: SlashItem[], query = ""): SlashItem[] {
 }
 
 const cache = new Map<string, { at: number; list: Promise<AgentCommand[]> }>();
-function commandsOf(agentId: string): Promise<AgentCommand[]> {
+// a skill learned, edited, shared or forgotten changes what "/" shows
+useStore.subscribe((s, prev) => {
+  if (s.skillsVersion !== prev.skillsVersion) cache.clear();
+});
+/** An agent's "/" list, fetched at most once a minute (and again once skills change). Exported for tests. */
+export function commandsOf(agentId: string): Promise<AgentCommand[]> {
   const hit = cache.get(agentId);
   if (hit && Date.now() - hit.at < 60_000) return hit.list;
   const list = api<{ commands: AgentCommand[] }>("GET", `/api/agents/${agentId}/commands`).then((r) => r.commands, () => []);

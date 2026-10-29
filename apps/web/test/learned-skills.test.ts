@@ -3,17 +3,19 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Agent, AgentCommand, MessagePart, Skill } from "@wisp/core";
 
+const storeListeners = vi.hoisted(() => [] as ((s: any, prev: any) => void)[]);
 vi.mock("../src/api.ts", () => ({ api: vi.fn() }));
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false, useMotionReduced: () => true, THEMES: [], useAppearance: () => ({}) }));
 vi.mock("../src/store.ts", () => ({
-  useStore: Object.assign((select: (s: unknown) => unknown) => select({ agents: [], me: null }), { getState: () => ({}), subscribe: () => () => {} }),
+  useStore: Object.assign((select: (s: unknown) => unknown) => select({ agents: [], me: null }), { getState: () => ({}), subscribe: (fn: (s: any, prev: any) => void) => (storeListeners.push(fn), () => {}) }),
   conversationKey: (c: string) => c,
   useNames: () => ({ agent: () => undefined }),
 }));
 
 const { skillByline, skillHolders, skillMeta, whoPatch, whoValue, builtInId } = await import("../src/views/SkillsView.tsx");
 const { skillSections } = await import("../src/views/settings/skills.tsx");
-const { orderSlashRows, slashSection, commandGroup } = await import("../src/components/SlashMenu.tsx");
+const { orderSlashRows, slashSection, commandGroup, commandsOf } = await import("../src/components/SlashMenu.tsx");
+const { api } = await import("../src/api.ts");
 const { AgentPicker } = await import("../src/components/ShopParts.tsx");
 const { SkillLines } = await import("../src/views/ChannelView.tsx");
 const { href, parseRoute } = await import("../src/router.ts");
@@ -73,9 +75,11 @@ describe("skill lines in Settings → Skills", () => {
     expect(whoValue(skill({ source: "custom" }), agents)).toBe("some");
     // the agent that learned it is gone: pick agents instead
     expect(whoValue(skill({ learnedBy: "gone" }), agents)).toBe("some");
-    expect(whoPatch(skill({}), "all")).toEqual({ allAgents: true });
-    expect(whoPatch(skill({}), "just")).toEqual({ allAgents: false, agentIds: ["a1"] });
-    expect(whoPatch(skill({}), "some")).toEqual({ allAgents: false });
+    expect(whoPatch(skill({}), "all", agents)).toEqual({ allAgents: true });
+    expect(whoPatch(skill({}), "just", agents)).toEqual({ allAgents: false, agentIds: ["a1"] });
+    expect(whoPatch(skill({}), "some", agents)).toEqual({ allAgents: false });
+    // the agent that learned it is gone: never "just" that agent
+    expect(whoPatch(skill({ learnedBy: "gone" }), "just", agents)).toEqual({ allAgents: false });
   });
 
   it("groups the list Learned, Built in, Added, and filters by tab", () => {
@@ -124,6 +128,24 @@ describe("the / menu", () => {
     expect(commandGroup({ kind: "wisp" })).toBe("wisp");
     expect(commandGroup({ kind: "wisp-skill" })).toBe("skill");
     expect(commandGroup({ kind: "skill" })).toBe("harness");
+  });
+});
+
+describe("the / menu's cache", () => {
+  it("fetches an agent's list once, and again after skills change", async () => {
+    const get = vi.mocked(api);
+    get.mockResolvedValue({ commands: [] });
+    get.mockClear();
+    await commandsOf("cache-a");
+    await commandsOf("cache-a");
+    expect(get).toHaveBeenCalledTimes(1);
+    for (const fn of storeListeners) fn({ skillsVersion: 2 }, { skillsVersion: 1 });
+    await commandsOf("cache-a");
+    expect(get).toHaveBeenCalledTimes(2);
+    // other changes keep it
+    for (const fn of storeListeners) fn({ skillsVersion: 2, agents: [] }, { skillsVersion: 2 });
+    await commandsOf("cache-a");
+    expect(get).toHaveBeenCalledTimes(2);
   });
 });
 

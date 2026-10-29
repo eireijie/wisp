@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { planFromWindows, type AccessLevel, type AgentEvent, type HarnessCatalog, type PlanUsage, type PlanWindow } from "@wisp/core";
-import type { AdapterEvent, CatalogPlace, HarnessAdapter, RunInput, RunResult } from "./types.ts";
+import type { AdapterEvent, CatalogPlace, HarnessAdapter, RunInput, RunPlace, RunResult } from "./types.ts";
 import { CLAUDE_BUILTINS, claudeCommands, claudeInitCommands, commandsIn, skillsIn } from "./commands.ts";
 import { RunFiles, commandVersion, launched, runJsonl } from "./process.ts";
 
@@ -127,8 +127,11 @@ export const claudeCode: HarnessAdapter = {
     if (input.signal?.aborted) throw new Error("cancelled");
     // the session's own "/" list: what the device's catalog shows from now on
     if (init) {
-      const known = input.place ? CLAUDE_BUILTINS : [...(await claudeCommands().catch(() => [])), ...(await commandsIn(path.join(input.cwd, ".claude", "commands"))), ...(await skillsIn(path.join(input.cwd, ".claude", "skills"), { via: "raw" }))];
-      const commands = claudeInitCommands(init, known);
+      const known = input.place ? CLAUDE_BUILTINS : await claudeCommands().catch(() => []);
+      const cwd = typeof init.cwd === "string" && init.cwd ? init.cwd : input.cwd;
+      const project = await projectCommands(cwd, input.place);
+      const mcpServers = Object.keys(claudeMcpConfig(input)?.mcpServers ?? {});
+      const commands = claudeInitCommands(init, known, { project, mcpServers, vm: !!input.place });
       if (commands) onEvent({ type: "commands", commands });
     }
     const usage = claudeUsage(lastAssistant, result);
@@ -217,4 +220,22 @@ function summarize(content: unknown): unknown {
 
 function lastLine(s: string) {
   return s.trim().split("\n").pop() ?? "";
+}
+
+/**
+ * The names a project's own .claude folder adds to "/" (commands, as "folder:name" one level down,
+ * and skills): they belong to the run in that folder, not to every agent on the device.
+ */
+async function projectCommands(cwd: string, place?: RunPlace): Promise<string[]> {
+  if (!place) return [...(await commandsIn(path.join(cwd, ".claude", "commands"))), ...(await skillsIn(path.join(cwd, ".claude", "skills"), { via: "raw" }))].map((c) => c.name);
+  const list = (dir: string) => place.readDir(dir).catch(() => [] as string[]);
+  const out: string[] = [];
+  const commands = `${cwd}/.claude/commands`;
+  for (const n of await list(commands)) {
+    if (n.startsWith(".")) continue;
+    if (n.endsWith(".md")) out.push(n.slice(0, -3));
+    else for (const m of await list(`${commands}/${n}`)) if (m.endsWith(".md")) out.push(`${n}:${m.slice(0, -3)}`);
+  }
+  for (const n of await list(`${cwd}/.claude/skills`)) if (!n.startsWith(".")) out.push(n);
+  return out;
 }

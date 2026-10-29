@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { SETTINGS_HARNESSES, agentSkillPath, catalogSkill, harnessLabel, skillBody, skillFile, skillSlug, skillTitle, type HarnessSkillFile, type Skill } from "@wisp/core";
+import { SETTINGS_HARNESSES, WISP_COMMANDS, agentSkillPath, catalogSkill, harnessLabel, skillBody, skillFile, skillSlug, skillTitle, type HarnessSkillFile, type Skill } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import type { Hub } from "./hub.ts";
 import { CALLBACK_PATH } from "./connector-auth.ts";
@@ -33,6 +33,9 @@ const CONNECTOR_PATCH = z
   .strict();
 
 const SKILL_BODY = z.object({ name: NAME, description: z.string().trim().max(500).default(""), content: z.string().min(1).max(100_000), tags: z.array(z.string().trim().min(1).max(30)).max(10).default([]) });
+
+/** How many skills one agent can learn. */
+const MAX_LEARNED = 200;
 
 /** What an agent sends to save how it did something (skill_save). */
 const LEARNED = z.object({ name: NAME, description: z.string().trim().max(200).default(""), content: z.string().trim().min(1).max(20_000), slug: z.string().trim().min(1).max(60).optional() }).strict();
@@ -175,6 +178,8 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!conn) return;
     const body = parse(CONNECTOR_PATCH, req.body, reply);
     if (!body) return;
+    if (body.allAgents !== undefined && body.allAgents !== conn.allAgents && conn.createdBy !== c.actor.id && store.role(c.workspaceId, c.actor.id) !== "owner")
+      return reply.code(403).send({ error: "Only the person who added this connector, or the workspace owner, can turn All agents on or off" });
     if (body.name) {
       const other = connectors.byName(c.workspaceId, body.name);
       if (other && other.id !== conn.id) return reply.code(409).send({ error: `there's already a connector named "${body.name}"` });
@@ -261,6 +266,21 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
   });
 
   /**
+   * The skill an agent learned before that a save means: one at the slug asked for or its name's
+   * slug (or the "-2", "-3"… freeSlug gave it when that was taken), else one with the same name.
+   */
+  function learnedMatch(workspaceId: string, agentId: string, body: { name: string; slug?: string }): Skill | undefined {
+    const bases = [...new Set([body.slug && skillSlug(body.slug), skillSlug(body.name)].filter((b): b is string => !!b))];
+    const mine = skills.learnedBy(workspaceId, agentId);
+    const numbered = (slug: string, base: string) => slug.startsWith(`${base}-`) && /^\d+$/.test(slug.slice(base.length + 1));
+    return (
+      mine.find((s) => bases.includes(s.slug)) ??
+      mine.find((s) => bases.some((b) => numbered(s.slug, b))) ??
+      mine.find((s) => s.name.toLowerCase() === body.name.toLowerCase())
+    );
+  }
+
+  /**
    * An agent saves how it did something, to do it the same way next time (skill_save). Saving
    * under the name (or slug) of a skill it learned before updates that one.
    */
@@ -274,11 +294,23 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (holdsSecret(`${body.name}\n${body.description}\n${body.content}`)) return reply.code(400).send({ error: "Skills can't hold passwords, keys or card numbers" });
     const agent = store.agent(c.actor.id)!;
     const slug = skillSlug(body.slug ?? body.name);
-    const mine = skills.bySlug(c.workspaceId, slug);
+    const mine = learnedMatch(c.workspaceId, agent.id, body);
     let skill: Skill;
-    if (mine && mine.source === "learned" && mine.learnedBy === agent.id) skill = skills.update(mine.id, { name: body.name, description: body.description, content: body.content })!;
-    else {
-      skill = skills.create(c.workspaceId, agent.id, { name: body.name, slug: skills.freeSlug(c.workspaceId, slug), description: body.description, source: "learned", content: body.content, learnedBy: agent.id });
+    if (mine) {
+      const shared = mine.allAgents ? holders(mine).filter((a) => a !== agent.id) : [];
+      skill = skills.update(mine.id, { name: body.name, description: body.description, content: body.content, allAgents: false })!;
+      if (mine.allAgents) {
+        // a shared skill its agent changed goes back to just that agent, until a person shares it again
+        for (const a of skill.agentIds.filter((a) => a !== agent.id)) skills.attach(skill.id, a, false);
+        skills.attach(skill.id, agent.id, true);
+        skill = skills.get(skill.id)!;
+        await syncFiles(c, skill, shared, false);
+      }
+    } else {
+      if (skills.learnedBy(c.workspaceId, agent.id).length >= MAX_LEARNED) return reply.code(400).send({ error: "Too many learned skills. Forget some in Settings → Skills." });
+      // not a name "/" already uses for this agent: Wisp's commands, or its harness's own
+      const reserved = [...WISP_COMMANDS.map((w) => w.name), ...(hub.catalogFor(agent)?.commands ?? []).map((x) => x.name)];
+      skill = skills.create(c.workspaceId, agent.id, { name: body.name, slug: skills.freeSlug(c.workspaceId, slug, reserved), description: body.description, source: "learned", content: body.content, learnedBy: agent.id });
       skills.attach(skill.id, agent.id, true);
       skill = skills.get(skill.id)!;
     }

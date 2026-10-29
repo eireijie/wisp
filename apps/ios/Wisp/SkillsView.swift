@@ -280,6 +280,8 @@ private struct SkillPage: View {
   private var current: HelperSkill { store.skills.first { $0.id == skill.id } ?? skill }
   private var allAgents: Bool { pendingAll ?? current.forAll }
   private var owner: String? { current.learnedBy.flatMap { store.agent($0)?.name } }
+  /** "Just <agent>" only while the agent that learned it is still around; else "Some agents" */
+  private var justLearner: Bool { current.isLearned && owner != nil }
   private var meta: String {
     SkillText.meta(current, name: { store.agent($0)?.name }, device: { id in store.nodes.first { $0.id == id }.map { $0.mine == true ? "your \($0.name)" : $0.name } })
   }
@@ -296,9 +298,9 @@ private struct SkillPage: View {
       .padding(.horizontal, 14).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading).skillCard()
       if store.canManage {
         SkillCaption("Who can use it")
-        SegPicker(options: [(false, current.isLearned ? "Just \(owner ?? "its agent")" : "Some agents"), (true, "All agents")],
+        SegPicker(options: [(false, justLearner ? "Just \(owner ?? "its agent")" : "Some agents"), (true, "All agents")],
                   selection: Binding(get: { allAgents }, set: setAll), disabled: action.busy)
-        if !allAgents && !current.isLearned {
+        if !allAgents && !justLearner {
           CardGroup {
             ForEach(store.agents) { agent in
               MarketToggleRow(title: agent.name, subtitle: "@\(agent.handle)", isOn: Binding(get: { current.agentIds?.contains(agent.id) == true }, set: { on in
@@ -336,7 +338,7 @@ private struct SkillPage: View {
     let learnedBy = current.learnedBy
     action.run {
       defer { pendingAll = nil }
-      try await store.setSkillAccess(current.id, allAgents: on, agentIds: !on && current.isLearned ? learnedBy.map { [$0] } : nil)
+      try await store.setSkillAccess(current.id, allAgents: on, agentIds: !on && justLearner ? learnedBy.map { [$0] } : nil)
     }
   }
 }

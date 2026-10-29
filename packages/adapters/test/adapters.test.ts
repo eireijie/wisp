@@ -269,24 +269,38 @@ describe("harness commands on the device", () => {
     expect(claudeInitCommands({ type: "system", subtype: "init" } as any)).toBeNull();
   });
 
+  it("leaves one run's project and connector commands out of the device's Claude Code list", async () => {
+    const { claudeInitCommands } = await import("../src/commands.ts");
+    const init = {
+      slash_commands: ["compact", "ship", "tools:deploy", "github:open-pr", "mcp__wisp__note", "linear:triage", "agent-skills:review", "odd", "loop"],
+      skills: ["agent-skills:review", "loop", "house-style"],
+      mcp_servers: [{ name: "linear", status: "connected" }],
+    };
+    const names = (list: { name: string; builtIn?: boolean }[] | null) => list!.map((c) => `${c.name}${c.builtIn ? "*" : ""}`);
+    // here: the run's folder had ship, tools:deploy and house-style; github is a connector
+    expect(names(claudeInitCommands(init, [], { project: ["ship", "tools:deploy", "house-style"], mcpServers: ["wisp", "github"] }))).toEqual(["compact*", "agent-skills:review", "odd*", "loop"]);
+    // in a VM only Claude Code's known ones are built in
+    expect(names(claudeInitCommands(init, [], { project: ["ship", "tools:deploy", "house-style"], mcpServers: ["github"], vm: true }))).toEqual(["compact*", "agent-skills:review", "odd", "loop*"]);
+  });
+
   it("reports the start-up list from a run as a commands event", async () => {
     const { claudeCode } = await import("../src/claude-code.ts");
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "wisp-claude-init-"));
     const bin = path.join(dir, "claude");
     const lines = [
-      { type: "system", subtype: "init", session_id: "s1", slash_commands: ["compact", "loop"], skills: ["loop"], terminal_slash_commands: [] },
+      { type: "system", subtype: "init", session_id: "s1", slash_commands: ["compact", "loop", "deploy"], skills: ["loop"], terminal_slash_commands: [] },
       { type: "result", result: "ok", usage: { input_tokens: 1, output_tokens: 1 } },
     ];
     await fsp.writeFile(bin, `#!/bin/sh\ncat > /dev/null\nprintf '%s\\n' ${lines.map((l) => `'${JSON.stringify(l)}'`).join(" ")}\n`, { mode: 0o755 });
     const events: any[] = [];
-    // runs "on a VM" (place) so the device's own ~/.claude isn't read
-    const place = { home: dir, readFile: async () => null, readDir: async () => [] };
+    // runs "on a VM" (place) so the device's own ~/.claude isn't read; the project there has a "deploy" command of its own
+    const place = { home: dir, readFile: async () => null, readDir: async (d: string) => (d === `${dir}/.claude/commands` ? ["deploy.md"] : []) };
     await { ...claudeCode, binary: bin }.run({ prompt: "hi", cwd: dir, place }, (e) => events.push(e));
     expect(events.find((e) => e.type === "commands")).toEqual({
       type: "commands",
       commands: [
         { name: "compact", description: "Shrink the conversation so it can keep going", hint: "what to keep", kind: "command", via: "raw", builtIn: true },
-        { name: "loop", description: "Run a prompt again on an interval", kind: "skill", via: "raw" },
+        { name: "loop", description: "Run a prompt again on an interval", kind: "skill", via: "raw", builtIn: true },
       ],
     });
     await fsp.rm(dir, { recursive: true, force: true });

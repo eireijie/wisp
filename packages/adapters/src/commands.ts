@@ -74,24 +74,42 @@ const CLAUDE_DESCRIPTIONS: Record<string, string> = {
   "release-notes": "See what's new in Claude Code",
 };
 
+/** Claude Code's own commands and skills, by name: in a VM, only these count as built in. */
+export const CLAUDE_KNOWN_BUILTINS = new Set([
+  "compact", "review", "security-review", "init", "pr-comments", "simplify", "code-review", "debug", "verify", "batch", "loop", "run", "claude-api",
+  "update-config", "fewer-permission-prompts", "deep-research", "workflow-authoring", "plugin-authoring", "run-skill-generator",
+]);
+
 /**
  * Claude Code's "/" list from the first line of a run (stream-json `system`/`init`): every command
  * and skill the session can run. Entries on disk (`known`, from claudeCommands) keep their
- * descriptions; other commands are the harness's own (`builtIn`). Exported for tests.
+ * descriptions; other commands are the harness's own (`builtIn`). The list is shared by every agent
+ * on the device (or VM), so what belongs to this run alone is left out: the project's own commands
+ * and skills (`project`, names in its .claude folder) and MCP servers' prompts (`mcpServers`, as
+ * "server:name" or "mcp__server__name"). In a VM (`vm`), where the person's own folders aren't
+ * read, only CLAUDE_KNOWN_BUILTINS are marked built in. Exported for tests.
  */
-export function claudeInitCommands(init: { slash_commands?: unknown; skills?: unknown; terminal_slash_commands?: unknown }, known: CommandOption[] = []): CommandOption[] | null {
+export function claudeInitCommands(
+  init: { slash_commands?: unknown; skills?: unknown; terminal_slash_commands?: unknown; mcp_servers?: unknown },
+  known: CommandOption[] = [],
+  opts: { project?: string[]; mcpServers?: string[]; vm?: boolean } = {},
+): CommandOption[] | null {
   const names = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()).map((x) => x.trim().replace(/^\//, "")) : []);
   if (!Array.isArray(init.slash_commands) && !Array.isArray(init.skills)) return null;
   const skills = new Set(names(init.skills));
   const terminal = new Set(names(init.terminal_slash_commands));
+  const project = new Set(opts.project ?? []);
+  const servers = [...(opts.mcpServers ?? []), ...(Array.isArray(init.mcp_servers) ? init.mcp_servers.map((s) => (s as { name?: unknown })?.name).filter((n): n is string => typeof n === "string") : [])];
+  const fromMcp = (name: string) => name.startsWith("mcp__") || servers.some((s) => name.startsWith(`${s}:`));
   const byName = new Map(known.map((c) => [c.name, c]));
   const out: CommandOption[] = [];
   for (const name of new Set([...names(init.slash_commands), ...skills])) {
-    if (terminal.has(name) || name.startsWith("_") || CLAUDE_SKIP.has(name)) continue;
+    if (terminal.has(name) || name.startsWith("_") || CLAUDE_SKIP.has(name) || project.has(name) || fromMcp(name)) continue;
     const disk = byName.get(name);
     const description = disk?.description ?? CLAUDE_DESCRIPTIONS[name];
     const kind = skills.has(name) ? "skill" : "command";
-    out.push({ name, ...(description ? { description } : {}), ...(disk?.hint ? { hint: disk.hint } : {}), kind, via: "raw", ...(kind === "command" && (!disk || disk.builtIn) ? { builtIn: true } : {}) });
+    const builtIn = opts.vm ? CLAUDE_KNOWN_BUILTINS.has(name) : kind === "command" && (!disk || !!disk.builtIn);
+    out.push({ name, ...(description ? { description } : {}), ...(disk?.hint ? { hint: disk.hint } : {}), kind, via: "raw", ...(builtIn ? { builtIn: true } : {}) });
   }
   return dedupe(out);
 }

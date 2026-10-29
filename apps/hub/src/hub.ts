@@ -213,8 +213,8 @@ export class Hub {
     const notes = this.runSkills.get(run.id);
     if (notes?.used.has(skill.id) || notes?.learned.has(skill.id)) return;
     this.skillUsed(run.id, skill.id, "used");
+    // counted quietly: apps see the new count next time they load skills
     this.skills.used(skill.id);
-    this.broadcast(agent.workspaceId, { type: "skills_changed" });
   }
 
   /** The `skill` parts for a run's reply, learned ones first; forgets them. */

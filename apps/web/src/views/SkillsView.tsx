@@ -153,10 +153,10 @@ export function whoValue(s: Pick<Skill, "source" | "allAgents" | "learnedBy">, a
   return s.source === "learned" && s.learnedBy && agents.some((a) => a.id === s.learnedBy) ? "just" : "some";
 }
 
-/** What to send when "Who can use it" changes. */
-export function whoPatch(s: Pick<Skill, "learnedBy">, to: Who): { allAgents: boolean; agentIds?: string[] } {
+/** What to send when "Who can use it" changes. "Just" the agent that learned it only while that agent is still around. */
+export function whoPatch(s: Pick<Skill, "learnedBy">, to: Who, agents: Pick<Agent, "id">[]): { allAgents: boolean; agentIds?: string[] } {
   if (to === "all") return { allAgents: true };
-  if (to === "just" && s.learnedBy) return { allAgents: false, agentIds: [s.learnedBy] };
+  if (to === "just" && s.learnedBy && agents.some((a) => a.id === s.learnedBy)) return { allAgents: false, agentIds: [s.learnedBy] };
   return { allAgents: false };
 }
 
@@ -245,7 +245,7 @@ function SkillPage({ skill, agents, canEdit, onEdit, onChanged, onGone, onTry, o
 
       <section className="space-y-2">
         <h3 className="px-1 text-xs font-medium uppercase tracking-[0.04em] text-faint">Who can use it</h3>
-        <WhoSeg value={who} options={options} disabled={!canEdit || busy} onChange={(v) => void run(() => api("PATCH", `/api/skills/${skill.id}`, whoPatch(skill, v)))} />
+        <WhoSeg value={who} options={options} disabled={!canEdit || busy} onChange={(v) => void run(() => api("PATCH", `/api/skills/${skill.id}`, whoPatch(skill, v, agents)))} />
         {who === "some" && <AgentPicker agents={agents} value={skill.agentIds} onChange={(ids) => void pick(ids)} disabled={!canEdit || busy} />}
       </section>
 

@@ -419,20 +419,23 @@ function migrateSkillSources(db: Database.Database) {
   if (sql.includes("'learned'")) return;
   const columns = (db.prepare("PRAGMA table_info(skills)").all() as { name: string }[]).map((c) => c.name).join(", ");
   db.pragma("foreign_keys = OFF");
-  db.transaction(() => {
-    db.exec(`CREATE TABLE skills_new (
-      id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-      name TEXT NOT NULL, slug TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
-      source TEXT NOT NULL CHECK (source IN ('catalog','custom','taught','learned')), catalog_id TEXT, tags_json TEXT NOT NULL DEFAULT '[]',
-      content TEXT NOT NULL, created_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-      all_agents INTEGER NOT NULL DEFAULT 0, learned_by TEXT, uses INTEGER NOT NULL DEFAULT 0, last_used_at TEXT,
-      UNIQUE (workspace_id, slug)
-    )`);
-    db.exec(`INSERT INTO skills_new (${columns}) SELECT ${columns} FROM skills`);
-    db.exec("DROP TABLE skills");
-    db.exec("ALTER TABLE skills_new RENAME TO skills");
-  })();
-  db.pragma("foreign_keys = ON");
+  try {
+    db.transaction(() => {
+      db.exec(`CREATE TABLE skills_new (
+        id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        name TEXT NOT NULL, slug TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL CHECK (source IN ('catalog','custom','taught','learned')), catalog_id TEXT, tags_json TEXT NOT NULL DEFAULT '[]',
+        content TEXT NOT NULL, created_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        all_agents INTEGER NOT NULL DEFAULT 0, learned_by TEXT, uses INTEGER NOT NULL DEFAULT 0, last_used_at TEXT,
+        UNIQUE (workspace_id, slug)
+      )`);
+      db.exec(`INSERT INTO skills_new (${columns}) SELECT ${columns} FROM skills`);
+      db.exec("DROP TABLE skills");
+      db.exec("ALTER TABLE skills_new RENAME TO skills");
+    })();
+  } finally {
+    db.pragma("foreign_keys = ON");
+  }
 }
 
 /** Devices from before they had a role: the ones already running agents' VMs do that. */

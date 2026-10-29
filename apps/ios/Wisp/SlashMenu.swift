@@ -170,6 +170,9 @@ final class SlashMenuModel {
     }
   }
 
+  /** A skill was learned, changed or forgotten: "/" lists are fetched again. */
+  static func forget() { cache = [:] }
+
   /** The commands of one agent, for showing a button only when it can do that ("compact"). */
   static func commands(_ store: Store, agentId: String) async -> [AgentCommand] {
     if let hit = cache[agentId], Date().timeIntervalSince(hit.at) < 60 { return hit.list }

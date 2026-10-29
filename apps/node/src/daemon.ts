@@ -383,6 +383,7 @@ export class NodeDaemon {
           if (msg.action.action === "start") this.send({ type: "computer_status", computerId: msg.computer.id, status: "ready", text: "" });
           // a VM that just came up: tell the hub which harnesses (and models) it has
           if (msg.action.action === "start" && msg.computer.kind === "vm") void this.sendVmCatalog(msg.computer);
+          if (msg.action.action === "destroy") this.forgetVm(msg.computer.id);
         },
         (err) => {
           this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message });
@@ -840,6 +841,13 @@ export class NodeDaemon {
     })().catch(() => void this.vmCatalogs.delete(spec.id));
     this.vmCatalogs.set(spec.id, job);
     return job;
+  }
+
+  /** A VM was removed: drop what was listed for it and what its runs reported. */
+  forgetVm(computerId: string) {
+    this.vmCatalogs.delete(computerId);
+    this.vmLists.delete(computerId);
+    for (const key of [...this.runCommands.keys()]) if (key.startsWith(`${computerId}\n`)) this.runCommands.delete(key);
   }
 
   /** This device's harnesses, with what runs here learned about their "/" lists. */
