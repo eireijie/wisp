@@ -67,6 +67,9 @@ a.rounded-full,
 .m-chip-in { animation: m-chip 360ms var(--pop) backwards; }
 .m-unfold { animation: m-unfold-in 380ms var(--soft) 120ms backwards; transform-origin: 0 0; }
 .m-fade-in { animation: m-fade 320ms ease-out 150ms backwards; }
+/* a sign-in waiting on the person: its dot breathes */
+@keyframes m-wait-pulse { 50% { opacity: 0.3; } }
+.m-wait { animation: m-wait-pulse 1.4s ease-in-out infinite; }
 @keyframes m-toast-in { from { opacity: 0; transform: translateY(24px) scale(0.96); } }
 @keyframes m-toast-top { from { opacity: 0; transform: translateY(-24px) scale(0.96); } }
 @keyframes m-push-in { from { transform: translateX(100%); } }
@@ -194,6 +197,7 @@ button[role="switch"]:active:not(:disabled) .m-knob { scale: 1.2 1; }
   .m-badge[data-zero="true"] { transform: none; }
   .m-bubble-me, .m-bubble-them, .m-work, .m-swap, .m-menu, .m-dialog, .m-drawer, .m-palette-card,
   .m-panel, .m-toast, .m-toast-top, .m-chat-layer, .m-pill-in, .m-chip-in, .m-unfold, .m-fade-in { animation: m-fade 120ms ease-out backwards !important; }
+  .m-wait { animation: none !important; }
   .m-scrim, .m-palette-scrim { animation: m-scrim-in 120ms ease-out backwards !important; }
   .m-menu[data-closing="true"], [data-closing="true"] .m-palette-card { animation: m-fade 120ms ease-out reverse both !important; }
   [data-closing="true"].m-palette-scrim { animation: m-scrim-in 120ms ease-out reverse both !important; }
