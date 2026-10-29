@@ -34,7 +34,8 @@ struct NativeSettingsView: View {
           NavigationLink { AgentDefaultsView() } label: { RowLabel(title: "Agent defaults") }.accessibilityIdentifier("settings-agent-defaults")
           NavigationLink { ConnectionsSettingsView() } label: { RowLabel(title: "Connections") }.accessibilityIdentifier("settings-connections")
           NavigationLink { MemoryStorageView() } label: { RowLabel(title: "Memory storage") }.accessibilityIdentifier("settings-memory-storage")
-          NavigationLink { HarnessesView() } label: { RowLabel(title: "AI tool settings") }.accessibilityIdentifier("settings-harnesses")
+          NavigationLink { ModelsSettingsView() } label: { RowLabel(title: "Models") }.accessibilityIdentifier("settings-models")
+          NavigationLink { HarnessesView() } label: { RowLabel(title: "Harnesses") }.accessibilityIdentifier("settings-harnesses")
           NavigationLink { LoginsView() } label: { RowLabel(title: "Logins") }.accessibilityIdentifier("settings-logins")
           NavigationLink { AgentRuntimesView() } label: { RowLabel(title: "Agent runtimes") }.accessibilityIdentifier("settings-runtimes")
         }
