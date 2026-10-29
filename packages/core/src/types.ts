@@ -48,6 +48,11 @@ export type AccessLevel = "read-only" | "edit" | "full";
 export interface AgentSettings {
   /** reasoning effort, e.g. "low" | "medium" | "high"; null = the harness default */
   effort?: string | null;
+  /**
+   * The model connection (models.ts) it runs on: a sign-in or API key kept on the hub and handed to
+   * its device or VM with each run. Unset (or null) = the harness's own login where it runs, as before.
+   */
+  connectionId?: string | null;
   access?: AccessLevel;
   /** when true the agent can't rewrite its own SOUL.md */
   soulLocked?: boolean;
@@ -149,6 +154,8 @@ export interface ContextUsage {
   outputTokens?: number;
   /** the part of `inputTokens` served from the harness's cache */
   cachedInputTokens?: number;
+  /** how much of the subscription's limit was used, where the harness reports it */
+  plan?: import("./models.ts").PlanUsage;
   at: string;
 }
 

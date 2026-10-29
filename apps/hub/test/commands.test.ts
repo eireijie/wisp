@@ -74,7 +74,7 @@ const post = async (body: string) => (await api("POST", `/api/channels/${general
 describe("/ commands", () => {
   it("lists Wisp's own first, then the harness's", async () => {
     const { data } = await api<{ commands: any[] }>("GET", `/api/agents/${atlas.id}/commands`);
-    expect(data.commands.map((c) => `${c.name}:${c.kind}`)).toEqual(["context:wisp", "model:wisp", "compress:command", "humanizer:skill"]);
+    expect(data.commands.map((c) => `${c.name}:${c.kind}`)).toEqual(["context:wisp", "model:wisp", "effort:wisp", "harness:wisp", "compress:command", "humanizer:skill"]);
   });
 
   it("passes a harness command through as typed, into the same conversation", async () => {
