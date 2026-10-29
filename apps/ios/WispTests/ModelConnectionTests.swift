@@ -50,9 +50,9 @@ final class ModelConnectionTests: XCTestCase {
     var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
     let now = Wire.date("2026-10-29T01:00:00Z")!
     let soon = PlanUsage(window: "5-hour", usedFraction: 0.74, resetsAt: "2026-10-29T05:40:00Z")
-    XCTAssertEqual(ModelWords.planLine(soon, now: now, calendar: cal, locale: Locale(identifier: "en_US")), "26% left · resets 5:40 AM")
+    XCTAssertEqual(ModelWords.planLine(soon, now: now, calendar: cal, locale: Locale(identifier: "en_US")).replacingOccurrences(of: "\u{202F}", with: " "), "26% left · resets 5:40 AM")
     let later = PlanUsage(window: "weekly", usedFraction: 0.2, resetsAt: "2026-11-02T05:40:00Z")
-    XCTAssertEqual(ModelWords.planLine(later, now: now, calendar: cal, locale: Locale(identifier: "en_US")), "80% left · resets Mon 5:40 AM")
+    XCTAssertEqual(ModelWords.planLine(later, now: now, calendar: cal, locale: Locale(identifier: "en_US")).replacingOccurrences(of: "\u{202F}", with: " "), "80% left · resets Mon 5:40 AM")
     XCTAssertEqual(ModelWords.planLine(PlanUsage(window: "x", usedFraction: 1.4, resetsAt: nil)), "0% left")
   }
 
