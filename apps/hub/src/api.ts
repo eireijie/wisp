@@ -1144,7 +1144,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!harness) return reply.code(400).send({ error: "harness: pick a harness (no device offers one yet to use as a default)" });
     if (store.agentByHandle(c.workspaceId, body.handle)) return reply.code(409).send({ error: "handle taken" });
     if (body.settings?.respondPeople?.some((p) => !store.role(c.workspaceId, p))) return reply.code(400).send({ error: "respondPeople: someone isn't in this organization" });
-    const connWhy = body.settings?.connectionId ? connectionProblem(hub, c, body.settings.connectionId, harness) : null;
+    const connWhy = body.settings?.connectionId ? connectionProblem(hub, c, body.settings.connectionId, harness, fields.nodeId) : null;
     if (connWhy) return reply.code(400).send({ error: connWhy });
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
     if (body.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
@@ -1207,11 +1207,23 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       return reply.code(403).send({ error: `@${agent.handle} ${owner === deviceOwnerOf(agent) ? "runs" : "would run"} directly on ${name}'s device, so only ${name} can ${owner === deviceOwnerOf(agent) ? "change it" : "make that change"}` });
     }
     if (body.handle && body.handle !== agent.handle && store.agentByHandle(c.workspaceId, body.handle)) return reply.code(409).send({ error: "handle taken" });
+    // a connection only goes to its owner's own devices (Hub.connectionWithheld): moved by someone
+    // else, the agent leaves it behind and runs on the new device's own login; its owner can't move
+    // it onto someone else's device with it
+    // (runs go to the agent's device, VM or not, so that's what counts)
+    const moved = body.nodeId !== undefined && body.nodeId !== agent.nodeId;
+    const kept = moved && !body.settings?.connectionId && after.settings.connectionId ? hub.models.row(after.settings.connectionId) : undefined;
+    if (kept && kept.user_id !== c.actor.id) {
+      body.settings = { ...body.settings, connectionId: null };
+      after.settings = { ...after.settings, connectionId: null };
+    } else if (kept && after.nodeId && store.node(after.nodeId)?.ownerId !== kept.user_id) {
+      return reply.code(400).send({ error: `@${agent.handle} runs on your ${providerLabel(kept.provider)} ${kept.kind === "oauth" ? "sign-in" : "key"}, which only goes to your own devices; pick another model for it (settings.connectionId) to move it there` });
+    }
     // a new connection must be the caller's and fit the harness; a new harness must fit the connection it keeps
     const newConnection = body.settings?.connectionId && body.settings.connectionId !== agent.settings.connectionId;
     if (newConnection || (body.harness && body.harness !== agent.harness && after.settings.connectionId)) {
       const r = hub.models.row(after.settings.connectionId!);
-      const why = newConnection ? connectionProblem(hub, c, after.settings.connectionId!, after.harness) : r && !credentialSupport(after.harness, r.provider, r.kind) ? `${harnessLabel(after.harness)} can't use @${agent.handle}'s ${providerLabel(r.provider)} ${r.kind === "oauth" ? "sign-in" : "key"}; pick another model (settings.connectionId) with the harness` : null;
+      const why = newConnection ? connectionProblem(hub, c, after.settings.connectionId!, after.harness, after.nodeId) : r && !credentialSupport(after.harness, r.provider, r.kind) ? `${harnessLabel(after.harness)} can't use @${agent.handle}'s ${providerLabel(r.provider)} ${r.kind === "oauth" ? "sign-in" : "key"}; pick another model (settings.connectionId) with the harness` : null;
       if (why) return reply.code(400).send({ error: why });
     }
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });

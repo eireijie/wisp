@@ -30,6 +30,8 @@ import type { Store } from "./store.ts";
 import { guestEvent } from "./guest-computers.ts";
 
 const CONTEXT_MESSAGES = 20;
+/** How long after a run ends its device may still send back the sign-in it renewed. */
+export const RENEW_GRACE_MS = 10 * 60_000;
 
 interface ClientConn {
   socket: WebSocket;
@@ -89,8 +91,12 @@ export class Hub {
   readonly modelLogins = new Map<string, { workspaceId: string; userId: string; nodeId: string; label?: string; state: ModelLogin }>();
   /** runs on a connection right now (run id → connection id): one at a time while its sign-in is due a renewal */
   private connectionRuns = new Map<string, string>();
-  /** which devices were handed which connection (`node:connection`): only they may send a renewed sign-in back */
-  private handedOut = new Set<string>();
+  /**
+   * Runs that were handed a connection (run id → device, connection, when the run ended): a device
+   * may send a renewed sign-in back only for a run of its own on that connection, while it runs or
+   * for RENEW_GRACE_MS after (a device that was offline sends it when it reconnects).
+   */
+  private handedOut = new Map<string, { nodeId: string; connectionId: string; endedAt: number | null }>();
   readonly skills: SkillStore;
   /** iOS push notifications (optional; needs an APNs key) */
   readonly apns: Apns;
@@ -250,6 +256,7 @@ export class Hub {
     conn.socket.close(4401, "device removed");
     for (const a of this.store.agentsOnNode(nodeId)) this.broadcast(conn.workspaceId, { type: "agent_status", agentId: a.id, status: "offline" });
     this.computers.nodeGone(nodeId);
+    this.releaseNodeConnections(nodeId);
   }
 
   // --- nodes ----------------------------------------------------------------
@@ -312,10 +319,39 @@ export class Hub {
 
   /** A run on a connection ended: free it, and start runs that waited their turn on it. */
   private releaseConnection(runId: string) {
+    const at = Date.now();
+    const handed = this.handedOut.get(runId);
+    if (handed && handed.endedAt === null) handed.endedAt = at;
+    for (const [id, h] of this.handedOut) if (h.endedAt !== null && at - h.endedAt > RENEW_GRACE_MS) this.handedOut.delete(id);
     const cid = this.connectionRuns.get(runId);
     if (!cid) return;
     this.connectionRuns.delete(runId);
     this.dispatchWaiting(cid);
+  }
+
+  /**
+   * A device went away: its runs no longer hold their connections, so a crashed device doesn't
+   * keep a sign-in that's due a renewal from everyone else. (If it comes back and reports, the
+   * renewed sign-in is still taken within RENEW_GRACE_MS.)
+   */
+  private releaseNodeConnections(nodeId: string) {
+    for (const [runId, h] of [...this.handedOut]) if (h.nodeId === nodeId && h.endedAt === null) this.releaseConnection(runId);
+  }
+
+  /**
+   * Why the agent's connection can't go with its runs: a connection (its key or sign-in) is only
+   * ever handed to a device its owner owns (a VM runs on its device, so that device counts). An
+   * agent someone moved elsewhere fails with this instead of carrying the owner's secret to
+   * someone else's device, or quietly running on that device's own login.
+   */
+  connectionWithheld(agent: Pick<Agent, "workspaceId" | "handle" | "harness" | "nodeId" | "settings">): string | null {
+    const cid = agent.settings.connectionId;
+    const r = cid ? this.models.row(cid) : undefined;
+    if (!r || r.workspace_id !== agent.workspaceId || !credentialSupport(agent.harness, r.provider, r.kind)) return null;
+    const node = agent.nodeId ? this.store.node(agent.nodeId) : undefined;
+    if (!node || node.ownerId === r.user_id) return null;
+    const owner = this.store.user(r.user_id)?.name ?? "its owner";
+    return `@${agent.handle} is set to use ${owner}'s ${providerLabel(r.provider)} ${r.kind === "oauth" ? "sign-in" : "key"}, which only goes to ${owner}'s own devices, and ${node.name} isn't one. Pick another model for @${agent.handle}, or move it back.`;
   }
 
   /** Runs of agents on this connection that are still queued, now that it's free (or renewed). */
@@ -403,6 +439,7 @@ export class Hub {
       this.pausedNodes.delete(nodeId);
       for (const a of this.store.agentsOnNode(nodeId)) this.broadcast(workspaceId, { type: "agent_status", agentId: a.id, status: "offline" });
       this.computers.nodeGone(nodeId);
+      this.releaseNodeConnections(nodeId);
     });
   }
 
@@ -472,8 +509,12 @@ export class Hub {
         return;
       }
       case "credential_refreshed": {
-        // only a device that was handed this connection can renew it
-        if (!this.handedOut.has(`${conn.nodeId}:${msg.connectionId}`)) return;
+        // only for a run of this device's on this connection, while it runs or shortly after, and
+        // only for sign-ins that rotate (a key or a long-lived token is never "renewed")
+        const h = msg.runId ? this.handedOut.get(msg.runId) : undefined;
+        if (!h || h.nodeId !== conn.nodeId || h.connectionId !== msg.connectionId) return;
+        if (h.endedAt !== null && Date.now() - h.endedAt > RENEW_GRACE_MS) return;
+        if (!this.models.rotates(msg.connectionId)) return;
         if (this.models.saveRenewed(msg.connectionId, msg.secret)) {
           this.connectionsChanged(msg.connectionId);
           this.dispatchWaiting(msg.connectionId);
@@ -943,10 +984,15 @@ export class Hub {
     // a sign-in about to be renewed is used by one run at a time (renewing it kills the old one); this run waits its turn
     const cid = agent.settings.connectionId;
     if (cid && this.models.oneAtATime(cid) && [...this.connectionRuns.values()].includes(cid)) return;
+    const withheld = this.connectionWithheld(agent);
+    if (withheld) {
+      this.store.setRunStatus(run.id, "running");
+      return this.finishRun(conn.workspaceId, run, { error: withheld });
+    }
     const credential = this.credentialFor(agent);
     if (credential) {
       this.connectionRuns.set(run.id, credential.connectionId);
-      this.handedOut.add(`${conn.nodeId}:${credential.connectionId}`);
+      this.handedOut.set(run.id, { nodeId: conn.nodeId, connectionId: credential.connectionId, endedAt: null });
       this.models.used(credential.connectionId);
     }
     // mark it running before the (async) prompt build so it can't be dispatched twice

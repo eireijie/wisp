@@ -147,11 +147,15 @@ export class ModelConnections {
     this.db.prepare("UPDATE model_connections SET last_error = ? WHERE id = ?").run(error ? error.slice(0, 500) : null, connectionId);
   }
 
+  /** A sign-in whose harness renews it, changing the refresh token (a key or Claude's long-lived token never does). */
+  rotates(connectionId: string): boolean {
+    const r = this.row(connectionId);
+    return !!r && r.kind === "oauth" && CREDENTIAL_SUPPORT.some((s) => s.provider === r.provider && s.kind === "oauth" && s.rotates);
+  }
+
   /** Whether the hub should run one agent at a time on it right now (see renewalDue). */
   oneAtATime(connectionId: string): boolean {
-    const r = this.row(connectionId);
-    if (!r || r.kind !== "oauth" || !CREDENTIAL_SUPPORT.some((s) => s.provider === r.provider && s.kind === "oauth" && s.rotates)) return false;
-    return renewalDue(JSON.parse(r.secret_json));
+    return this.rotates(connectionId) && renewalDue(JSON.parse(this.row(connectionId)!.secret_json));
   }
 
   /**

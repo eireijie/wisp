@@ -396,3 +396,109 @@ describe("catalogs per computer", () => {
     expect(computers.find((c: any) => c.id === box.id).harnesses.map((h: any) => h.id).sort()).toEqual(["claude-code", "codex"]);
   });
 });
+
+describe("a connection stays with its owner's devices", () => {
+  let theirs: { id: string; token: string };
+  let theirDevice: FakeDevice;
+  let key: string;
+  let general: any;
+  const runsOn = (d: FakeDevice) => d.got.filter((m): m is Extract<HubToNode, { type: "run" }> => m.type === "run");
+
+  beforeAll(async () => {
+    general = (await owner.channels()).find((c) => c.name === "general")!;
+    const made = await other.request("POST", "/api/nodes", { name: "their laptop" });
+    theirs = { id: made.node.id, token: made.token };
+    theirDevice = new FakeDevice();
+    await theirDevice.connect(theirs.token);
+    key = hub.models.create({ workspaceId: ws, userId: me, provider: "openai", kind: "key", label: "OpenAI", secret: { key: "sk-proj-mine-1234" } });
+  });
+
+  it("drops the owner's connection when someone else moves the agent to their device", async () => {
+    const zed = await owner.request("POST", "/api/agents", { handle: "zed", name: "Zed", harness: "codex", nodeId: box.id, settings: { connectionId: key, respondTo: "anyone" } });
+    // box is shared, so the other person may move it, but my key doesn't go along
+    const moved = await other.request("PATCH", `/api/agents/${zed.id}`, { nodeId: theirs.id });
+    expect(moved.settings.connectionId).toBeNull();
+    await other.send(general.id, "@zed hello there");
+    const run = await waitFor(() => runsOn(theirDevice).find((m) => m.run.agentId === zed.id));
+    expect(run.run.credential).toBeUndefined();
+    expect(JSON.stringify(theirDevice.got)).not.toContain("sk-proj-mine-1234");
+    theirDevice.send({ type: "run_done", runId: run.run.runId, finalText: "ok" });
+  });
+
+  it("won't let the owner move it onto someone else's device with the connection, or put it on one", async () => {
+    await other.request("PATCH", `/api/nodes/${theirs.id}`, { shared: true });
+    const yan = await owner.request("POST", "/api/agents", { handle: "yan", name: "Yan", harness: "codex", nodeId: box.id, settings: { connectionId: key } });
+    await expect(owner.request("PATCH", `/api/agents/${yan.id}`, { nodeId: theirs.id })).rejects.toThrow(/only goes to your own devices/);
+    await expect(owner.request("POST", "/api/agents", { handle: "yon", name: "Yon", harness: "codex", nodeId: theirs.id, settings: { connectionId: key } })).rejects.toThrow(/only goes to your own devices/);
+    // moving it back to the device's own login works
+    expect((await owner.request("PATCH", `/api/agents/${yan.id}`, { nodeId: theirs.id, settings: { connectionId: null } })).nodeId).toBe(theirs.id);
+  });
+
+  it("fails a run, rather than handing the secret over, when an agent ended up elsewhere anyway", async () => {
+    const xia = await owner.request("POST", "/api/agents", { handle: "xia", name: "Xia", harness: "codex", nodeId: box.id, settings: { connectionId: key } });
+    // as it might be in an older database: on their device, still on my key
+    hub.store.updateAgent(xia.id, { nodeId: theirs.id });
+    const before = runsOn(theirDevice).length;
+    const sent = await owner.send(general.id, "@xia go");
+    const failed = await waitFor(() => (hub.store.db.prepare("SELECT status, error FROM runs WHERE trigger_message_id = ?").get(sent.id) as { status: string; error: string } | undefined)?.status === "failed" ? (hub.store.db.prepare("SELECT error FROM runs WHERE trigger_message_id = ?").get(sent.id) as { error: string }) : undefined);
+    expect(failed.error).toMatch(/@xia is set to use Me's ChatGPT key, which only goes to Me's own devices, and .+ isn't one/);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(runsOn(theirDevice).length).toBe(before);
+    expect(JSON.stringify(theirDevice.got)).not.toContain("sk-proj-mine-1234");
+  });
+});
+
+describe("renewed sign-ins come back only from the run they were handed to", () => {
+  it("frees a sign-in when its device drops, and takes a renewal only for a recent run of that device on that connection", async () => {
+    const general = (await owner.channels()).find((c) => c.name === "general")!;
+    const stale = hub.models.create({ workspaceId: ws, userId: me, provider: "openai", kind: "oauth", label: "Due", secret: { auth: chatgpt("d1", new Date(Date.now() - 10 * 86_400_000).toISOString()) } });
+    const cy = await owner.request("POST", "/api/agents", { handle: "cy", name: "Cy", harness: "codex", nodeId: phone.id, settings: { connectionId: stale } });
+    await owner.request("POST", "/api/agents", { handle: "di", name: "Di", harness: "codex", nodeId: box.id, settings: { connectionId: stale } });
+    const runs: Extract<HubToNode, { type: "run" }>[] = [];
+    device.onMessage = (m) => {
+      if (m.type === "run") runs.push(m);
+    };
+    await owner.send(general.id, "@cy go");
+    await waitFor(() => (runs.some((r) => r.run.agentId === cy.id) ? true : undefined));
+    const cyRun = runs.find((r) => r.run.agentId === cy.id)!.run.runId;
+    // Di waits its turn while Cy's run holds the sign-in
+    const before = calls.length;
+    await owner.send(general.id, "@di go");
+    await new Promise((r) => setTimeout(r, 300));
+    expect(calls.length).toBe(before);
+    // Cy's device drops (a crash, say): Di goes ahead on the box
+    device.ws.close();
+    await waitFor(() => (calls.length > before ? true : undefined));
+    // the dropped device comes back and sends the sign-in it renewed for Cy's run: still taken
+    device = new FakeDevice();
+    await device.connect(phone.token);
+    // ...but not for a run that isn't on that connection, nor without a run
+    device.send({ type: "credential_refreshed", connectionId: stale, secret: { auth: chatgpt("nope1") } });
+    device.send({ type: "credential_refreshed", connectionId: stale, runId: "run_nope", secret: { auth: chatgpt("nope2") } });
+    await new Promise((r) => setTimeout(r, 100));
+    expect((hub.models.secret(stale)?.auth as any).tokens.refresh_token).not.toMatch(/nope/);
+    device.send({ type: "credential_refreshed", connectionId: stale, runId: cyRun, secret: { auth: chatgpt("d2") } });
+    await waitFor(() => ((hub.models.secret(stale)?.auth as any).tokens.refresh_token === "d2" ? true : undefined));
+    // long after the run, it isn't
+    (hub as any).handedOut.get(cyRun).endedAt = Date.now() - 11 * 60_000;
+    device.send({ type: "credential_refreshed", connectionId: stale, runId: cyRun, secret: { auth: chatgpt("late") } });
+    await new Promise((r) => setTimeout(r, 100));
+    expect((hub.models.secret(stale)?.auth as any).tokens.refresh_token).toBe("d2");
+  });
+
+  it("never takes a renewal for a connection that doesn't rotate", async () => {
+    const token = hub.models.create({ workspaceId: ws, userId: me, provider: "anthropic", kind: "oauth", label: "Claude", secret: { token: "sk-ant-oat01-original" } });
+    const general = (await owner.channels()).find((c) => c.name === "general")!;
+    const ivy = await owner.request("POST", "/api/agents", { handle: "ivy", name: "Ivy", harness: "claude-code", nodeId: phone.id, settings: { connectionId: token } });
+    const runs: Extract<HubToNode, { type: "run" }>[] = [];
+    device.onMessage = (m) => {
+      if (m.type === "run") runs.push(m);
+    };
+    await owner.send(general.id, "@ivy go");
+    const run = await waitFor(() => runs.find((r) => r.run.agentId === ivy.id));
+    device.send({ type: "credential_refreshed", connectionId: token, runId: run.run.runId, secret: { token: "sk-ant-oat01-swapped" } });
+    await new Promise((r) => setTimeout(r, 100));
+    expect(hub.models.secret(token)?.token).toBe("sk-ant-oat01-original");
+    device.send({ type: "run_done", runId: run.run.runId, finalText: "ok" });
+  });
+});

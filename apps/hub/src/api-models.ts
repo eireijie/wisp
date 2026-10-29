@@ -259,10 +259,13 @@ export function registerModelsApi(app: FastifyInstance, hub: Hub, h: Helpers) {
 }
 
 /** For API code that checks a connection before assigning it to an agent. */
-export function connectionProblem(hub: Hub, c: Caller, connectionId: string, harness: string): string | null {
+export function connectionProblem(hub: Hub, c: Caller, connectionId: string, harness: string, nodeId?: string | null): string | null {
   const r = hub.models.row(connectionId);
   if (!r || r.workspace_id !== c.workspaceId) return "settings.connectionId: no such connection";
   if (r.user_id !== c.actor.id) return "settings.connectionId: only its owner can put an agent on that connection";
+  // a connection only ever goes to its owner's own devices (Hub.connectionWithheld)
+  const node = nodeId ? hub.store.node(nodeId) : undefined;
+  if (node && node.ownerId !== r.user_id) return `settings.connectionId: your ${providerLabel(r.provider)} ${r.kind === "oauth" ? "sign-in" : "key"} only goes to your own devices, and ${node.name} isn't one`;
   if (!CREDENTIAL_SUPPORT.some((s) => s.harness === harness && s.provider === r.provider && s.kind === r.kind)) return `${harnessLabel(harness)} can't use a ${providerLabel(r.provider as ModelProvider)} ${r.kind === "oauth" ? "sign-in" : "key"}`;
   return null;
 }
