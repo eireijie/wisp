@@ -4,7 +4,7 @@ import { harnessLabel, providerLabel, type Agent, type ConnectionModel, type Mod
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { href } from "../router.ts";
-import { agentComputer, canUse, connectionName, connectionModels, connectionSub, connectionsFor, contextColor, contextLine, effortShort, forgetConnectionModels, modelName, planLeft, patchAgent, prettyModel, runLine, useConnections, useHarnessComputers, type AgentContext, type AgentModels } from "../models.ts";
+import { agentComputer, canUse, connectionModelList, connectionName, connectionModels, connectionSub, connectionsFor, contextColor, contextLine, effortShort, forgetConnectionModels, harnessSwitch, modelName, planLeft, patchAgent, prettyModel, runLine, useConnections, useHarnessComputers, type AgentContext, type AgentModels } from "../models.ts";
 import { HarnessLogo } from "./HarnessLogo.tsx";
 import { Modal, Popover, cx } from "./ui.tsx";
 import { useAgentCommands } from "./SlashMenu.tsx";
@@ -60,13 +60,23 @@ export function RunPanel({ agent, ctx, models, channelId, threadId, close, big }
   const [view, setView] = useState<View>("main");
   const [error, setError] = useState<string | null>(null);
   const go = (v: View) => (setError(null), setView(v));
-  const save = async (body: unknown, then: View = "main") => {
+  const [brief, setBrief] = useState(false);
+  // a failed toggle's error goes after a few seconds; a picker's stays until the next try
+  useEffect(() => {
+    if (!error || !brief) return;
+    const t = setTimeout(() => setError(null), 4000);
+    return () => clearTimeout(t);
+  }, [error, brief]);
+  const save = async (body: unknown, then: View = "main", opts?: { brief?: boolean }): Promise<boolean> => {
     setError(null);
     try {
       await patchAgent(agent.id, body);
       setView(then);
+      return true;
     } catch (e) {
+      setBrief(!!opts?.brief);
       setError((e as Error).message);
+      return false;
     }
   };
   const err = error && <p className="px-2.5 py-1.5 text-[12px] leading-snug text-bad">{error}</p>;
@@ -88,12 +98,19 @@ export function RunPanel({ agent, ctx, models, channelId, threadId, close, big }
 
 const row = (big?: boolean) => cx("flex w-full items-center gap-2 rounded-lg px-2.5 text-left hover:bg-hover", big ? "min-h-12 text-[15px]" : "min-h-9 text-[13px]");
 
-function Main({ agent, ctx, models, channelId, threadId, big, go, close, save, error }: { agent: Agent; ctx: AgentContext; models: AgentModels | null; channelId?: string; threadId?: string; big?: boolean; go: (v: View) => void; close: () => void; save: (body: unknown, then?: View) => Promise<void>; error: ReactNode }) {
+type Save = (body: unknown, then?: View, opts?: { brief?: boolean }) => Promise<boolean>;
+
+function Main({ agent, ctx, models, channelId, threadId, big, go, close, save, error }: { agent: Agent; ctx: AgentContext; models: AgentModels | null; channelId?: string; threadId?: string; big?: boolean; go: (v: View) => void; close: () => void; save: Save; error: ReactNode }) {
   const name = modelName(ctx, models);
   const levels = ctx.efforts ?? [];
-  // move the thumb right away; the save follows
-  const [effort, setEffort] = useState(agent.settings.effort ?? ctx.effort);
-  const [fast, setFast] = useState(!!agent.settings.fast);
+  // move the thumb right away; the save follows, and a failed save puts it back
+  const savedEffort = agent.settings.effort ?? ctx.effort;
+  const savedFast = !!(agent.settings.fast ?? ctx.fast);
+  const [effort, setEffort] = useState(savedEffort);
+  const [fast, setFast] = useState(savedFast);
+  // and whatever the agent says now wins (a change from another screen, a model switch)
+  useEffect(() => setEffort(savedEffort), [savedEffort]);
+  useEffect(() => setFast(savedFast), [savedFast]);
   const c = contextLine(ctx);
   const plan = ctx.plan ? planLeft(ctx.plan) : null;
   const commands = useAgentCommands(agent.id);
@@ -104,22 +121,41 @@ function Main({ agent, ctx, models, channelId, threadId, big, go, close, save, e
     close();
     await api("POST", `/api/channels/${channelId}/messages`, { body: `${channelKind === "dm" ? "" : `@${agent.handle} `}/${shrink.name}`, threadId });
   };
-  const label = (t: string) => <span className={cx("shrink-0 text-muted", big ? "w-20" : "w-16")}>{t}</span>;
+  // phones: the name left, the value right (an iOS settings row); larger screens: a narrow label column
+  const label = (t: string) => <span className={cx("shrink-0", big ? "text-ink" : "w-16 text-muted")}>{t}</span>;
   return (
     <div className="space-y-1">
-      <div className={cx(big && "rounded-xl border border-line bg-card p-1")}>
-        <button type="button" onClick={() => go("harness")} className={row(big)}>
-          {label("Harness")}
-          <span className="truncate">{harnessLabel(ctx.harness)}</span>
-          <ChevronRight size={big ? 15 : 12} className="ml-auto shrink-0 text-faint" />
-        </button>
-        <button type="button" onClick={() => go("model")} className={row(big)}>
-          {label("Model")}
-          <span className="truncate">{name.name}</span>
-          {name.provider && <span className={cx("shrink-0 text-faint", big ? "text-[13px]" : "text-[12px]")}>{name.provider}</span>}
-          <ChevronRight size={big ? 15 : 12} className="ml-auto shrink-0 text-faint" />
-        </button>
-      </div>
+      {big ? (
+        <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-card">
+          <button type="button" onClick={() => go("harness")} className={row(big)}>
+            {label("Harness")}
+            <span className="ml-auto min-w-0 truncate text-right text-muted">{harnessLabel(ctx.harness)}</span>
+            <ChevronRight size={15} className="shrink-0 text-faint" />
+          </button>
+          <button type="button" onClick={() => go("model")} className={row(big)}>
+            {label("Model")}
+            <span className="ml-auto flex min-w-0 flex-col items-end py-1.5 text-right leading-tight">
+              <span className="max-w-full truncate text-muted">{name.name}</span>
+              {name.provider && <span className="text-[12px] text-faint">{name.provider}</span>}
+            </span>
+            <ChevronRight size={15} className="shrink-0 text-faint" />
+          </button>
+        </div>
+      ) : (
+        <div>
+          <button type="button" onClick={() => go("harness")} className={row(big)}>
+            {label("Harness")}
+            <span className="truncate">{harnessLabel(ctx.harness)}</span>
+            <ChevronRight size={12} className="ml-auto shrink-0 text-faint" />
+          </button>
+          <button type="button" onClick={() => go("model")} className={row(big)}>
+            {label("Model")}
+            <span className="truncate">{name.name}</span>
+            {name.provider && <span className="shrink-0 text-[12px] text-faint">{name.provider}</span>}
+            <ChevronRight size={12} className="ml-auto shrink-0 text-faint" />
+          </button>
+        </div>
+      )}
       {error}
       {levels.length > 0 && (
         <div className="px-1 pt-1">
@@ -129,8 +165,9 @@ function Main({ agent, ctx, models, channelId, threadId, big, go, close, save, e
             value={effort && levels.includes(effort) ? effort : null}
             options={levels.map((l) => [l, effortShort(l, levels.length > 4)] as const)}
             onChange={(l) => {
+              const was = effort;
               setEffort(l);
-              void save({ settings: { effort: l } });
+              void save({ settings: { effort: l } }, "main", { brief: true }).then((ok) => ok || setEffort(was));
             }}
           />
         </div>
@@ -141,8 +178,9 @@ function Main({ agent, ctx, models, channelId, threadId, big, go, close, save, e
           role="switch"
           aria-checked={fast}
           onClick={() => {
-            setFast(!fast);
-            void save({ settings: { fast: !fast } });
+            const was = fast;
+            setFast(!was);
+            void save({ settings: { fast: !was } }, "main", { brief: true }).then((ok) => ok || setFast(was));
           }}
           className={row(big)}
           title={ctx.fastDescription ?? undefined}
@@ -177,19 +215,23 @@ function Main({ agent, ctx, models, channelId, threadId, big, go, close, save, e
   );
 }
 
-function HarnessPicker({ agent, ctx, models, big, onBack, save, error }: { agent: Agent; ctx: AgentContext; models: AgentModels | null; big?: boolean; onBack: () => void; save: (body: unknown, then?: View) => Promise<void>; error: ReactNode }) {
+function HarnessPicker({ agent, ctx, models, big, onBack, save, error }: { agent: Agent; ctx: AgentContext; models: AgentModels | null; big?: boolean; onBack: () => void; save: Save; error: ReactNode }) {
   const { computers } = useHarnessComputers();
   const { connections, support } = useConnections();
   const computer = computers ? agentComputer(agent, models, computers) : undefined;
   const conn = connections?.find((c) => c.id === agent.settings.connectionId) ?? ctx.connection ?? null;
   const list = computer?.harnesses.length ? computer.harnesses : [{ id: ctx.harness, label: harnessLabel(ctx.harness), version: ctx.harnessVersion, agents: [] }];
-  const pick = (h: string) => {
+  const [busy, setBusy] = useState(false);
+  const pick = async (h: string) => {
     if (h === agent.harness) return onBack();
     // a body that can't use the agent's connection goes back to that computer's own sign-in;
-    // models of one harness's own login don't carry over to another's
+    // models of one harness's own login don't carry over to another's (nor do its effort levels)
     const fits = !!conn && canUse(support, h, conn);
-    // (nor do its effort levels)
-    void save({ harness: h, ...(fits ? {} : { model: null, settings: { effort: null, ...(conn ? { connectionId: null } : {}) } }) });
+    // on a connection it can use, the model stays only when the new harness lists it (as the model picker does)
+    setBusy(true);
+    const list = fits ? await connectionModelList(agent.settings.connectionId ?? conn!.id, h, agent.id).catch(() => null) : null;
+    await save(harnessSwitch(h, agent, fits, list));
+    setBusy(false);
   };
   return (
     <div className="space-y-1 p-0.5">
@@ -199,7 +241,7 @@ function HarnessPicker({ agent, ctx, models, big, onBack, save, error }: { agent
         {list.map((h) => {
           const fits = !conn || support.length === 0 || canUse(support, h.id, conn);
           return (
-            <button key={h.id} type="button" role="radio" aria-checked={agent.harness === h.id} onClick={() => pick(h.id)} className={row(big)}>
+            <button key={h.id} type="button" role="radio" aria-checked={agent.harness === h.id} disabled={busy} onClick={() => void pick(h.id)} className={cx(row(big), "disabled:opacity-60")}>
               <span className="grid w-5 shrink-0 place-items-center text-muted">
                 <HarnessLogo harness={h.id} size={big ? 16 : 14} />
               </span>
@@ -223,7 +265,7 @@ function HarnessPicker({ agent, ctx, models, big, onBack, save, error }: { agent
   );
 }
 
-function ModelPicker({ agent, ctx, models, big, onBack, onConnect, save, error }: { agent: Agent; ctx: AgentContext; models: AgentModels | null; big?: boolean; onBack: () => void; onConnect: () => void; save: (body: unknown, then?: View) => Promise<void>; error: ReactNode }) {
+function ModelPicker({ agent, ctx, models, big, onBack, onConnect, save, error }: { agent: Agent; ctx: AgentContext; models: AgentModels | null; big?: boolean; onBack: () => void; onConnect: () => void; save: Save; error: ReactNode }) {
   const { connections } = useConnections();
   const usable = connectionsFor(agent.harness, connections ?? []);
   const current = agent.model ?? ctx.model;
@@ -272,8 +314,11 @@ function ModelPicker({ agent, ctx, models, big, onBack, onConnect, save, error }
 function ConnectionGroup({ c, all, agent, big, checked, onPick }: { c: ModelConnection; all: ModelConnection[]; agent: Agent; big?: boolean; checked: string | null; onPick: (m: ConnectionModel) => void }) {
   const [list, setList] = useState<ConnectionModel[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // asked again when connections change (a sign-in renewed, its models listed)
+  const version = useStore((s) => s.modelsVersion);
   useEffect(() => {
     let live = true;
+    setError(null);
     connectionModels(c.id, agent.harness, agent.id).then(
       (m) => live && setList(m),
       (e) => live && setError((e as Error).message),
@@ -281,7 +326,7 @@ function ConnectionGroup({ c, all, agent, big, checked, onPick }: { c: ModelConn
     return () => {
       live = false;
     };
-  }, [c.id, agent.harness, agent.id]);
+  }, [c.id, agent.harness, agent.id, version]);
   return (
     <Group big={big} label={connectionName(c, all)} right={connectionSub(c, true)}>
       {error ? <p className="px-2.5 py-1.5 text-[12px] text-bad">{error}</p> : !list ? <p className="px-2.5 py-1.5 text-[12px] text-faint">Loading…</p> : list.length === 0 ? <p className="px-2.5 py-1.5 text-[12px] text-faint">No models for {harnessLabel(agent.harness)}.</p> : <More big={big} items={list} render={(m) => <ModelRow key={m.id} big={big} label={prettyModel(m.label)} checked={checked === m.id} onClick={() => onPick(m)} />} />}
