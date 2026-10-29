@@ -17,6 +17,14 @@ describe("claude stream-json", () => {
       { type: "tool_result", name: "mcp__wisp__memory_search", output: "found" },
     ]);
   });
+  it("streams text as it's written and doesn't repeat it when the message completes", () => {
+    const names = new Map<string, string>(), streamed = new Set<string>();
+    const line = (m: unknown) => parseClaudeLine(m, names, streamed);
+    expect(line({ type: "stream_event", event: { type: "message_start", message: { id: "m1" } } })).toEqual([]);
+    expect(line({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Hey " } } })).toEqual([{ type: "text", text: "Hey " }]);
+    expect(line({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "there." } } })).toEqual([{ type: "text", text: "there." }]);
+    expect(line({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: "Hey there." }, { type: "tool_use", id: "t1", name: "x", input: {} }] } })).toEqual([{ type: "tool_call", name: "x", input: {} }]);
+  });
 });
 
 describe("codex exec --json", () => {

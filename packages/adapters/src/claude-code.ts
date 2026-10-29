@@ -30,7 +30,8 @@ export function claudeMcpConfig(input: RunInput): { mcpServers: Record<string, u
  * inline, where `ps` would show it. Exported for tests.
  */
 export function claudeArgs(input: RunInput, opts: { mcpConfigFile?: string } = {}): string[] {
-  const args = ["-p", "--output-format", "stream-json", "--verbose"];
+  // partial messages stream the reply as it's written, so a voice call can speak its first sentence early
+  const args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"];
   if (input.sessionId) args.push("--resume", input.sessionId);
   if (input.model) args.push("--model", input.model);
   if (input.effort) args.push("--effort", input.effort);
@@ -93,6 +94,7 @@ export const claudeCode: HarnessAdapter = {
     let sessionId: string | null = input.sessionId ?? null;
     let error: string | null = null;
     const toolNames = new Map<string, string>();
+    const streamed = new Set<string>();
     let lastAssistant: any = null;
     let result: any = null;
     let plan: PlanUsage | undefined;
@@ -104,7 +106,7 @@ export const claudeCode: HarnessAdapter = {
       const mcpFile = mcp ? await files.add("mcp.json", JSON.stringify(mcp)) : undefined;
       const l = await launched(input, this.binary, claudeArgs(input, { mcpConfigFile: mcpFile?.path }), claudeEnv(input), files.list);
       proc = await runJsonl(l.command, l.args, { cwd: l.cwd, env: l.env, stdin: input.prompt, signal: input.signal }, (m) => {
-        for (const e of parseClaudeLine(m, toolNames)) {
+        for (const e of parseClaudeLine(m, toolNames, streamed)) {
           if (e.type === "session") sessionId = e.id;
           onEvent(e);
         }
@@ -172,12 +174,19 @@ export function claudePlan(info: any): PlanUsage | undefined {
 }
 
 /** Translate one stream-json line into Wisp events. Exported for tests. */
-export function parseClaudeLine(m: any, toolNames = new Map<string, string>()): AdapterEvent[] {
+export function parseClaudeLine(m: any, toolNames = new Map<string, string>(), streamed = new Set<string>()): AdapterEvent[] {
   const out: AdapterEvent[] = [];
   if (m.type === "system" && m.subtype === "init" && m.session_id) out.push({ type: "session", id: m.session_id });
+  // a message whose text already arrived piece by piece isn't sent again when it completes
+  if (m.type === "stream_event") {
+    const e = m.event;
+    if (e?.type === "message_start" && e.message?.id) streamed.add(e.message.id);
+    if (e?.type === "content_block_delta" && e.delta?.type === "text_delta" && e.delta.text) out.push({ type: "text", text: e.delta.text });
+  }
   if (m.type === "assistant" && Array.isArray(m.message?.content)) {
+    const sent = streamed.has(m.message.id);
     for (const c of m.message.content) {
-      if (c.type === "text" && c.text) out.push({ type: "text", text: c.text });
+      if (c.type === "text" && c.text && !sent) out.push({ type: "text", text: c.text });
       if (c.type === "tool_use") {
         toolNames.set(c.id, c.name);
         out.push({ type: "tool_call", name: c.name, input: c.input });

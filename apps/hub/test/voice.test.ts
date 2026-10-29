@@ -69,6 +69,13 @@ describe("personal voice credentials and proxy", () => {
     expect(await built.hub.buildPrompt(agent.id, dm.id, null, message.id)).toContain("You're on a voice call");
     const typed = (await api("POST", `/api/channels/${dm.id}/messages`, { body: "Typed this" })).json();
     expect(await built.hub.buildPrompt(agent.id, dm.id, null, typed.id)).not.toContain("You're on a voice call");
+    // a spoken message is answered at low effort when the model offers it
+    vi.spyOn(built.hub.store, "nodeCatalog").mockReturnValue([{ harness: "custom", efforts: [], models: [{ id: "m", label: "M", efforts: ["low", "high"] }], defaultModel: "m" }] as never);
+    const onNode = { ...built.hub.store.agent(agent.id)!, nodeId: "n1" };
+    const voiceEffort = (id: string) => (built.hub as unknown as { voiceEffort(a: typeof onNode, id: string): string | undefined }).voiceEffort(onNode, id);
+    expect(voiceEffort(message.id)).toBe("low");
+    expect(voiceEffort(typed.id)).toBeUndefined();
+    vi.restoreAllMocks();
   });
   it("deletes a cleared key", async () => {
     expect((await api("PUT", "/api/voice/settings", { ...settings, openaiKey: "", elevenlabsKey: "" })).statusCode).toBe(200);
