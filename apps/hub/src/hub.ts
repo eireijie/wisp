@@ -795,14 +795,24 @@ export class Hub {
         const connectors = this.connectors.specsFor(agent.id);
         // every background check starts a new session (the watch notes carry what it needs), on the model the person picked for checks
         const bg = run.kind === "background" && run.requestedBy ? this.store.background(agent.id, run.requestedBy) : undefined;
+        const effort = bg?.effort ?? (run.kind !== "background" ? this.voiceEffort(agent, run.triggerMessageId) : undefined);
         this.send(conn, {
           type: "run",
-          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.kind === "background" ? BACKGROUND_THREAD : run.threadId, prompt, hop: run.hop, ...(run.kind === "background" ? { fresh: true } : {}), ...(bg?.model ? { model: bg.model } : {}), ...(bg?.effort ? { effort: bg.effort } : {}), ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}) },
+          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.kind === "background" ? BACKGROUND_THREAD : run.threadId, prompt, hop: run.hop, ...(run.kind === "background" ? { fresh: true } : {}), ...(bg?.model ? { model: bg.model } : {}), ...(effort ? { effort } : {}), ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}) },
         });
       },
       // the prompt couldn't be built (a vault read failed, say): say so like any other failure
       (err) => this.finishRun(conn.workspaceId, run, { error: `couldn't prepare the request: ${(err as Error).message}` }),
     );
+  }
+
+  /** A spoken message is answered at low effort when the agent's model offers it: on a call, long thinking is silence. */
+  private voiceEffort(agent: Agent, triggerId: string): string | undefined {
+    const trigger = triggerId ? this.store.message(triggerId) : undefined;
+    if (!trigger || !isVoiceMessage(trigger)) return undefined;
+    const catalog = agent.nodeId ? this.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness) : undefined;
+    const efforts = catalog?.models.find((m) => m.id === (agent.model ?? catalog.defaultModel))?.efforts ?? catalog?.efforts ?? [];
+    return efforts.includes("low") ? "low" : undefined;
   }
 
   /** Toggle (or force) a reaction and push the message's new reaction list to browsers. */
