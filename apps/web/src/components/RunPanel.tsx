@@ -188,7 +188,8 @@ function HarnessPicker({ agent, ctx, models, big, onBack, save, error }: { agent
     // a body that can't use the agent's connection goes back to that computer's own sign-in;
     // models of one harness's own login don't carry over to another's
     const fits = !!conn && canUse(support, h, conn);
-    void save({ harness: h, ...(fits ? {} : { model: null }), ...(conn && !fits ? { settings: { connectionId: null } } : {}) });
+    // (nor do its effort levels)
+    void save({ harness: h, ...(fits ? {} : { model: null, settings: { effort: null, ...(conn ? { connectionId: null } : {}) } }) });
   };
   return (
     <div className="space-y-1 p-0.5">

@@ -206,7 +206,8 @@ function KeyForm({ provider, big, onDone }: { provider: ModelProvider; big?: boo
       const c = await api<ModelConnection>("POST", "/api/model-connections", { provider, kind: "key", key: key.trim() });
       onDone(c.id);
     } catch (err) {
-      setError((err as Error).message.replace(/^key: /, ""));
+      const m = (err as Error).message.replace(/^key: /, "");
+      setError(m.charAt(0).toUpperCase() + m.slice(1));
     } finally {
       setBusy(false);
     }
