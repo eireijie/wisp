@@ -266,7 +266,7 @@ function SkillPage({ skill, agents, canEdit, onEdit, onChanged, onGone, onTry, o
       </div>
       {error && <p className="text-sm text-bad">{error}</p>}
 
-      <MoreOptions about="details">
+      <MoreOptions title="Details">
         <p className="text-xs text-muted">
           Instruction file: <span className="font-mono">me/skills/{skill.slug}/SKILL.md</span>
         </p>
