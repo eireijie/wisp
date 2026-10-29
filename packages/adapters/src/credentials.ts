@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { credentialSupport, harnessLabel, hermesProvider, providerLabel, type ConnectionSecret, type RunCredential } from "@wisp/core";
+import { credentialSupport, harnessLabel, hermesProvider, providerLabel, withArticle, type ConnectionSecret, type RunCredential } from "@wisp/core";
 import { yamlSetScalar } from "./harness-formats.ts";
 
 /**
@@ -67,7 +67,7 @@ const HERMES_CODEX_URL = "https://chatgpt.com/backend-api/codex";
  */
 export async function prepareCredential(harness: string, cred: RunCredential, at: CredentialPlaces): Promise<PreparedCredential> {
   const support = credentialSupport(harness, cred.provider, cred.kind);
-  if (!support) throw new Error(`${harnessLabel(harness)} can't use a ${providerLabel(cred.provider)} ${cred.kind === "oauth" ? "sign-in" : "key"}`);
+  if (!support) throw new Error(`${harnessLabel(harness)} can't use ${withArticle(providerLabel(cred.provider))} ${cred.kind === "oauth" ? "sign-in" : "key"}`);
   const s = cred.secret;
   const need = (v: string | undefined, what: string) => {
     if (!v) throw new Error(`the ${providerLabel(cred.provider)} connection has no ${what}; connect it again in Settings → Models`);

@@ -1303,7 +1303,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       computer: vm ? { id: vm.id, name: vm.name, reported: !!(node && store.computerCatalog(node.id, vm.id)) } : null,
       catalog,
       /** the model connection it runs on, and that connection's models (null without one) */
-      connection: r ? { id: r.id, provider: r.provider, kind: r.kind, label: r.label, account: r.account, plan: r.plan, mine: r.user_id === c.actor.id } : null,
+      // whose account it is (an email) is for its owner only
+      connection: r ? { id: r.id, provider: r.provider, kind: r.kind, label: r.label, account: r.user_id === c.actor.id ? r.account : null, plan: r.plan, mine: r.user_id === c.actor.id } : null,
       models,
     };
   });
@@ -1363,8 +1364,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       lastRunAt: usage?.at ?? null,
       /** effort levels the model in use offers (else the harness's) */
       efforts: entryOf(model)?.efforts ?? catalog?.efforts ?? [],
-      /** the model connection it runs on: { id, provider, kind, label, account, plan }, or null for the device's own login */
-      connection: usable ? { id: usable.id, provider: usable.provider, kind: usable.kind, label: usable.label, account: usable.account, plan: usable.plan } : null,
+      /** the model connection it runs on: { id, provider, kind, label, account (its owner sees it), plan }, or null for the device's own login */
+      connection: usable ? { id: usable.id, provider: usable.provider, kind: usable.kind, label: usable.label, account: usable.user_id === c.actor.id ? usable.account : null, plan: usable.plan } : null,
       /** the subscription's usage as last reported ({ window, usedFraction 0–1, resetsAt, planType?, windows?, capturedAt }); null when unknown */
       plan: planNow,
     };

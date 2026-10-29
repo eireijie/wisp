@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { CREDENTIAL_SUPPORT, MODEL_PROVIDER_INFO, MODEL_PROVIDERS, ModelProviderId, harnessLabel, providerLabel, type ModelLogin, type ModelProvider } from "@wisp/core";
+import { CREDENTIAL_SUPPORT, MODEL_PROVIDER_INFO, MODEL_PROVIDERS, ModelProviderId, harnessLabel, providerLabel, withArticle, type ModelLogin, type ModelProvider } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import { id } from "./auth.ts";
 import { ComputerError } from "./computers.ts";
@@ -13,6 +13,8 @@ interface Helpers {
 }
 
 const LABEL = z.string().trim().min(1).max(80);
+/** fresh=1 asks the provider again at most this often per connection; otherwise the cached list is served */
+const FRESH_EVERY_MS = 30_000;
 const SIGN_IN_HARNESS = z.enum(["claude-code", "codex", "hermes"]);
 
 /**
@@ -27,7 +29,7 @@ const SIGN_IN_HARNESS = z.enum(["claude-code", "codex", "hermes"]);
  *   POST   /api/model-connections                   { provider, kind: "key", key, label? } → ModelConnection
  *   PATCH  /api/model-connections/:id               { label } → ModelConnection
  *   DELETE /api/model-connections/:id               → { ok, agents }  (agents that were on it go back to their device's login)
- *   GET    /api/model-connections/:id/models        ?harness=&agent=&fresh=1 → { connectionId, provider, harness, models, efforts }
+ *   GET    /api/model-connections/:id/models        ?harness=&agent=&fresh=1 → { connectionId, provider, harness, models, efforts }  (fresh: owner only, every 30 s at most)
  *   POST   /api/model-connections/login             { provider, nodeId?, harness?, label? } → ModelLogin & { nodeId }
  *   GET    /api/model-connections/login/:loginId    → ModelLogin
  *   POST   /api/model-connections/login/:loginId/input  { text } → ModelLogin   (the code Claude's page shows)
@@ -40,6 +42,8 @@ const SIGN_IN_HARNESS = z.enum(["claude-code", "codex", "hermes"]);
  */
 export function registerModelsApi(app: FastifyInstance, hub: Hub, h: Helpers) {
   const { store } = hub;
+  /** when each connection's model list was last fetched fresh (fresh=1) */
+  const lastFresh = new Map<string, number>();
   const { need, parse } = h;
 
   const usedBy = (workspaceId: string, connectionId: string) =>
@@ -85,7 +89,7 @@ export function registerModelsApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     // an OpenRouter key in the Anthropic box, say: the most specific prefix the key has, when it's another provider's
     const ours = info.keyPrefix && body.key.startsWith(info.keyPrefix) ? info.keyPrefix.length : 0;
     const other = MODEL_PROVIDERS.filter((p) => p !== body.provider && MODEL_PROVIDER_INFO[p].keyPrefix && body.key.startsWith(MODEL_PROVIDER_INFO[p].keyPrefix!) && MODEL_PROVIDER_INFO[p].keyPrefix!.length > ours).sort((x, y) => MODEL_PROVIDER_INFO[y].keyPrefix!.length - MODEL_PROVIDER_INFO[x].keyPrefix!.length)[0];
-    if (other) return reply.code(400).send({ error: `key: that looks like a ${providerLabel(other)} key` });
+    if (other) return reply.code(400).send({ error: `key: that looks like ${withArticle(providerLabel(other))} key` });
     const problem = await hub.models.checkKey(body.provider, body.key);
     if (problem) return reply.code(400).send({ error: `key: ${problem}` });
     const cid = hub.models.create({ workspaceId: c.workspaceId, userId: c.actor.id, provider: body.provider, kind: "key", label: body.label ?? `${info.label} key`, secret: { key: body.key } });
@@ -136,7 +140,10 @@ export function registerModelsApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     const harness = q.harness ?? agent?.harness ?? CREDENTIAL_SUPPORT.find((s) => s.provider === r.provider && s.kind === r.kind)?.harness ?? "";
     // a sign-in's list comes from the harness that runs it: the agent's, else any device's
     const catalog = (agent ? hub.catalogFor({ ...agent, harness }) : undefined) ?? store.nodes(c.workspaceId).flatMap((n) => store.nodeCatalog(n.id)).find((h) => h.harness === harness);
-    const models = await hub.models.models(r.id, catalog, { fresh: !!q.fresh }).catch((err) => {
+    // asking the provider again (on the owner's key) is for the owner, and not more than every FRESH_EVERY_MS
+    const fresh = !!q.fresh && r.user_id === c.actor.id && Date.now() - (lastFresh.get(r.id) ?? 0) >= FRESH_EVERY_MS;
+    if (fresh) lastFresh.set(r.id, Date.now());
+    const models = await hub.models.models(r.id, catalog, { fresh }).catch((err) => {
       reply.code(502).send({ error: (err as Error).message });
       return null;
     });
@@ -266,6 +273,6 @@ export function connectionProblem(hub: Hub, c: Caller, connectionId: string, har
   // a connection only ever goes to its owner's own devices (Hub.connectionWithheld)
   const node = nodeId ? hub.store.node(nodeId) : undefined;
   if (node && node.ownerId !== r.user_id) return `settings.connectionId: your ${providerLabel(r.provider)} ${r.kind === "oauth" ? "sign-in" : "key"} only goes to your own devices, and ${node.name} isn't one`;
-  if (!CREDENTIAL_SUPPORT.some((s) => s.harness === harness && s.provider === r.provider && s.kind === r.kind)) return `${harnessLabel(harness)} can't use a ${providerLabel(r.provider as ModelProvider)} ${r.kind === "oauth" ? "sign-in" : "key"}`;
+  if (!CREDENTIAL_SUPPORT.some((s) => s.harness === harness && s.provider === r.provider && s.kind === r.kind)) return `${harnessLabel(harness)} can't use ${withArticle(providerLabel(r.provider as ModelProvider))} ${r.kind === "oauth" ? "sign-in" : "key"}`;
   return null;
 }

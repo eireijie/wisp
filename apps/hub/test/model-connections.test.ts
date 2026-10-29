@@ -167,7 +167,7 @@ afterAll(async () => {
 describe("connecting keys", () => {
   it("checks a key with its provider, keeps it, and never gives it back", async () => {
     await expect(owner.request("POST", "/api/model-connections", { provider: "openrouter", kind: "key", key: "sk-or-bad-key-123" })).rejects.toThrow(/wasn't accepted/);
-    await expect(owner.request("POST", "/api/model-connections", { provider: "anthropic", kind: "key", key: "sk-or-v1-looks-like-openrouter" })).rejects.toThrow(/looks like a OpenRouter key/);
+    await expect(owner.request("POST", "/api/model-connections", { provider: "anthropic", kind: "key", key: "sk-or-v1-looks-like-openrouter" })).rejects.toThrow(/looks like an OpenRouter key/);
     const c = await owner.request("POST", "/api/model-connections", { provider: "openrouter", kind: "key", key: "sk-or-v1-good-a91f" });
     expect(c).toMatchObject({ provider: "openrouter", kind: "key", label: "OpenRouter key", keyHint: "a91f", mine: true, harnesses: ["claude-code", "codex", "hermes"] });
     const { connections } = await owner.request("GET", "/api/model-connections");
@@ -559,5 +559,39 @@ describe("what /context shows after a switch", () => {
     const quin = await owner.request("POST", "/api/agents", { handle: "quin", name: "Quin", harness: "claude-code", nodeId: box.id, settings: { connectionId: router } });
     const ctx = await owner.request("GET", `/api/agents/${quin.id}/context`);
     expect(ctx).toMatchObject({ model: "anthropic/claude-opus-5.5", modelLabel: "Claude Opus 5.5", modelIsDefault: true });
+  });
+});
+
+describe("what others see of my connection", () => {
+  it("shows its account to its owner only, and only the owner can ask the provider again (not too often)", async () => {
+    const signin = hub.models.create({ workspaceId: ws, userId: me, provider: "anthropic", kind: "oauth", label: "Claude", secret: { token: "sk-ant-oat01-acct" }, account: "me@example.com", plan: "Max" });
+    const rae = await owner.request("POST", "/api/agents", { handle: "rae", name: "Rae", harness: "claude-code", nodeId: box.id, settings: { connectionId: signin } });
+    expect((await owner.request("GET", `/api/agents/${rae.id}/context`)).connection.account).toBe("me@example.com");
+    expect((await owner.request("GET", `/api/agents/${rae.id}/models`)).connection.account).toBe("me@example.com");
+    const ctx = await other.request("GET", `/api/agents/${rae.id}/context`);
+    expect(ctx.connection).toMatchObject({ id: signin, plan: "Max", account: null });
+    expect((await other.request("GET", `/api/agents/${rae.id}/models`)).connection.account).toBeNull();
+
+    const key = hub.models.create({ workspaceId: ws, userId: me, provider: "openrouter", kind: "key", label: "Router 4", secret: { key: "sk-or-v1-fresh" } });
+    const sam = await owner.request("POST", "/api/agents", { handle: "sam", name: "Sam", harness: "codex", nodeId: box.id, settings: { connectionId: key } });
+    let asked = 0;
+    const real = hub.fetchImpl;
+    hub.fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).startsWith("https://openrouter.ai/api/v1/models")) asked++;
+      return real(input, init);
+    }) as typeof fetch;
+    try {
+      await owner.request("GET", `/api/model-connections/${key}/models?agent=${sam.id}`);
+      expect(asked).toBe(1);
+      // someone else's fresh=1 is served from the cache
+      for (let i = 0; i < 3; i++) await other.request("GET", `/api/model-connections/${key}/models?agent=${sam.id}&fresh=1`);
+      expect(asked).toBe(1);
+      // the owner's is fetched, but not again right away
+      await owner.request("GET", `/api/model-connections/${key}/models?agent=${sam.id}&fresh=1`);
+      await owner.request("GET", `/api/model-connections/${key}/models?agent=${sam.id}&fresh=1`);
+      expect(asked).toBe(2);
+    } finally {
+      hub.fetchImpl = real;
+    }
   });
 });

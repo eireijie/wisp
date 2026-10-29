@@ -47,6 +47,11 @@ export function providerLabel(p: string): string {
   return MODEL_PROVIDER_INFO[p as ModelProvider]?.label ?? p;
 }
 
+/** "a" or "an" before a word, by its first letter ("an OpenRouter key", "a Claude key"). */
+export function withArticle(word: string): string {
+  return `${/^[aeiou]/i.test(word) ? "an" : "a"} ${word}`;
+}
+
 /**
  * How one harness uses one kind of connection.
  * - "env": the run's environment carries it (the harness's own folder, sessions and settings stay as they are)
