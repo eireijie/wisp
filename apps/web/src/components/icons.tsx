@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 /**
  * Wisp's own line icons for the four places (Inbox, Chats, Agents, Computers), drawn like the
@@ -40,13 +40,30 @@ export const ComputersIcon = (p: { size?: number; className?: string }) => (
   </Line>
 );
 
-/** Wisp's ghost, filled: the mark on the rail's top button. */
+/**
+ * Wisp's logo, "Peek": a purple-to-blue gradient tile with a white dome ghost that runs off the
+ * bottom edge (the tile clips it) and looks to the side. It's full colour, so a text colour class
+ * has no effect on it; the rail button, sign-in hero and welcome/authorize screens all show it as is.
+ */
 export function WispGhost({ size = 34, className }: { size?: number; className?: string }) {
+  const id = useId();
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className}>
-      <path d="M12 2.5a7.5 7.5 0 0 0-7.5 7.5v11l2.5-1.7 2.5 1.7 2.5-1.7 2.5 1.7 2.5-1.7 2.5 1.7V10A7.5 7.5 0 0 0 12 2.5z" fill="currentColor" />
-      <circle cx="9.5" cy="10.5" r="1.3" fill="var(--app)" />
-      <circle cx="14.5" cy="10.5" r="1.3" fill="var(--app)" />
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden className={className}>
+      <defs>
+        <linearGradient id={`${id}g`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#BF5AF2" />
+          <stop offset="1" stopColor="#0A84FF" />
+        </linearGradient>
+        <clipPath id={`${id}c`}>
+          <rect width="100" height="100" rx="23" />
+        </clipPath>
+      </defs>
+      <rect width="100" height="100" rx="23" fill={`url(#${id}g)`} />
+      <g clipPath={`url(#${id}c)`}>
+        <path fill="#FFFFFF" d="M18 101 L18 62 C18 40 32 28 50 28 C68 28 82 40 82 62 L82 101Z" />
+      </g>
+      <ellipse cx="53" cy="55" rx="4.2" ry="6.6" fill="#15131C" />
+      <ellipse cx="70" cy="55" rx="4.2" ry="6.6" fill="#15131C" />
     </svg>
   );
 }

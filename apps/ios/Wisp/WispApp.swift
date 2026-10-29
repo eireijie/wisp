@@ -33,7 +33,7 @@ struct RootView: View {
       PairView()
     case .loading:
       VStack(spacing: 14) {
-        GhostView(look: GhostLook(color: "#f5f5f5", color2: "#d9d9d9"), seed: "", size: 56)
+        WispMark(size: 56)
         ProgressView()
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
