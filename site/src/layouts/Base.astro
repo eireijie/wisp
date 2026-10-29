@@ -1,6 +1,5 @@
 ---
 import "../styles/global.css";
-import Ghost from "../components/Ghost.astro";
 import { REPO } from "../lib/site";
 
 interface Props {
@@ -43,7 +42,7 @@ const nav = [
     <header class="site-header">
       <div class="wrap"><div class="bar glass">
         <a class="brand" href="/" aria-label="Wisp home" aria-current={current === "home" ? "page" : undefined}>
-          <span class="tile"><Ghost size={22} color="#ffffff" color2="#d9d4ff" /></span>
+          <img class="tile" src="/favicon.svg" width="36" height="36" alt="" />
           <span>Wisp</span>
         </a>
         <nav aria-label="Main">
@@ -72,7 +71,7 @@ const nav = [
     <footer class="site-footer">
       <div class="wrap foot">
         <div class="foot-brand">
-          <span class="tile"><Ghost size={20} color="#ffffff" color2="#d9d4ff" /></span>
+          <img class="tile" src="/favicon.svg" width="30" height="30" alt="" />
           <p>
             <strong>Wisp</strong> is free and open source under the{" "}
             <a href={`${REPO}/blob/main/LICENSE`} rel="noopener">Apache-2.0 license</a>.
@@ -135,20 +134,16 @@ const nav = [
         font-size: 1.3rem;
         letter-spacing: -0.02em;
       }
-      /* the ghost on a dark tile, like the app icon, so it reads in light and dark mode */
+      /* the Peek logo: the app icon itself (gradient tile), which reads in light and dark mode */
       .tile {
-        display: inline-grid;
-        place-items: center;
+        display: block;
         width: 36px;
         height: 36px;
-        border-radius: 12px;
-        background: #141414;
-        box-shadow: 0 0 0 1px oklch(1 0 0 / 0.08);
+        border-radius: 23%;
       }
       .site-footer .tile {
         width: 30px;
         height: 30px;
-        border-radius: 10px;
       }
       nav ul {
         list-style: none;

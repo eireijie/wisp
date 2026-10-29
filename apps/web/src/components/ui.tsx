@@ -1,5 +1,5 @@
 import { shareOrigin, useAccess } from "../access.ts";
-import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { type Agent } from "@wisp/core";
@@ -224,16 +224,22 @@ export function StatusChip({ status }: { status: Agent["status"] }) {
   );
 }
 
-/** Wisp's mark: a ghost outline. `draw` animates it drawing itself (the loading state). */
+/** Wisp's mark: the Peek ghost, a dome peeking up from the bottom. `draw` animates its outline drawing itself (the loading state). */
 export function GhostMark({ size = 20, draw, className }: { size?: number; draw?: boolean; className?: string }) {
+  const id = useId();
   return (
-    <svg viewBox="22 10 76 104" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={draw ? 4.5 : 9} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <path className={draw ? "loader-draw" : undefined} pathLength={100} d="M30 60 C30 32 44 18 60 18 C76 18 90 32 90 60 L90 96 Q85 104 80 96 Q75 88 70 96 Q65 104 60 96 Q55 88 50 96 Q45 104 40 96 Q35 88 30 96 Z" />
-      {!draw && (
-        <g fill="currentColor" stroke="none">
-          <circle cx="50" cy="56" r="6" />
-          <circle cx="70" cy="56" r="6" />
-        </g>
+    <svg viewBox="12 22 76 80" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={4.5} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      {draw ? (
+        <path className="loader-draw" pathLength={100} d="M18 100 L18 62 C18 40 32 28 50 28 C68 28 82 40 82 62 L82 100" />
+      ) : (
+        <>
+          <mask id={id}>
+            <rect x="0" y="0" width="100" height="110" fill="#fff" />
+            <ellipse cx="53" cy="55" rx="4.2" ry="6.6" fill="#000" />
+            <ellipse cx="70" cy="55" rx="4.2" ry="6.6" fill="#000" />
+          </mask>
+          <path d="M18 101 L18 62 C18 40 32 28 50 28 C68 28 82 40 82 62 L82 101Z" fill="currentColor" stroke="none" mask={`url(#${id})`} />
+        </>
       )}
     </svg>
   );

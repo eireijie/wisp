@@ -1,35 +1,26 @@
 import SwiftUI
 
-// The pieces of the screens before you're in the app (pairing, waiting, errors): the Wisp ghost
+// The pieces of the screens before you're in the app (pairing, waiting, errors): the Wisp logo
 // bobbing over a big title, a tall code card, and full-width pill buttons. They follow the
 // approved design (auth-Pair*, auth-Join*) and build on Palette and Chrome.
 
-/** Wisp's ghost as one simple piece, drawn in a 24-point box like the design's path. */
+/** The Peek ghost as one simple piece, drawn in a 100-point box: a dome that runs off the bottom edge. */
 struct WispGhostShape: Shape {
   func path(in rect: CGRect) -> Path {
-    let s = min(rect.width, rect.height) / 24
-    let ox = rect.midX - 12 * s, oy = rect.midY - 12 * s
-    func p(_ x: Double, _ y: Double) -> CGPoint { CGPoint(x: ox + x * s, y: oy + y * s) }
+    let s = min(rect.width, rect.height) / 100
+    func p(_ x: Double, _ y: Double) -> CGPoint { CGPoint(x: rect.midX + (x - 50) * s, y: rect.midY + (y - 50) * s) }
     var path = Path()
-    path.move(to: p(4.5, 10))
-    // the round top: from the left edge over the top to the right edge
-    for i in 1...40 {
-      let a = Double.pi * (1 - Double(i) / 40)
-      path.addLine(to: p(12 + 7.5 * cos(a), 10 - 7.5 * sin(a)))
-    }
-    path.addLine(to: p(19.5, 21))
-    path.addLine(to: p(17, 19.3))
-    path.addLine(to: p(14.5, 21))
-    path.addLine(to: p(12, 19.3))
-    path.addLine(to: p(9.5, 21))
-    path.addLine(to: p(7, 19.3))
-    path.addLine(to: p(4.5, 21))
+    path.move(to: p(18, 101))
+    path.addLine(to: p(18, 62))
+    path.addCurve(to: p(50, 28), control1: p(18, 40), control2: p(32, 28))
+    path.addCurve(to: p(82, 62), control1: p(68, 28), control2: p(82, 40))
+    path.addLine(to: p(82, 101))
     path.closeSubpath()
     return path
   }
 }
 
-/** The ghost with its two eyes, optionally floating up and down. */
+/** Wisp's logo, "Peek": the white ghost peeking up from the bottom of the purple-to-blue tile, optionally floating up and down. */
 struct WispMark: View {
   var size: CGFloat = 84
   var bobbing = true
@@ -37,12 +28,15 @@ struct WispMark: View {
   @ReduceMotion private var reduceMotion
 
   var body: some View {
+    let eye = Color(red: 0x15 / 255, green: 0x13 / 255, blue: 0x1C / 255)
     ZStack {
-      WispGhostShape().fill(Palette.text)
-      Circle().fill(Palette.ground).frame(width: size * 0.108, height: size * 0.108).position(x: size * 9.5 / 24, y: size * 10.5 / 24)
-      Circle().fill(Palette.ground).frame(width: size * 0.108, height: size * 0.108).position(x: size * 14.5 / 24, y: size * 10.5 / 24)
+      LinearGradient(colors: [Color(red: 0xBF / 255, green: 0x5A / 255, blue: 0xF2 / 255), Color(red: 0x0A / 255, green: 0x84 / 255, blue: 0xFF / 255)], startPoint: .topLeading, endPoint: .bottomTrailing)
+      WispGhostShape().fill(Color.white)
+      Ellipse().fill(eye).frame(width: size * 0.084, height: size * 0.132).position(x: size * 0.53, y: size * 0.55)
+      Ellipse().fill(eye).frame(width: size * 0.084, height: size * 0.132).position(x: size * 0.70, y: size * 0.55)
     }
     .frame(width: size, height: size)
+    .clipShape(RoundedRectangle(cornerRadius: size * 0.23, style: .continuous))
     .offset(y: reduceMotion || !bobbing ? 0 : (up ? -6 : 0))
     .animation(reduceMotion || !bobbing ? nil : .easeInOut(duration: 1.3).repeatForever(autoreverses: true), value: up)
     .onAppear { up = true }
