@@ -29,6 +29,7 @@ export class ModelLogins {
     const state = this.logins.start(harness, `model-${loginId}`, { command: cmd.command, args: cmd.args, env: { [cmd.home]: dir } }, 15 * 60_000, {
       // Claude prints the token it made; it goes to the hub, never into what people see
       redact: /sk-ant-oat\d*-[A-Za-z0-9_-]+/,
+      redactStart: "sk-ant-oat",
       onRaw: (t) => (entry.raw = (entry.raw + t).slice(-64_000)),
       onChange: (l) => this.send({ type: "model_login", login: this.view(loginId, l) }),
     });
@@ -46,8 +47,17 @@ export class ModelLogins {
     if (e) this.logins.cancel(e.inner);
   }
 
+  /** The device is stopping: every sign-in ends, and no scratch folder is left behind. */
   stopAll() {
+    const dirs = [...this.live.values()].map((e) => e.dir);
     this.logins.stopAll();
+    this.live.clear();
+    for (const d of dirs) fs.rmSync(d, { recursive: true, force: true });
+  }
+
+  /** Scratch folders of sign-ins still running (for tests). */
+  get scratch(): string[] {
+    return [...this.live.values()].map((e) => e.dir);
   }
 
   private entry(loginId: string) {

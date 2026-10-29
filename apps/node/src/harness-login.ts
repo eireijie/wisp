@@ -20,7 +20,7 @@ export class HarnessLogins {
    * `opts.onRaw` sees everything it prints, unredacted (to pick that token up); `opts.onChange`
    * hears each time the link or code shows up.
    */
-  start(harness: string, account: string, cmd: { command: string; args: string[]; env: Record<string, string> }, timeoutMs = 15 * 60_000, opts: { redact?: RegExp; onRaw?: (text: string) => void; onChange?: (login: HarnessLogin) => void } = {}): HarnessLogin {
+  start(harness: string, account: string, cmd: { command: string; args: string[]; env: Record<string, string> }, timeoutMs = 15 * 60_000, opts: { redact?: RegExp; redactStart?: string; onRaw?: (text: string) => void; onChange?: (login: HarnessLogin) => void } = {}): HarnessLogin {
     // one sign-in per account at a time
     for (const [id, l] of this.live) if (l.state.harness === harness && l.state.account === account) this.cancel(id);
     const id = `login_${crypto.randomBytes(6).toString("hex")}`;
@@ -28,11 +28,20 @@ export class HarnessLogins {
     const child = spawn(cmd.command, cmd.args, { env: { ...process.env, ...cmd.env, NO_COLOR: "1", BROWSER: "none" }, stdio: ["pipe", "pipe", "pipe"], shell: process.platform === "win32" });
     const timer = setTimeout(() => this.finish(id, "failed", "The sign-in took too long, so it was stopped. Start it again."), timeoutMs);
     this.live.set(id, { state, child, timer });
+    // everything it printed, unredacted; what people see is made from this each time, so a token
+    // split across two chunks is still caught whole (redacting the already-redacted text plus the
+    // new chunk would let the token's tail through)
+    let raw = "";
+    const render = (final: boolean) => {
+      let out = clean(raw);
+      if (opts.redact) out = out.replace(new RegExp(opts.redact.source, "g"), "[saved]");
+      if (opts.redact && !final) out = withheld(out, opts.redact, opts.redactStart);
+      return out.slice(-4000);
+    };
     const take = (d: Buffer) => {
       opts.onRaw?.(d.toString());
-      let out = clean(state.output + d.toString());
-      if (opts.redact) out = out.replace(new RegExp(opts.redact.source, "g"), "[saved]");
-      state.output = out.slice(-4000);
+      raw = (raw + d.toString()).slice(-16_000);
+      state.output = render(false);
       const found = findLink(state.output);
       const changed = (found.url && found.url !== state.url) || (found.code && found.code !== state.code);
       if (found.url) state.url = found.url;
@@ -42,7 +51,11 @@ export class HarnessLogins {
     child.stdout!.on("data", take);
     child.stderr!.on("data", take);
     child.on("error", (e) => this.finish(id, "failed", `couldn't start ${cmd.command}: ${e.message}`));
-    child.on("close", (code) => this.finish(id, code === 0 ? "done" : "failed", code === 0 ? undefined : lastLine(state.output) || `the sign-in ended with code ${code}`));
+    child.on("close", (code) => {
+      // nothing more is coming: what was held back shows (redacted)
+      state.output = render(true);
+      this.finish(id, code === 0 ? "done" : "failed", code === 0 ? undefined : lastLine(state.output) || `the sign-in ended with code ${code}`);
+    });
     return { ...state };
   }
 
@@ -79,6 +92,18 @@ export class HarnessLogins {
     setTimeout(() => this.ended.delete(id), 10 * 60_000).unref?.();
     this.onDone({ ...l.state });
   }
+}
+
+/**
+ * What may show of `out` (already redacted) while more may follow: a token still being printed
+ * at the very end, or the start of one ("sk-ant-o"), is held back until the next chunk shows
+ * where it ends. Exported for tests.
+ */
+export function withheld(out: string, redact: RegExp, start?: string): string {
+  if (!start) return out;
+  const tail = /\S*$/.exec(out)![0];
+  const partial = tail.length >= 3 && (start.startsWith(tail) || (tail.startsWith(start) && !new RegExp(redact.source).test(tail)));
+  return partial ? out.slice(0, -tail.length) : out;
 }
 
 /** Terminal colors and cursor moves out. */
