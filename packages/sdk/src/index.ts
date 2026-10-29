@@ -1,9 +1,11 @@
-import type { Agent, Allowance, Approval, Channel, ComputerAction, HarnessSettings, HarnessSettingsChange, Message, Routine, Followup } from "@wisp/core";
+import type { Agent, Allowance, Approval, Channel, ComputerAction, HarnessSettings, HarnessSettingsChange, Message, Routine, Followup, ChatLoop } from "@wisp/core";
 
 export interface WispClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
   token: string; // agent token, or node token + agentId
   agentId?: string;
+  /** the request the agent is working on, so the hub knows which chat its calls are about */
+  runId?: string;
   /** used instead of the global fetch, e.g. by the hub calling its own API in-process */
   fetch?: typeof fetch;
 }
@@ -30,6 +32,7 @@ export class WispClient {
       headers: {
         authorization: `Bearer ${this.opts.token}`,
         ...(this.opts.agentId ? { "x-wisp-agent": this.opts.agentId } : {}),
+        ...(this.opts.runId ? { "x-wisp-run": this.opts.runId } : {}),
         ...(body !== undefined && !(body instanceof Uint8Array) ? { "content-type": "application/json" } : {}),
         ...headers,
       },
@@ -160,8 +163,8 @@ export class WispClient {
     return this.request<Approval>("POST", "/api/approvals", { summary, details });
   }
   /** Write to the person this agent works for, in their DM; it reaches their phone by push. */
-  messagePerson(text: string, fileIds: string[] = []) {
-    return this.request<{ messageId: string; channelId: string }>("POST", "/api/message-person", { text, fileIds });
+  messagePerson(text: string, fileIds: string[] = [], replies: string[] = []) {
+    return this.request<{ messageId: string; channelId: string }>("POST", "/api/message-person", { text, fileIds, replies });
   }
   /** This agent's background settings for the person it works for, the organization's mods, and today's allowance. */
   mySettings() {
@@ -183,11 +186,16 @@ export class WispClient {
   followups() {
     return this.request<Followup[]>("GET", "/api/followups");
   }
-  setFollowup(f: { at?: string; inMinutes?: number; note: string }) {
+  setFollowup(f: { at?: string; inMinutes?: number; note: string; label?: string; waitingOn?: "agent" | "person"; condition?: string }) {
     return this.request<Followup & { timezone: string }>("POST", "/api/followups", f);
   }
-  cancelFollowup(followupId: string) {
-    return this.request<{ ok: boolean }>("DELETE", `/api/followups/${followupId}`);
+  /** `done`: it happened, rather than no longer being needed. */
+  cancelFollowup(followupId: string, done = false) {
+    return this.request<{ ok: boolean }>("DELETE", `/api/followups/${followupId}${done ? "?done=1" : ""}`);
+  }
+  /** Where this agent's DM stands: waiting on the person, done (with a wrap-up), open, or dropped. */
+  chatStatus(s: { status: ChatLoop["status"]; summary?: string; did?: string; saved?: string; next?: string; checkBackInMinutes?: number }) {
+    return this.request<ChatLoop>("POST", "/api/chat-status", s);
   }
   routines() {
     return this.request<Routine[]>("GET", "/api/routines");

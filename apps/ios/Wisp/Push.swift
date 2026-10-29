@@ -43,6 +43,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     // set before launch finishes, so a tap that opened the app is delivered
     UNUserNotificationCenter.current().delegate = self
+    // an agent checking back: answer it from the notification
+    let reply = UNTextInputNotificationAction(identifier: CheckbackPush.reply, title: "Reply", options: [], textInputButtonTitle: "Send", textInputPlaceholder: "Reply")
+    UNUserNotificationCenter.current().setNotificationCategories([UNNotificationCategory(identifier: CheckbackPush.category, actions: [reply], intentIdentifiers: [])])
     return true
   }
 
@@ -76,6 +79,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
   }
 
   nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+    // typed into a check-back's Reply: send it to that chat without opening anything
+    if response.actionIdentifier == CheckbackPush.reply, let text = (response as? UNTextInputNotificationResponse)?.userText,
+       let channel = CheckbackPush.channel(response.notification.request.content.userInfo) {
+      await store.replyFromNotification(text, channelId: channel)
+      return
+    }
     guard let route = Route(response.notification.request.content.userInfo) else { return }
     await MainActor.run { store.route = route }
   }

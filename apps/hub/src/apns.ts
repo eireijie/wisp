@@ -34,8 +34,10 @@ export interface PushDevice {
 }
 
 export interface PushPayload {
-  aps: { alert: { title: string; body: string }; sound?: string; badge?: number; "thread-id"?: string };
-  wisp: { kind: "message" | "approval" | "computer" | "test"; category: "dm" | "reply" | "mention" | "channel" | "approval" | "help" | "other"; channelId?: string; threadId?: string | null; approvalId?: string; computerId?: string };
+  /** `category` "CHECKBACK": an agent checking back; the phone offers a Reply action */
+  aps: { alert: { title: string; body: string }; sound?: string; badge?: number; "thread-id"?: string; category?: string };
+  /** `replies`: the check-back's quick answers */
+  wisp: { kind: "message" | "approval" | "computer" | "test"; category: "dm" | "reply" | "mention" | "channel" | "approval" | "help" | "other"; channelId?: string; threadId?: string | null; approvalId?: string; computerId?: string; replies?: string[] };
 }
 
 /** What a send came back with: APNs' status and reason ("BadDeviceToken", "Unregistered"…). */
@@ -157,8 +159,12 @@ export class Apns {
       const where = { kind: "message" as const, channelId: ch.id, threadId: m.threadId };
       const push = (userId: string, title: string, category: PushPayload["wisp"]["category"]) => out.has(userId) || out.set(userId, { aps: { alert: { title, body: preview(m) }, "thread-id": ch.id }, wisp: { ...where, category } });
 
-      // an agent wrote to you in a DM
-      if (ch.kind === "dm" && m.author.kind === "agent") for (const u of members) push(u.id, from, "dm");
+      // an agent wrote to you in a DM; checking back, you can answer from the notification
+      if (ch.kind === "dm" && m.author.kind === "agent") {
+        for (const u of members) push(u.id, from, "dm");
+        const back = m.parts.find((p) => p.type === "checkback");
+        if (back?.type === "checkback") for (const p of out.values()) Object.assign(p, { aps: { ...p.aps, category: "CHECKBACK" }, wisp: { ...p.wisp, replies: back.replies } });
+      }
       // an agent answered in a thread you started
       if (m.threadId && m.author.kind === "agent") {
         const root = store.message(m.threadId);

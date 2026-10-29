@@ -531,7 +531,7 @@ export class NodeDaemon {
     this.log(`@${agent.handle} (${adapter.label}) working on ${run.runId}${inside ? ` inside ${run.computer!.name}` : ""}`);
     let mcp: McpServerSpec, browser: McpServerSpec | undefined;
     try {
-      mcp = inside ? await this.vmMcpSpec(agent.id, vm!) : await this.mcpSpec(agent.id);
+      mcp = inside ? await this.vmMcpSpec(agent.id, run.runId, vm!) : await this.mcpSpec(agent.id, run.runId);
       // the VM's Chrome as page-element tools, run inside the VM either way
       if (vm) {
         const browserBin = vm.user === "warren" ? "warren-browser-mcp" : "wisp-browser-mcp";
@@ -767,19 +767,20 @@ export class NodeDaemon {
    * act as this device or its other agents. Only a hub from before agent tokens (it has no such
    * endpoint) gets the device's token; when the hub merely can't answer, the run fails instead.
    */
-  private async mcpSpec(agentId: string): Promise<McpServerSpec> {
+  private async mcpSpec(agentId: string, runId: string): Promise<McpServerSpec> {
     const token = await this.harnessToken(agentId);
     // in the desktop app this "node" is the app itself, which runs scripts only when told to
     const asNode: Record<string, string> = process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {};
     return {
       command: process.execPath,
       args: [MCP_BIN],
-      env: token ? { ...asNode, WISP_URL: this.cfg.hub, WISP_TOKEN: token } : { ...asNode, WISP_URL: this.cfg.hub, WISP_TOKEN: this.cfg.token, WISP_AGENT: agentId },
+      // WISP_RUN: which request its calls belong to, when the agent is answering several at once
+      env: token ? { ...asNode, WISP_URL: this.cfg.hub, WISP_TOKEN: token, WISP_RUN: runId } : { ...asNode, WISP_URL: this.cfg.hub, WISP_TOKEN: this.cfg.token, WISP_AGENT: agentId, WISP_RUN: runId },
     };
   }
 
   /** wisp-mcp for a harness inside a VM: Wisp's tools copied into the VM, talking to the hub from in there. */
-  private async vmMcpSpec(agentId: string, vm: DockerVm): Promise<McpServerSpec> {
+  private async vmMcpSpec(agentId: string, runId: string, vm: DockerVm): Promise<McpServerSpec> {
     const token = await this.harnessToken(agentId);
     if (!token) throw new Error("the hub didn't give this agent a token of its own; update the hub");
     const bundle = await mcpBundle();
@@ -788,7 +789,7 @@ export class NodeDaemon {
       await vm.writeFile(file, bundle.code);
       this.vmTools.set(vm.name, bundle.hash);
     }
-    return { command: "node", args: [file], env: { WISP_URL: await vm.hubUrl(this.cfg.hub), WISP_TOKEN: token } };
+    return { command: "node", args: [file], env: { WISP_URL: await vm.hubUrl(this.cfg.hub), WISP_TOKEN: token, WISP_RUN: runId } };
   }
 
   private async harnessToken(agentId: string): Promise<string | null> {

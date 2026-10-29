@@ -11,6 +11,7 @@ import { useSheetBackdrop } from "../motion.ts";
 import { ChannelSettings, SectionDialog, leaveChannel, setChannelPrefs } from "./Channels.tsx";
 import { activityPhrase } from "./agentActivity.ts";
 import { cleanPreview } from "./CommandPalette.tsx";
+import { loopLine } from "./Loops.tsx";
 import { UserAvatarButton } from "./Rail.tsx";
 
 const COLLAPSE_KEY = "wisp.chats.collapsed";
@@ -127,7 +128,7 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
   };
 
   /** the preview line: what an agent is doing right now, else the newest message */
-  const preview = (c: Chat): { text: string; working: boolean; needs?: boolean } => {
+  const preview = (c: Chat): { text: string; working: boolean; needs?: boolean; icon?: ReactNode } => {
     const run = c.channel ? Object.values(live).find((r) => r.channelId === c.channel!.id && (c.kind === "team" || r.agentId === c.agent?.id)) : undefined;
     if (run) {
       const who = c.kind === "team" ? `${agents.find((a) => a.id === run.agentId)?.name ?? "An agent"} · ` : "";
@@ -138,12 +139,15 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
     } else if (c.agent.status === "busy") return { text: "Working", working: true };
     const ask = c.channel ? Object.values(approvals).find((a) => a.status === "pending" && a.channelId === c.channel!.id) : undefined;
     if (ask) return { text: `Needs approval · ${cleanPreview(ask.summary, 70)}`, working: false, needs: true };
+    // waiting on you, or when its agent will be back with something
+    const line = c.kind === "dm" && c.channel ? loopLine(c.channel, prefs.clock) : null;
+    if (line) return { text: line.text, working: false, needs: line.tone === "warn", icon: line.icon };
     const last = c.channel?.last;
     if (!last) return { text: c.kind === "dm" ? "No messages yet" : "No messages yet", working: false };
     const body = cleanPreview(last.body, 90) || "Sent something";
     const mine = last.author.kind === "user" && last.author.id === me.user.id;
     if (mine) return { text: `You: ${body}`, working: false };
-    if (c.kind === "dm") return { text: body, working: false };
+    if (c.kind === "dm") return { text: body, working: false, icon: c.channel?.loop?.status === "done" ? <Check size={12} className="text-ok" aria-label="Done" /> : undefined };
     const who = last.author.kind === "agent" ? agents.find((a) => a.id === last.author.id)?.name : last.author.kind === "user" ? useStore.getState().members.find((m) => m.id === last.author.id)?.name?.split(" ")[0] : undefined;
     return { text: who ? `${who}: ${body}` : body, working: false };
   };
@@ -287,7 +291,7 @@ export function withMentions(text: string) {
   return text.split(/(@\w+)/g).map((part, i) => (part.startsWith("@") && part.length > 1 ? <span key={i} className="text-accent-agents">{part}</span> : part));
 }
 
-function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSection }: { chat: Chat; page: boolean; active: boolean; preview: { text: string; working: boolean; needs?: boolean }; time: string; onOpen: () => void; sections: Section[]; onNewSection: () => void }) {
+function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSection }: { chat: Chat; page: boolean; active: boolean; preview: { text: string; working: boolean; needs?: boolean; icon?: ReactNode }; time: string; onOpen: () => void; sections: Section[]; onNewSection: () => void }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const press = useLongPress((x, y) => chat.channel && setMenu({ x, y }));
   const size = 68;
@@ -310,6 +314,7 @@ function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSec
         <span className="flex items-center justify-between gap-2">
           <span className={cx("min-w-0 flex items-center gap-1.5", "text-[13px]", preview.working ? "text-st-working" : preview.needs ? "text-st-needs" : "text-muted")}>
             {preview.working && <PulseDots />}
+            {preview.icon && <span className="shrink-0 inline-flex">{preview.icon}</span>}
             <span className="truncate">{preview.working || preview.needs ? preview.text : withMentions(preview.text)}</span>
           </span>
           {chat.unread > 0 && chat.muted && <span aria-label="Unread" className="shrink-0 size-2 rounded-full bg-faint" />}

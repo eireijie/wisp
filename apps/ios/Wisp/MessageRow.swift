@@ -76,6 +76,7 @@ struct MessageRow: View {
   private var showsBubble: Bool { message.deletedAt == nil && (!message.body.isEmpty || message.replyTo != nil) && !hasChange }
 
   private var row: some View {
+    VStack(spacing: 0) {
     HStack(alignment: .bottom, spacing: 8) {
       if mine {
         Spacer(minLength: 56)
@@ -90,6 +91,9 @@ struct MessageRow: View {
       }
       column
       if !mine { Spacer(minLength: home ? 56 : 40) }
+    }
+      // the agent let the chat go: a quiet line across the chat, not part of the bubble
+      if Loops.isClosed(message) { ClosedLine(message: message) }
     }
     .padding(.horizontal, 16)
     .padding(.top, compact ? 0 : 4)
@@ -139,6 +143,7 @@ struct MessageRow: View {
         } else if mine && pinned {
           Label("Pinned", systemImage: "pin.fill").font(.system(size: 11)).foregroundStyle(Palette.faint).padding(.trailing, 6)
         }
+        if !mine && message.deletedAt == nil && Loops.isCheckback(message) { CheckbackLabel() }
         if message.deletedAt != nil {
           Text("This message was deleted.").font(.system(size: 15)).italic().foregroundStyle(Palette.muted)
             .padding(.horizontal, 13).padding(.vertical, 9)
@@ -301,7 +306,15 @@ struct PartView: View {
       ChangeCard(changeId: id, fallback: message.body)
     case .computer(let id, let request):
       ComputerCard(computerId: id, request: request, agentName: store.agent(message.author.id)?.name)
-    case .toolCall, .other:
+    case .followup(let pill):
+      FollowupPillView(pill: pill, message: message)
+    case .checkback:
+      // only the newest message offers its answers, and only until something is written after it
+      let replies = Loops.replies(message, newest: store.messages[message.channelId]?.last)
+      if !replies.isEmpty { QuickReplies(replies: replies, message: message) }
+    case .wrapup(let wrap):
+      if !wrap.rows.isEmpty { WrapUpCard(wrap: wrap, message: message) }
+    case .closed, .toolCall, .other:
       EmptyView()
     }
   }

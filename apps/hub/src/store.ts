@@ -1,4 +1,4 @@
-import { channelTeams, chartFromSteps, cleanRulePath, hasSteps, isGraphTeam, migrateTeam, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type OwnRemoteDesktop, type BackgroundWork, type Followup, type Change } from "@wisp/core";
+import { channelTeams, chartFromSteps, cleanRulePath, hasSteps, isGraphTeam, migrateTeam, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type OwnRemoteDesktop, type BackgroundWork, type Followup, type Change, type ChatLoop } from "@wisp/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -1287,11 +1287,14 @@ export class Store {
     this.db.prepare("UPDATE changes SET undone_at = ? WHERE id = ?").run(now(), changeId);
   }
 
-  private followupSql = "SELECT id, agent_id AS agentId, user_id AS userId, due_at AS dueAt, note, status, created_at AS createdAt FROM followups";
+  private followupSql = `SELECT id, agent_id AS agentId, user_id AS userId, due_at AS dueAt, note, status, created_at AS createdAt,
+    label, waiting_on AS waitingOn, condition, kind, channel_id AS channelId, message_id AS messageId FROM followups`;
 
-  createFollowup(f: { agentId: string; userId: string | null; dueAt: string; note: string }): Followup {
+  createFollowup(f: { agentId: string; userId: string | null; dueAt: string; note: string; label?: string | null; waitingOn?: Followup["waitingOn"]; condition?: string; kind?: Followup["kind"]; channelId?: string | null; runId?: string | null }): Followup {
     const fid = id("fup");
-    this.db.prepare("INSERT INTO followups (id, agent_id, user_id, due_at, note, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)").run(fid, f.agentId, f.userId, f.dueAt, f.note, now());
+    this.db
+      .prepare("INSERT INTO followups (id, agent_id, user_id, due_at, note, status, created_at, label, waiting_on, condition, kind, channel_id, run_id) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)")
+      .run(fid, f.agentId, f.userId, f.dueAt, f.note, now(), f.label ?? null, f.waitingOn ?? "agent", f.condition ?? "", f.kind ?? "followup", f.channelId ?? null, f.runId ?? null);
     return this.followup(fid)!;
   }
 
@@ -1310,6 +1313,56 @@ export class Store {
 
   setFollowupStatus(followupId: string, status: Followup["status"]) {
     this.db.prepare("UPDATE followups SET status = ? WHERE id = ?").run(status, followupId);
+  }
+
+  rescheduleFollowup(followupId: string, dueAt: string) {
+    this.db.prepare("UPDATE followups SET due_at = ? WHERE id = ?").run(dueAt, followupId);
+  }
+
+  /** Follow-ups set during a run that have no reply to show them yet. */
+  unplacedFollowups(runId: string): Followup[] {
+    return this.db.prepare(`${this.followupSql} WHERE run_id = ? AND message_id IS NULL`).all(runId) as Followup[];
+  }
+
+  placeFollowup(followupId: string, messageId: string) {
+    this.db.prepare("UPDATE followups SET message_id = ? WHERE id = ?").run(messageId, followupId);
+  }
+
+  // --- where a DM stands (chat_status) ------------------------------------------------------------
+
+  private loopSql = "SELECT channel_id AS channelId, agent_id AS agentId, user_id AS userId, status, summary, nudges, updated_at AS updatedAt FROM chat_loops";
+
+  chatLoop(channelId: string): ChatLoop | undefined {
+    return this.db.prepare(`${this.loopSql} WHERE channel_id = ?`).get(channelId) as ChatLoop | undefined;
+  }
+
+  /** One person's chats by where they stand, keyed by channel. */
+  chatLoopsFor(userId: string, channelIds: string[]): Record<string, ChatLoop> {
+    if (!channelIds.length) return {};
+    const rows = this.db.prepare(`${this.loopSql} WHERE user_id = ? AND channel_id IN (${channelIds.map(() => "?").join(",")})`).all(userId, ...channelIds) as ChatLoop[];
+    return Object.fromEntries(rows.map((r) => [r.channelId, r]));
+  }
+
+  /** Chats with one agent that wait on this person. */
+  waitingLoops(agentId: string, userId: string): ChatLoop[] {
+    return this.db.prepare(`${this.loopSql} WHERE agent_id = ? AND user_id = ? AND status = 'waiting' ORDER BY updated_at DESC`).all(agentId, userId) as ChatLoop[];
+  }
+
+  setChatLoop(l: { channelId: string; agentId: string; userId: string; status: ChatLoop["status"]; summary?: string; nudges?: number }): ChatLoop {
+    const was = this.chatLoop(l.channelId);
+    this.db
+      .prepare("INSERT INTO chat_loops (channel_id, agent_id, user_id, status, summary, nudges, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(channel_id) DO UPDATE SET status = excluded.status, summary = excluded.summary, nudges = excluded.nudges, updated_at = excluded.updated_at")
+      .run(l.channelId, l.agentId, l.userId, l.status, l.summary ?? was?.summary ?? "", l.nudges ?? was?.nudges ?? 0, now());
+    return this.chatLoop(l.channelId)!;
+  }
+
+  checkbackOn(agentId: string, userId: string): boolean {
+    return !this.db.prepare("SELECT 1 FROM checkback_off WHERE agent_id = ? AND user_id = ?").get(agentId, userId);
+  }
+
+  setCheckback(agentId: string, userId: string, on: boolean) {
+    if (on) this.db.prepare("DELETE FROM checkback_off WHERE agent_id = ? AND user_id = ?").run(agentId, userId);
+    else this.db.prepare("INSERT OR IGNORE INTO checkback_off (agent_id, user_id) VALUES (?, ?)").run(agentId, userId);
   }
 
   // --- web push ---------------------------------------------------------------------------------

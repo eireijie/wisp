@@ -28,6 +28,7 @@ import { useFeature } from "../features.ts";
 import { useDevices } from "../devices.ts";
 import { isGrouped, needsStamp, snippetOf, stampLabel, toolLine } from "../chatFormat.ts";
 import { openDm } from "../openDm.ts";
+import { CheckbackLabel, ClosedLine, LoopParts } from "../components/Loops.tsx";
 
 /** What's open in the pane beside the chat (a thread comes from the route instead). */
 type Side = { kind: "agent"; agentId: string; tab: AgentPanelTab } | { kind: "info"; tab: InfoTab };
@@ -779,6 +780,7 @@ function MessageList({ channel, readMark, onAddAgent, onMembers, messageId }: { 
                 </div>
               )}
               <MessageItem m={m} grouped={grouped} last={last} replies={replyCounts[m.id]} working={inThreads.filter((r) => r.threadId === m.id || r.threadPath.includes(m.id))} onReplies={() => go({ view: "chat", channelId: channel.id, threadId: m.id })} />
+              {m.parts?.some((p) => p.type === "closed") && <ClosedLine animate={fresh.has(m.id)} />}
             </div>
           );
         })}
@@ -1016,6 +1018,7 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
             <Pin size={11} /> Pinned
           </span>
         )}
+        {!m.deletedAt && m.parts.some((p) => p.type === "checkback") && <CheckbackLabel />}
         {m.deletedAt ? (
           <div className="bubble them text-body text-muted italic">This message was deleted.</div>
         ) : (
@@ -1055,6 +1058,7 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
             <Parts parts={m.parts} body={m.body} agentName={agent?.name} />
           </CardAuthor.Provider>
         )}
+        {!m.deletedAt && <LoopParts m={m} arrived={arrived} />}
         {(!!replies || working.length > 0) && onReplies && !inThread && (
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {!!replies && (

@@ -47,6 +47,10 @@ export interface ChannelInfo extends Channel {
   last?: { at: string; body: string; author: { kind: string; id: string } } | null;
   /** pinned messages, newest pin first */
   pinnedIds: string[];
+  /** a DM: whether it waits on you (or was finished or dropped), as its agent last said */
+  loop?: { status: "waiting" | "done" | "closed"; summary: string } | null;
+  /** a DM: the next thing its agent said it'd come back to */
+  next?: { label: string; dueAt: string; waitingOn: "agent" | "person" } | null;
 }
 
 /** What an agent is doing right now, built from streamed run events. */

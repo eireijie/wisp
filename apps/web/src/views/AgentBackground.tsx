@@ -1,15 +1,16 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { AppWindow, BellRing, Check, ChevronDown, ChevronRight, FolderOpen, Monitor, RefreshCw, X } from "lucide-react";
-import type { Agent, BackgroundSource, BackgroundUsage, BackgroundWork, Followup, HarnessCatalog } from "@wisp/core";
+import { AppWindow, BellRing, Check, ChevronDown, ChevronRight, Clock, FolderOpen, MessageCircle, Monitor, RefreshCw, X } from "lucide-react";
+import type { Agent, BackgroundSource, BackgroundUsage, BackgroundWork, ChatLoop, Followup, HarnessCatalog } from "@wisp/core";
 import { effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { api } from "../api.ts";
-import { useStore } from "../store.ts";
-import { href } from "../router.ts";
+import { usePrefs, useStore } from "../store.ts";
+import { go, href } from "../router.ts";
 import { pathLabel } from "../components/AccessDialog.tsx";
 import { pushOnHere } from "../push.ts";
 import { tokensText, useAllowance } from "../changes.ts";
 import { Toggle } from "./settings/parts.tsx";
-import { Button, Popover, Textarea, agentColor, cx, timeAgo } from "../components/ui.tsx";
+import { Button, Menu, Popover, Textarea, agentColor, cx, timeAgo } from "../components/ui.tsx";
+import { PickTime, changeFollowup, useReminderItems, whenText } from "../components/Loops.tsx";
 
 const PACES = [
   [15, "every 15 minutes"],
@@ -85,7 +86,7 @@ export function BackgroundPanel({ agent, active, onDirty }: { agent: Agent; acti
   const version = useStore((s) => s.backgroundVersion);
   const offline = useStore((s) => s.agents.find((a) => a.id === agent.id)?.status === "offline");
   const [allowance] = useAllowance();
-  const [state, setState] = useState<{ background: BackgroundWork | null; followups: Followup[]; notAllowed: string | null; sources: BackgroundSource[]; usage: BackgroundUsage; defaultDailyCap: number } | null>(null);
+  const [state, setState] = useState<{ background: BackgroundWork | null; followups: Followup[]; loops: ChatLoop[]; checkback: boolean; notAllowed: string | null; sources: BackgroundSource[]; usage: BackgroundUsage; defaultDailyCap: number } | null>(null);
   const [catalog, setCatalog] = useState<HarnessCatalog | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -117,7 +118,11 @@ export function BackgroundPanel({ agent, active, onDirty }: { agent: Agent; acti
     await load();
   };
   const cancel = async (f: Followup) => {
-    await api("DELETE", `/api/followups/${f.id}`).catch((e) => setError((e as Error).message));
+    await changeFollowup(f.id, { status: "cancelled" }).catch((e) => setError((e as Error).message));
+    await load();
+  };
+  const setCheckback = async (enabled: boolean) => {
+    await api("PUT", `/api/agents/${agent.id}/checkback`, { enabled }).catch((e) => setError((e as Error).message));
     await load();
   };
 
@@ -253,22 +258,37 @@ export function BackgroundPanel({ agent, active, onDirty }: { agent: Agent; acti
             )}
           </div>
 
-          {state.followups.length > 0 && (
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold">Coming up</h3>
-              <div className="rounded-xl border border-line divide-y divide-line">
-                {state.followups.map((f) => (
-                  <div key={f.id} className="flex items-center gap-3 px-4 h-11 text-sm">
-                    <span className="text-muted w-28 shrink-0">{at(f.dueAt)}</span>
-                    <span className="flex-1 truncate">{f.note}</span>
-                    <button type="button" className="p-1 rounded-md text-muted hover:text-ink hover:bg-hover" onClick={() => void cancel(f)} aria-label="Cancel this follow-up">
-                      <X size={14} />
+          <section className="space-y-2">
+            {(state.followups.length > 0 || (state.loops ?? []).length > 0) && (
+              <>
+                <h3 className="text-sm font-semibold">Keeping track · {state.followups.length + (state.loops ?? []).length}</h3>
+                <div className="rounded-xl border border-line divide-y divide-line">
+                  {(state.loops ?? []).map((l) => (
+                    <button key={l.channelId} onClick={() => go({ view: "chat", channelId: l.channelId, threadId: null })} className="w-full flex items-center gap-3 px-4 min-h-14 py-2 text-left text-sm hover:bg-hover first:rounded-t-xl last:rounded-b-xl">
+                      <TrackIcon person />
+                      <span className="flex-1 min-w-0">
+                        <span className="block truncate">{cap(l.summary || "An open question")}</span>
+                        <span className="block text-xs text-muted">{l.nudges ? "No answer yet · last try soon" : "Waiting on you"}</span>
+                      </span>
+                      <ChevronRight size={15} className="text-faint" />
                     </button>
-                  </div>
-                ))}
+                  ))}
+                  {state.followups.map((f) => (
+                    <TrackRow key={f.id} f={f} agentName={agent.name} onCancel={() => void cancel(f)} onChanged={() => void load()} />
+                  ))}
+                </div>
+              </>
+            )}
+            <div className="rounded-xl border border-line">
+              <div className="flex items-center gap-3 px-4 min-h-14 py-2 text-sm">
+                <span className="flex-1 min-w-0">
+                  <span className="block font-medium">Check back when a chat stops</span>
+                  <span className="block text-xs text-muted">Once or twice, then lets it go</span>
+                </span>
+                <Toggle label="Check back when a chat stops" on={state.checkback ?? true} onChange={(v) => void setCheckback(v)} />
               </div>
-            </section>
-          )}
+            </div>
+          </section>
 
           <details className="group">
             <summary className="list-none cursor-pointer inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
@@ -337,6 +357,46 @@ export function BackgroundPanel({ agent, active, onDirty }: { agent: Agent; acti
 }
 
 /** One setting: its name on the left, the value (or control) on the right. */
+/** An orange speech bubble for what waits on the person, a blue clock for what the agent will do. */
+function TrackIcon({ person }: { person: boolean }) {
+  return (
+    <span className={cx("size-7 shrink-0 rounded-lg grid place-items-center", person ? "bg-accent-inbox/15 text-accent-inbox" : "bg-accent-chats/15 text-accent-chats")} aria-hidden>
+      {person ? <MessageCircle size={15} /> : <Clock size={15} />}
+    </span>
+  );
+}
+
+/** One thing the agent keeps track of: what, whose move it is and when, with Change and stop. */
+function TrackRow({ f, agentName, onCancel, onChanged }: { f: Followup; agentName: string; onCancel: () => void; onChanged: () => void }) {
+  const { clock } = usePrefs();
+  const [picking, setPicking] = useState(false);
+  const items = useReminderItems(f.id, () => setPicking(true));
+  const when = whenText(f.dueAt, new Date(), clock);
+  const sub = f.waitingOn === "person" ? `You said you would · nudge ${/^\d/.test(when) ? `at ${when}` : when}` : f.label ? `${agentName} said it would · ${when}` : when;
+  return (
+    <div className="flex items-center gap-3 px-4 min-h-14 py-2 text-sm">
+      <TrackIcon person={f.waitingOn === "person"} />
+      <span className="flex-1 min-w-0">
+        <span className="block truncate">{f.label ?? f.note}</span>
+        <span className="block text-xs text-muted truncate">{sub}</span>
+      </span>
+      <Menu
+        align="right"
+        items={items}
+        trigger={(open, toggle) => (
+          <button onClick={toggle} aria-expanded={open} className="h-7 px-3 rounded-full border border-control-line bg-control text-[12px] font-medium hover:bg-hover">
+            Change
+          </button>
+        )}
+      />
+      <button type="button" className="p-1.5 rounded-full text-muted hover:text-ink hover:bg-hover" onClick={onCancel} aria-label="Stop keeping track of this">
+        <X size={14} />
+      </button>
+      {picking && <PickTime title={f.label ?? "Reminder"} dueAt={f.dueAt} onClose={() => setPicking(false)} onPick={(d) => void changeFollowup(f.id, { dueAt: d.toISOString() }).then(onChanged)} />}
+    </div>
+  );
+}
+
 function Setting({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-center gap-3 px-4 min-h-12 py-2 text-sm">

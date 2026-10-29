@@ -1,0 +1,1 @@
+{"Simulator Target Bundle":"ai.wisp.ios","aps":{"alert":{"title":"Ghosty","body":"Did the deck go out to Sam? I can write the email for you now."},"sound":"default","thread-id":"ch_CHANNEL_ID","category":"CHECKBACK"},"wisp":{"kind":"message","category":"dm","channelId":"ch_CHANNEL_ID","threadId":null,"replies":["Sent it","Write the email","Tomorrow"]}}

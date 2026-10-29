@@ -491,8 +491,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const prefs = c.actor.kind === "user" ? store.channelPrefs(c.actor.id) : {};
     const pins = store.pinnedIds(ids);
     const lasts = store.lastMessages(ids);
+    // a DM with an agent: whether it waits on you, and what the agent will come back to next
+    const loops = c.actor.kind === "user" ? hub.loops.chatList(c.actor.id, list.filter((ch) => ch.kind === "dm").map((ch) => ch.id)) : null;
     return list.map((ch) => ({
       ...ch,
+      ...(loops && ch.kind === "dm" ? loops(ch.id) : { loop: null, next: null }),
       last: lasts[ch.id] ?? null,
       joined: store.isMember(ch.id, c.actor),
       memberCount: counts[ch.id] ?? 0,

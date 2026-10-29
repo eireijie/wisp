@@ -119,6 +119,9 @@ struct Channel: Codable, Identifiable, Hashable {
   /** when the newest message was sent, from the channel list (messages themselves load per chat) */
   struct Last: Codable, Hashable { var at: String }
   var last: Last?
+  /** a DM with an agent: whether it waits on you ("waiting", "done", "closed"), and what the agent comes back to next (Loops.swift) */
+  var loop: ChatLoopState?
+  var next: ChatNext?
 
   var isDM: Bool { kind == "dm" }
   var isMuted: Bool { notify == "mute" }
@@ -200,6 +203,14 @@ enum MessagePart: Codable, Hashable {
   case discussion(discussionId: String)
   /** an agent's answer to /context: how full its conversation is (nil before its first reply) */
   case context(ContextUsage?)
+  /** something the agent will come back to, as a pill under its reply ("Check the build · 4:35 PM") */
+  case followup(FollowupPill)
+  /** the agent came back on its own: "Checking back" over the bubble, and quick answers under it */
+  case checkback(replies: [String])
+  /** the agent finished what the chat was about: Did / Saved / Next */
+  case wrapup(WrapUp)
+  /** the agent dropped what the chat was about after no answer */
+  case closed
   case other(String)
 
   /** what an agent saved about someone during a reply (the "Remembered" chip): the kind of note, its words, and the note it went to */
@@ -209,7 +220,7 @@ enum MessagePart: Codable, Hashable {
     var path: String?
   }
 
-  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage, input, output }
+  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage, input, output, replies, did, saved, next }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: K.self)
@@ -230,6 +241,15 @@ enum MessagePart: Codable, Hashable {
     case "routine": self = .routine(routineId: (try? c.decode(String.self, forKey: .routineId)) ?? "")
     case "discussion": self = .discussion(discussionId: (try? c.decode(String.self, forKey: .discussionId)) ?? "")
     case "context": self = .context(try? c.decode(ContextUsage.self, forKey: .usage))
+    case "followup":
+      // one without an id or a label can't be shown or changed
+      guard let pill = try? FollowupPill(from: decoder), !pill.followupId.isEmpty, !pill.label.isEmpty else { self = .other(type); return }
+      self = .followup(pill)
+    case "checkback": self = .checkback(replies: (try? c.decode([String].self, forKey: .replies)) ?? [])
+    case "wrapup":
+      let line = { (k: K) in ((try? c.decode(String.self, forKey: k)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+      self = .wrapup(WrapUp(did: line(.did), saved: line(.saved), next: line(.next)))
+    case "closed": self = .closed
     default: self = .other(type)
     }
   }

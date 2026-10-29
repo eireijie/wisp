@@ -11,6 +11,8 @@ struct BackgroundView: View {
   var agent: Agent
   @State private var catalog: AgentModels.Catalog?
   @State private var action = FormAction()
+  @State private var reminding: ReminderTarget?
+  @ReduceMotion private var reduceMotion
 
   static let paces: [(minutes: Int, label: String)] = [(15, "every 15 minutes"), (30, "every 30 minutes"), (60, "every hour"), (120, "every 2 hours"), (240, "every 4 hours")]
   static let caps = [6, 12, 24, 48, 96]
@@ -45,8 +47,14 @@ struct BackgroundView: View {
                     isOn: Binding(get: { on }, set: { v in save(["enabled": AnyEncodable(v)]) }), id: "background-toggle")
             .disabled(!canEdit || action.busy)
         }
+        keepingTrack
         CardCaption("Check in")
         CardGroup {
+          // yours alone (not the agent's settings), so anyone it answers can turn it off
+          SwitchRow(title: "Check back when a chat stops", subtitle: "Once or twice, then lets it go",
+                    isOn: Binding(get: { state?.checkback ?? true }, set: { v in action.run { try await store.setCheckback(agent.id, enabled: v) } }), id: "background-checkback")
+            .disabled(action.busy)
+          Group {
           NavigationLink { focusPage } label: { RowLabel(title: "What it checks", value: watching) }
             .buttonStyle(.plain).accessibilityIdentifier("background-focus")
           NavigationLink { pacePage } label: { RowLabel(title: "How often", value: paceText) }
@@ -61,8 +69,9 @@ struct BackgroundView: View {
           } label: {
             RowLabel(title: "Most checks a day", value: cap == 0 ? "No limit" : "\(cap)", chevron: true)
           }.disabled(!canEdit).accessibilityIdentifier("background-cap")
+          }
+          .disabled(!canEdit || action.busy)
         }
-        .disabled(!canEdit || action.busy)
         today
         if let sources = state?.sources, !sources.isEmpty {
           CardGroup {
@@ -92,32 +101,58 @@ struct BackgroundView: View {
     }
   }
 
+  // MARK: keeping track (loops-Track.dc.html)
+
+  /** What it will come back to and the chats that wait on you; a reminder opens the reminder sheet, a chat opens the chat. */
+  @ViewBuilder private var keepingTrack: some View {
+    let rows = Loops.trackRows(followups: state?.followups ?? [], loops: state?.loops ?? [], agent: agent)
+    if !rows.isEmpty {
+      CardCaption("Keeping track · \(rows.count)")
+      CardGroup {
+        ForEach(rows) { row in
+          if let reminder = row.reminder {
+            Button { reminding = reminder } label: { trackRow(row) }
+              .buttonStyle(.pressRow).accessibilityIdentifier("track-row")
+          } else if let channel = row.channelId.flatMap({ id in store.channels.first { $0.id == id } }) {
+            NavigationLink { ChannelView(channel: channel) } label: { trackRow(row) }
+              .buttonStyle(.pressRow).accessibilityIdentifier("track-row")
+          } else {
+            trackRow(row, chevron: false)
+          }
+        }
+      }
+      .animation(Motion.pick(Motion.soft, reduceMotion), value: rows.map(\.id))
+      .sheet(item: $reminding) { ReminderSheet(target: $0) }
+    }
+  }
+
+  private func trackRow(_ row: Loops.TrackRow, chevron: Bool = true) -> some View {
+    let tint = row.onPerson ? Palette.statusNeeds : Palette.blue
+    return HStack(spacing: 12) {
+      Image(systemName: row.onPerson ? "bubble.left" : "clock")
+        .font(.system(size: 13, weight: .medium)).foregroundStyle(tint)
+        .frame(width: 28, height: 28)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tint.tint16))
+        .accessibilityLabel(row.onPerson ? "On you" : "On \(agent.name)")
+      VStack(alignment: .leading, spacing: 2) {
+        Text(row.title).font(.system(size: 15)).foregroundStyle(Palette.text).lineLimit(2).multilineTextAlignment(.leading)
+        Text(row.subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
+      }
+      Spacer(minLength: 8)
+      if chevron { Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint) }
+    }
+    .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 56)
+    .contentShape(Rectangle())
+  }
+
   // MARK: today
 
   @ViewBuilder private var today: some View {
-    let followups = state?.followups ?? []
     let usage = state?.usage
-    if !followups.isEmpty || (usage?.checksToday ?? 0) > 0 {
+    if let checks = usage?.checksToday, checks > 0 {
       CardCaption("Today")
       CardGroup {
-        ForEach(followups) { f in
-          HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-              Text(f.note).font(.system(size: 15)).foregroundStyle(Palette.text).lineLimit(2)
-              if let date = Wire.date(f.dueAt) { Text("Coming up at \(Self.at(date))").font(.system(size: 13)).foregroundStyle(Palette.faint) }
-            }
-            Spacer(minLength: 8)
-            if f.userId == nil || f.userId == store.me?.id || store.isOwner {
-              Button("Cancel") { action.run { try await store.cancelFollowup(f, agentId: agent.id) } }
-                .font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.red).buttonStyle(.plain)
-                .accessibilityLabel("Cancel this follow-up")
-            }
-          }
-          .padding(.horizontal, 18).padding(.vertical, 8).frame(minHeight: 60)
-        }
-        if let checks = usage?.checksToday, checks > 0 {
-          RowLabel(title: "Checked \(checks) \(checks == 1 ? "time" : "times") today", subtitle: followups.isEmpty ? nil : "\(followups.count) follow-up\(followups.count == 1 ? "" : "s")", chevron: false)
-        }
+        RowLabel(title: "Checked \(checks) \(checks == 1 ? "time" : "times") today", chevron: false)
       }
     }
   }

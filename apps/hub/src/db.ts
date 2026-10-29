@@ -203,6 +203,16 @@ CREATE TABLE IF NOT EXISTS followups (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS followups_due ON followups(status, due_at);
+CREATE TABLE IF NOT EXISTS chat_loops (
+  channel_id TEXT PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('open','waiting','done','closed')), summary TEXT NOT NULL DEFAULT '',
+  nudges INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS checkback_off (
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (agent_id, user_id)
+);
 CREATE TABLE IF NOT EXISTS connector_auth (
   connector_id TEXT PRIMARY KEY REFERENCES connectors(id) ON DELETE CASCADE,
   required INTEGER NOT NULL DEFAULT 1, redirect_url TEXT, client_json TEXT, tokens_json TEXT, expires_at TEXT,
@@ -298,6 +308,14 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["discussions", "kind", "TEXT"],
   // the remote desktop app its owner already uses (OwnRemoteDesktop), shown to them only
   ["nodes", "remote_desktop_json", "TEXT"],
+  // what a follow-up looks like under the reply that set it, and whose move it is
+  ["followups", "label", "TEXT"],
+  ["followups", "waiting_on", "TEXT NOT NULL DEFAULT 'agent'"],
+  ["followups", "condition", "TEXT NOT NULL DEFAULT ''"],
+  ["followups", "kind", "TEXT NOT NULL DEFAULT 'followup'"],
+  ["followups", "channel_id", "TEXT"],
+  ["followups", "message_id", "TEXT"],
+  ["followups", "run_id", "TEXT"],
 ];
 
 export function openDb(file: string): Database.Database {
