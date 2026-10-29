@@ -248,6 +248,19 @@ CREATE TABLE IF NOT EXISTS changes (
   created_at TEXT NOT NULL, undone_at TEXT
 );
 CREATE INDEX IF NOT EXISTS changes_by_user ON changes(workspace_id, user_id, created_at);
+CREATE TABLE IF NOT EXISTS model_connections (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('oauth','key')), label TEXT NOT NULL,
+  account TEXT, plan TEXT, secret_json TEXT NOT NULL, usage_json TEXT,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_used_at TEXT, last_error TEXT
+);
+CREATE INDEX IF NOT EXISTS model_connections_by_user ON model_connections(workspace_id, user_id);
+CREATE TABLE IF NOT EXISTS computer_catalogs (
+  node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE, computer_id TEXT NOT NULL,
+  catalog_json TEXT NOT NULL, updated_at TEXT NOT NULL,
+  PRIMARY KEY (node_id, computer_id)
+);
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   keys_json TEXT NOT NULL, created_at TEXT NOT NULL

@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@wisp/core";
+import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Logins } from "./logins.ts";
@@ -16,6 +16,7 @@ import { Logos } from "./logos.ts";
 import { PublicSkills } from "./skill-store.ts";
 import { Updates } from "./updates.ts";
 import { ConnectorStore, SkillStore } from "./connectors.ts";
+import { ModelConnections } from "./model-connections.ts";
 import type { Vault } from "@wisp/vault";
 import type { Vaults } from "./vaults.ts";
 import { MemoryAccess } from "./access.ts";
@@ -82,6 +83,14 @@ export class Hub {
   readonly shelves = new Map<string, ShelfItem[]>();
   readonly updates: Updates;
   readonly connectors: ConnectorStore;
+  /** people's model connections (sign-ins and keys), handed to devices with each run */
+  readonly models: ModelConnections;
+  /** model sign-ins running on devices, by id: who started it, where, and how it's going */
+  readonly modelLogins = new Map<string, { workspaceId: string; userId: string; nodeId: string; label?: string; state: ModelLogin }>();
+  /** runs on a connection right now (run id → connection id): one at a time while its sign-in is due a renewal */
+  private connectionRuns = new Map<string, string>();
+  /** which devices were handed which connection (`node:connection`): only they may send a renewed sign-in back */
+  private handedOut = new Set<string>();
   readonly skills: SkillStore;
   /** iOS push notifications (optional; needs an APNs key) */
   readonly apns: Apns;
@@ -115,6 +124,7 @@ export class Hub {
     this.publicSkills = new PublicSkills(this);
     this.updates = new Updates(this);
     this.connectors = new ConnectorStore(store.db);
+    this.models = new ModelConnections(store.db, (...a) => this.fetchImpl(...a));
     this.skills = new SkillStore(store.db);
     this.apns = new Apns(this);
     this.fcm = new Fcm(this);
@@ -276,6 +286,54 @@ export class Hub {
     return !!agent.nodeId && !this.runsInComputer(agent);
   }
 
+  /**
+   * Harnesses installed where the agent's harness runs: inside its VM when it works in one (as the
+   * device reported for that VM), else on its device. A VM not reported yet falls back to the device's.
+   */
+  harnessesWhere(agent: Pick<Agent, "nodeId" | "computerId" | "settings">): HarnessCatalog[] {
+    if (!agent.nodeId) return [];
+    const c = agent.settings.runIn === "computer" && agent.computerId ? this.store.computer(agent.computerId) : undefined;
+    const vm = c?.kind === "vm" && c.nodeId === agent.nodeId ? this.store.computerCatalog(agent.nodeId, c.id) : null;
+    return vm ?? this.store.nodeCatalog(agent.nodeId);
+  }
+
+  /** The catalog an agent's models, efforts and "/" commands come from: its harness where it runs. */
+  catalogFor(agent: Pick<Agent, "nodeId" | "computerId" | "harness" | "settings">): HarnessCatalog | undefined {
+    return this.harnessesWhere(agent).find((h) => h.harness === agent.harness);
+  }
+
+  /** The connection a run carries: the agent's, when its harness can use it. */
+  credentialFor(agent: Pick<Agent, "workspaceId" | "harness" | "settings">): RunCredential | null {
+    const cid = agent.settings.connectionId;
+    const r = cid ? this.models.row(cid) : undefined;
+    if (!r || r.workspace_id !== agent.workspaceId || !credentialSupport(agent.harness, r.provider, r.kind)) return null;
+    return this.models.credentialFor(r.id);
+  }
+
+  /** A run on a connection ended: free it, and start runs that waited their turn on it. */
+  private releaseConnection(runId: string) {
+    const cid = this.connectionRuns.get(runId);
+    if (!cid) return;
+    this.connectionRuns.delete(runId);
+    this.dispatchWaiting(cid);
+  }
+
+  /** Runs of agents on this connection that are still queued, now that it's free (or renewed). */
+  private dispatchWaiting(connectionId: string) {
+    const r = this.models.row(connectionId);
+    if (!r) return;
+    for (const a of this.store.agents(r.workspace_id)) {
+      if (a.settings.connectionId !== connectionId) continue;
+      for (const q of this.store.activeRuns(a.id)) if (this.store.run(q.id)?.status === "queued") this.dispatchRun(q.id);
+    }
+  }
+
+  /** Tell the owner's apps their connections changed (a plan's usage, a renewed or failed sign-in). */
+  connectionsChanged(connectionId: string) {
+    const r = this.models.row(connectionId);
+    if (r) this.broadcast(r.workspace_id, { type: "model_connections_changed" }, (u) => u === r.user_id);
+  }
+
   /** Why `requestedBy` can't ask this agent for something, or null when they can. */
   whyNotAllowed(agent: Pick<Agent, "handle" | "nodeId" | "computerId" | "harness" | "settings">, requestedBy: string | null): string | null {
     if (!this.harnessOnDevice(agent) || agent.settings.anyoneCanAsk) return null;
@@ -404,7 +462,43 @@ export class Hub {
         return;
       }
       case "catalog": {
+        // a VM's harnesses only for a VM of this device
+        if (msg.computerId) {
+          const c = store.computer(msg.computerId);
+          if (c?.kind === "vm" && c.nodeId === conn.nodeId) store.setComputerCatalog(conn.nodeId, c.id, msg.catalog);
+          return;
+        }
         store.setNodeCatalog(conn.nodeId, msg.catalog);
+        return;
+      }
+      case "credential_refreshed": {
+        // only a device that was handed this connection can renew it
+        if (!this.handedOut.has(`${conn.nodeId}:${msg.connectionId}`)) return;
+        if (this.models.saveRenewed(msg.connectionId, msg.secret)) {
+          this.connectionsChanged(msg.connectionId);
+          this.dispatchWaiting(msg.connectionId);
+        }
+        return;
+      }
+      case "model_login": {
+        const l = this.modelLogins.get(msg.login.id);
+        if (!l || l.nodeId !== conn.nodeId) return;
+        l.state = { ...msg.login, provider: l.state.provider };
+        this.broadcast(l.workspaceId, { type: "model_login", login: l.state }, (u) => u === l.userId);
+        return;
+      }
+      case "model_login_done": {
+        const l = this.modelLogins.get(msg.loginId);
+        if (!l || l.nodeId !== conn.nodeId || l.state.status !== "running") return;
+        if (msg.ok && msg.secret) {
+          const provider = l.state.provider as ModelProvider;
+          const connectionId = this.models.create({ workspaceId: l.workspaceId, userId: l.userId, provider, kind: "oauth", label: l.label || providerLabel(provider), secret: msg.secret, account: msg.account ?? null, plan: msg.plan ?? null });
+          l.state = { ...l.state, status: "done", connectionId };
+          this.broadcast(l.workspaceId, { type: "model_connections_changed" }, (u) => u === l.userId);
+        } else l.state = { ...l.state, status: "failed", error: msg.error ?? "the sign-in didn't finish" };
+        this.broadcast(l.workspaceId, { type: "model_login", login: l.state }, (u) => u === l.userId);
+        // finished sign-ins stay readable for a while, so a page that polls sees how it ended
+        setTimeout(() => this.modelLogins.delete(msg.loginId), 10 * 60_000).unref?.();
         return;
       }
       case "run_event": {
@@ -413,6 +507,12 @@ export class Hub {
         if (msg.event.type === "usage") {
           const { type: _t, ...usage } = msg.event;
           store.setRunUsage(run.id, usage);
+          // a subscription's limits belong to the connection the run used
+          const cid = this.connectionRuns.get(run.id);
+          if (cid && usage.plan) {
+            this.models.setUsage(cid, usage.plan);
+            this.connectionsChanged(cid);
+          }
         }
         const live = this.live.get(run.id) ?? { parts: [], text: "" };
         collect(live, msg.event);
@@ -446,6 +546,16 @@ export class Hub {
    */
   private finishRun(workspaceId: string, run: NonNullable<ReturnType<Store["run"]>>, result: { finalText: string } | { error: string }) {
     const { store } = this;
+    // a connection that failed to sign in says so on Settings → Models; one that worked clears that
+    const cid = this.connectionRuns.get(run.id);
+    if (cid) {
+      const was = this.models.row(cid)?.last_error ?? null;
+      const now = "error" in result && signInProblem(store.agent(run.agentId)?.harness ?? "", result.error) ? result.error : null;
+      if (now || was) {
+        this.models.setError(cid, now);
+        if (now !== was) this.connectionsChanged(cid);
+      }
+    }
     const live = this.live.get(run.id) ?? { parts: [], text: "" };
     this.live.delete(run.id);
     const taskReply = this.taskReplies.get(run.id);
@@ -495,6 +605,7 @@ export class Hub {
     }
     if (agent) this.broadcast(workspaceId, { type: "agent_status", agentId: agent.id, status: this.agentStatus(agent) });
     if (run.discussionId) void this.discussions.onRunFinished(run, body);
+    this.releaseConnection(run.id);
   }
 
   /**
@@ -513,9 +624,12 @@ export class Hub {
   }
 
   /** A failure in plain words when it's a known one (a harness that needs signing in again), else as reported. */
-  explainFailure(agent: Pick<Agent, "harness" | "nodeId">, error: string): string {
+  explainFailure(agent: Pick<Agent, "harness" | "nodeId"> & Partial<Pick<Agent, "workspaceId" | "settings">>, error: string): string {
     const problem = signInProblem(agent.harness, error);
     if (!problem) return error;
+    // on a connection, it's the connection that needs signing in again, not the device
+    const conn = agent.settings?.connectionId ? this.models.row(agent.settings.connectionId) : undefined;
+    if (conn && credentialSupport(agent.harness, conn.provider, conn.kind)) return `The ${providerLabel(conn.provider)} ${conn.kind === "oauth" ? "sign-in" : "key"} "${conn.label}" stopped working (${error.slice(0, 200)}). Connect it again in Settings → Models.`;
     const device = agent.nodeId ? this.store.node(agent.nodeId)?.name : undefined;
     return problem.explain(device ?? "its device");
   }
@@ -686,7 +800,7 @@ export class Hub {
 
   /** What follows "/" for this agent: its harness's commands on its device, its Wisp skills, and Wisp's own. */
   commands(agent: Agent): AgentCommand[] {
-    const catalog = agent.nodeId ? this.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness) : undefined;
+    const catalog = this.catalogFor(agent);
     return agentCommands(catalog?.commands, this.skills.forAgent(agent.id));
   }
 
@@ -699,19 +813,18 @@ export class Hub {
   }
 
   /** /model: say which model the agent runs on, or switch it ("default" goes back to the harness's own). */
-  private answerModel(agent: Agent, msg: Message, threadId: string | null, ask: string) {
+  private async answerModel(agent: Agent, msg: Message, threadId: string | null, ask: string) {
     const near = { ...msg, threadId };
-    const catalog = agent.nodeId ? this.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness) : undefined;
-    const models = catalog?.models ?? [];
+    const catalog = this.catalogFor(agent);
+    const credential = this.credentialFor(agent);
+    // on a connection, its models (as its harness can run them); else the harness's own list where it runs
+    const models = credential ? await this.models.models(credential.connectionId, catalog).catch(() => []) : (catalog?.models ?? []);
     const handle = this.handleOf(agent.id);
     const list = models.length ? ` It offers ${models.map((m) => m.id).join(", ")}.` : "";
     const using = agent.model ?? catalog?.defaultModel;
     if (!ask) return void this.postSystem(near, `${handle} is on ${agent.model ? agent.model : using ? `${using} (the default)` : "its default model"}.${list} Switch with /model <name>, or /model default.`);
-    // guests can ask, but changing an agent is for members and owners (as in the agent settings)
-    if (this.store.role(agent.workspaceId, msg.author.id) === "guest") return void this.postSystem(near, `Guests can't change ${handle}'s model.`);
-    // an agent on someone's own device is theirs to change
-    const node = agent.nodeId && this.harnessOnDevice(agent) ? this.store.node(agent.nodeId) : undefined;
-    if (node && !node.shared && node.ownerId && node.ownerId !== msg.author.id) return void this.postSystem(near, `${handle} runs directly on ${this.store.user(node.ownerId)?.name ?? "its owner"}'s device, so only they can change its model.`);
+    const why = this.whyCantChange(agent, msg.author.id, "model");
+    if (why) return void this.postSystem(near, why);
     let model: string | null;
     if (/^(default|auto|reset)$/i.test(ask)) model = null;
     else if (!models.length) model = ask;
@@ -732,10 +845,70 @@ export class Hub {
     this.postSystem(near, `${handle} will use ${model ?? "its default model"} from the next message.`);
   }
 
-  /** Commands Wisp answers itself: /context (how full the conversation is) and /model. */
+  /** Why this person can't change the agent's `what` from chat (guests can't; an agent on someone's own device is theirs), or null. */
+  private whyCantChange(agent: Agent, personId: string, what: string): string | null {
+    const handle = this.handleOf(agent.id);
+    // guests can ask, but changing an agent is for members and owners (as in the agent settings)
+    if (this.store.role(agent.workspaceId, personId) === "guest") return `Guests can't change ${handle}'s ${what}.`;
+    const node = agent.nodeId && this.harnessOnDevice(agent) ? this.store.node(agent.nodeId) : undefined;
+    if (node && !node.shared && node.ownerId && node.ownerId !== personId) return `${handle} runs directly on ${this.store.user(node.ownerId)?.name ?? "its owner"}'s device, so only they can change its ${what}.`;
+    return null;
+  }
+
+  /** /effort: say how hard the agent thinks, or change it ("default" goes back to the model's own). */
+  private async answerEffort(agent: Agent, msg: Message, threadId: string | null, ask: string) {
+    const near = { ...msg, threadId };
+    const handle = this.handleOf(agent.id);
+    const catalog = this.catalogFor(agent);
+    const credential = this.credentialFor(agent);
+    const models = credential ? await this.models.models(credential.connectionId, catalog).catch(() => []) : (catalog?.models ?? []);
+    const model = agent.model ?? catalog?.defaultModel;
+    const entry = models.find((m) => m.id === model);
+    const efforts = entry?.efforts ?? catalog?.efforts ?? [];
+    const now = agent.settings.effort ?? entry?.defaultEffort ?? catalog?.defaultEffort;
+    const list = efforts.length ? ` It offers ${efforts.join(", ")}.` : "";
+    if (!ask) return void this.postSystem(near, `${handle} thinks at ${now ? `${now}${agent.settings.effort ? "" : " (the default)"}` : "its default effort"}.${list} Change it with /effort <level>, or /effort default.`);
+    const why = this.whyCantChange(agent, msg.author.id, "effort");
+    if (why) return void this.postSystem(near, why);
+    const level = /^(default|auto|reset)$/i.test(ask) ? null : ask.toLowerCase();
+    if (level && !/^[a-z]{1,16}$/.test(level)) return void this.postSystem(near, `${handle} has no "${ask}" effort.${list}`);
+    if (level && efforts.length && !efforts.includes(level)) return void this.postSystem(near, `${handle}'s model${model ? ` (${model})` : ""} has no "${level}" effort.${list}`);
+    this.store.updateAgent(agent.id, { settings: { effort: level } });
+    this.broadcast(agent.workspaceId, { type: "agents_changed" });
+    this.postSystem(near, `${handle} will think at ${level ?? "its default effort"} from the next message.`);
+  }
+
+  /**
+   * /harness: say which harness the agent runs in and which it could, or switch it. It keeps its
+   * memory, skills and chats; its model too, when the new harness has it (or runs its connection).
+   */
+  private answerHarness(agent: Agent, msg: Message, threadId: string | null, ask: string) {
+    const near = { ...msg, threadId };
+    const handle = this.handleOf(agent.id);
+    const here = this.harnessesWhere(agent);
+    const list = here.length ? ` It could also run in ${here.filter((h) => h.harness !== agent.harness).map((h) => harnessLabel(h.harness)).join(", ") || "nothing else here"}.` : "";
+    if (!ask) return void this.postSystem(near, `${handle} runs in ${harnessLabel(agent.harness)}.${list} Switch with /harness <name>.`);
+    const why = this.whyCantChange(agent, msg.author.id, "harness");
+    if (why) return void this.postSystem(near, why);
+    const want = ask.trim().toLowerCase();
+    const pick = here.find((h) => h.harness === want || harnessLabel(h.harness).toLowerCase() === want || harnessInfo(h.harness)?.binary === want) ?? here.find((h) => harnessLabel(h.harness).toLowerCase().startsWith(want));
+    if (!pick) return void this.postSystem(near, `${handle} can't switch to ${harnessLabel(want)}: it isn't installed where ${handle} runs.${list}`);
+    if (pick.harness === agent.harness) return void this.postSystem(near, `${handle} already runs in ${harnessLabel(pick.harness)}.`);
+    const conn = agent.settings.connectionId ? this.models.row(agent.settings.connectionId) : undefined;
+    if (conn && !credentialSupport(pick.harness, conn.provider, conn.kind)) return void this.postSystem(near, `${harnessLabel(pick.harness)} can't use ${handle}'s ${providerLabel(conn.provider)} ${conn.kind === "oauth" ? "sign-in" : "key"}. Pick another model for it first.`);
+    // a model the new harness doesn't have goes back to its default
+    const keepModel = !agent.model || !!conn || pick.models.some((m) => m.id === agent.model);
+    this.store.updateAgent(agent.id, { harness: pick.harness, ...(keepModel ? {} : { model: null }) });
+    this.broadcast(agent.workspaceId, { type: "agents_changed" });
+    this.postSystem(near, `${handle} will run in ${harnessLabel(pick.harness)} from the next message${keepModel ? "" : `, on its default model (it doesn't have ${agent.model})`}. Its memory, skills and chats stay.`);
+  }
+
+  /** Commands Wisp answers itself: /context (how full the conversation is), /model, /effort and /harness. */
   private answerCommand(agent: Agent, msg: Message, threadId: string | null) {
     const parsed = parseCommand(msg.body, agent.handle);
-    if (parsed?.name === "model") return this.answerModel(agent, msg, threadId, parsed.args);
+    if (parsed?.name === "model") return void this.answerModel(agent, msg, threadId, parsed.args);
+    if (parsed?.name === "effort") return void this.answerEffort(agent, msg, threadId, parsed.args);
+    if (parsed?.name === "harness") return this.answerHarness(agent, msg, threadId, parsed.args);
     const usage = this.store.latestUsage(agent.id, msg.channelId, threadId);
     this.postMessage({ channelId: msg.channelId, threadId, author: { kind: "agent", id: agent.id }, body: "", parts: [{ type: "context", usage }], hop: msg.hop + 1, route: false });
   }
@@ -767,6 +940,15 @@ export class Hub {
     const agent = this.store.agent(run.agentId);
     const conn = agent?.nodeId ? this.nodes.get(agent.nodeId) : undefined;
     if (!agent || !conn || this.pausedNodes.has(conn.nodeId)) return;
+    // a sign-in about to be renewed is used by one run at a time (renewing it kills the old one); this run waits its turn
+    const cid = agent.settings.connectionId;
+    if (cid && this.models.oneAtATime(cid) && [...this.connectionRuns.values()].includes(cid)) return;
+    const credential = this.credentialFor(agent);
+    if (credential) {
+      this.connectionRuns.set(run.id, credential.connectionId);
+      this.handedOut.add(`${conn.nodeId}:${credential.connectionId}`);
+      this.models.used(credential.connectionId);
+    }
     // mark it running before the (async) prompt build so it can't be dispatched twice
     this.store.setRunStatus(run.id, "running");
     this.broadcast(conn.workspaceId, { type: "agent_status", agentId: agent.id, status: "busy" });
@@ -797,7 +979,7 @@ export class Hub {
         const bg = run.kind === "background" && run.requestedBy ? this.store.background(agent.id, run.requestedBy) : undefined;
         this.send(conn, {
           type: "run",
-          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.kind === "background" ? BACKGROUND_THREAD : run.threadId, prompt, hop: run.hop, ...(run.kind === "background" ? { fresh: true } : {}), ...(bg?.model ? { model: bg.model } : {}), ...(bg?.effort ? { effort: bg.effort } : {}), ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}) },
+          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.kind === "background" ? BACKGROUND_THREAD : run.threadId, prompt, hop: run.hop, ...(run.kind === "background" ? { fresh: true } : {}), ...(bg?.model ? { model: bg.model } : {}), ...(bg?.effort ? { effort: bg.effort } : {}), ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}), ...(credential ? { credential: this.credentialFor(agent) ?? credential } : {}) },
         });
       },
       // the prompt couldn't be built (a vault read failed, say): say so like any other failure
@@ -883,6 +1065,7 @@ export class Hub {
     if (conn) this.send(conn, { type: "cancel", runId });
     this.store.setRunStatus(runId, "cancelled");
     this.live.delete(runId);
+    this.releaseConnection(runId);
     this.taskReplies.delete(runId);
     this.loops.forget(runId);
     // the device's late report is ignored, so clients hear from here that the agent is free again

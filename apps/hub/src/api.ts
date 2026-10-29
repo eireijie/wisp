@@ -42,6 +42,9 @@ import {
   type MemoryLevel,
   type Subject,
   type Viewer,
+  credentialSupport,
+  harnessLabel,
+  providerLabel,
 } from "@wisp/core";
 import { VaultError, notePath } from "@wisp/vault";
 import { MEMORY_KINDS } from "./profile.ts";
@@ -56,6 +59,8 @@ import { registerVoiceApi } from "./api-voice.ts";
 import { registerMemoryStorageApi } from "./api-memory.ts";
 import type { MoveResult, VaultLocation } from "./vault-location.ts";
 import { registerConnectorApi } from "./api-connectors.ts";
+import { connectionProblem, registerModelsApi } from "./api-models.ts";
+import { modelsForHarness } from "./model-connections.ts";
 import { registerBackgroundApi } from "./api-background.ts";
 import { registerLeadApi, workspaceLead } from "./lead.ts";
 import { registerJoinApi } from "./join.ts";
@@ -107,6 +112,8 @@ const APPEARANCE = z
 const SETTINGS = z
   .object({
     effort: z.string().regex(/^[a-z]{1,16}$/).nullable(),
+    /** a model connection of the caller's (GET /api/model-connections) its harness can use; null = the device's own login */
+    connectionId: z.string().min(1).max(64).nullable(),
     access: z.enum(["read-only", "edit", "full"]),
     soulLocked: z.boolean(),
     fast: z.boolean(),
@@ -1137,6 +1144,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!harness) return reply.code(400).send({ error: "harness: pick a harness (no device offers one yet to use as a default)" });
     if (store.agentByHandle(c.workspaceId, body.handle)) return reply.code(409).send({ error: "handle taken" });
     if (body.settings?.respondPeople?.some((p) => !store.role(c.workspaceId, p))) return reply.code(400).send({ error: "respondPeople: someone isn't in this organization" });
+    const connWhy = body.settings?.connectionId ? connectionProblem(hub, c, body.settings.connectionId, harness) : null;
+    if (connWhy) return reply.code(400).send({ error: connWhy });
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
     if (body.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
     if (body.computerId && !canAssignComputer(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
@@ -1198,6 +1207,13 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       return reply.code(403).send({ error: `@${agent.handle} ${owner === deviceOwnerOf(agent) ? "runs" : "would run"} directly on ${name}'s device, so only ${name} can ${owner === deviceOwnerOf(agent) ? "change it" : "make that change"}` });
     }
     if (body.handle && body.handle !== agent.handle && store.agentByHandle(c.workspaceId, body.handle)) return reply.code(409).send({ error: "handle taken" });
+    // a new connection must be the caller's and fit the harness; a new harness must fit the connection it keeps
+    const newConnection = body.settings?.connectionId && body.settings.connectionId !== agent.settings.connectionId;
+    if (newConnection || (body.harness && body.harness !== agent.harness && after.settings.connectionId)) {
+      const r = hub.models.row(after.settings.connectionId!);
+      const why = newConnection ? connectionProblem(hub, c, after.settings.connectionId!, after.harness) : r && !credentialSupport(after.harness, r.provider, r.kind) ? `${harnessLabel(after.harness)} can't use @${agent.handle}'s ${providerLabel(r.provider)} ${r.kind === "oauth" ? "sign-in" : "key"}; pick another model (settings.connectionId) with the harness` : null;
+      if (why) return reply.code(400).send({ error: why });
+    }
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
     if (body.nodeId && body.nodeId !== agent.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
     if (body.computerId && body.computerId !== agent.computerId && !canAssignComputer(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
@@ -1261,9 +1277,22 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const agent = store.agent((req.params as { id: string }).id);
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
     const node = agent.nodeId ? store.node(agent.nodeId) : undefined;
+    const vm = hub.runsInComputer(agent) && agent.computerId ? store.computer(agent.computerId) : undefined;
+    const catalog = hub.catalogFor(agent) ?? null;
+    // on a connection: its models, as this harness runs them (the device's catalog still says what's installed)
+    const credential = hub.credentialFor(agent);
+    const r = credential ? hub.models.row(credential.connectionId) : undefined;
+    const models = r ? modelsForHarness(agent.harness, r.provider, await hub.models.models(r.id, catalog).catch(() => [])) : null;
+    // a VM nobody has listed yet: ask its device (it answers once the VM is up)
+    if (vm && node && hub.isNodeOnline(node.id) && !store.computerCatalog(node.id, vm.id)) hub.sendToNode(node.id, { type: "computer_catalog", computer: hub.computers.spec(vm) });
     return {
       device: node ? { id: node.id, name: node.name, online: hub.isNodeOnline(node.id) } : null,
-      catalog: node ? (store.nodeCatalog(node.id).find((h) => h.harness === agent.harness) ?? null) : null,
+      /** the VM its harness runs in, when it runs in one (the catalog is that VM's once reported) */
+      computer: vm ? { id: vm.id, name: vm.name, reported: !!(node && store.computerCatalog(node.id, vm.id)) } : null,
+      catalog,
+      /** the model connection it runs on, and that connection's models (null without one) */
+      connection: r ? { id: r.id, provider: r.provider, kind: r.kind, label: r.label, account: r.account, plan: r.plan, mine: r.user_id === c.actor.id } : null,
+      models,
     };
   });
 
@@ -1288,11 +1317,16 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const q = req.query as { channel?: string; thread?: string };
     const channel = q.channel ? channelVisible(c, q.channel) : undefined;
     const usage = channel ? store.latestUsage(agent.id, channel.id, q.thread || null) : null;
-    const catalog = agent.nodeId ? store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness) : undefined;
+    const catalog = hub.catalogFor(agent);
+    const conn = agent.settings.connectionId ? hub.models.row(agent.settings.connectionId) : undefined;
+    const usable = conn && credentialSupport(agent.harness, conn.provider, conn.kind) ? conn : undefined;
+    const connModels = usable ? await hub.models.models(usable.id, catalog).catch(() => []) : [];
+    const entryOf = (m: string | null) => connModels.find((x) => x.id === m) ?? catalog?.models.find((x) => x.id === m);
     const model = agent.model ?? usage?.model ?? catalog?.defaultModel ?? null;
     const sameModel = !agent.model || !usage?.model || usage.model === agent.model;
     // the harness's configured effort wins over the model's own default, as in Codex
-    const effort = agent.settings.effort ?? (sameModel ? usage?.effort : undefined) ?? catalog?.defaultEffort ?? catalog?.models.find((m) => m.id === model)?.defaultEffort ?? null;
+    const effort = agent.settings.effort ?? (sameModel ? usage?.effort : undefined) ?? catalog?.defaultEffort ?? entryOf(model)?.defaultEffort ?? null;
+    const planNow = usable?.usage_json ? JSON.parse(usable.usage_json) : usage?.plan ? { ...usage.plan, capturedAt: usage.at } : null;
     return {
       harness: agent.harness,
       harnessVersion: catalog?.version ?? null,
@@ -1307,8 +1341,14 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       fastAvailable: !!catalog?.models.find((m) => m.id === model)?.fast,
       fastDescription: catalog?.models.find((m) => m.id === model)?.fast?.description ?? null,
       contextUsed: sameModel ? (usage?.contextUsed ?? null) : null,
-      contextWindow: (sameModel ? usage?.contextWindow : undefined) ?? catalog?.models.find((m) => m.id === model)?.contextWindow ?? null,
+      contextWindow: (sameModel ? usage?.contextWindow : undefined) ?? entryOf(model)?.contextWindow ?? null,
       lastRunAt: usage?.at ?? null,
+      /** effort levels the model in use offers (else the harness's) */
+      efforts: entryOf(model)?.efforts ?? catalog?.efforts ?? [],
+      /** the model connection it runs on: { id, provider, kind, label, account, plan }, or null for the device's own login */
+      connection: usable ? { id: usable.id, provider: usable.provider, kind: usable.kind, label: usable.label, account: usable.account, plan: usable.plan } : null,
+      /** the subscription's usage as last reported ({ window, usedFraction 0–1, resetsAt, planType?, windows?, capturedAt }); null when unknown */
+      plan: planNow,
     };
   });
 
@@ -2277,6 +2317,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerOrgApi(app, hub, { need, parse });
   registerMemoryStorageApi(app, hub, { need, parse, dataDir: opts.dataDir, started: opts.vault, restart: opts.restart });
   registerConnectorApi(app, hub, { need, parse, commitAuthor });
+  registerModelsApi(app, hub, { need, parse });
   registerVoiceApi(app, hub, { need });
   registerBackgroundApi(app, hub, { need, parse, requesterOf });
   registerLeadApi(app, hub, { need, parse });
