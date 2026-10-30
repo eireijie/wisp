@@ -1,5 +1,5 @@
 // Minimal service worker: makes Wisp installable and keeps the app shell available offline.
-const SHELL = "wisp-shell-v3";
+const SHELL = "wisp-shell-v4";
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(["/", "/manifest.webmanifest", "/icon.svg", "/storage-migration.js"])));
   self.skipWaiting();

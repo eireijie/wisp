@@ -43,11 +43,11 @@ describe("service worker cache migration", () => {
     const code = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
     runInNewContext(code, {
       self: { addEventListener: (name: string, fn: (event: unknown) => void) => handlers.set(name, fn), clients: { claim: () => {} } },
-      caches: { keys: async () => ["warren-shell-v2", "warren-old", "wisp-shell-v1", "wisp-shell-v2", "wisp-shell-v3", "another-app"], delete: async (key: string) => { deleted.push(key); } },
+      caches: { keys: async () => ["warren-shell-v2", "warren-old", "wisp-shell-v1", "wisp-shell-v2", "wisp-shell-v3", "wisp-shell-v4", "another-app"], delete: async (key: string) => { deleted.push(key); } },
     });
     let pending: Promise<unknown> = Promise.resolve();
     handlers.get("activate")!({ waitUntil: (promise: Promise<unknown>) => { pending = promise; } });
     await pending;
-    expect(deleted.sort()).toEqual(["warren-old", "warren-shell-v2", "wisp-shell-v1", "wisp-shell-v2"]);
+    expect(deleted.sort()).toEqual(["warren-old", "warren-shell-v2", "wisp-shell-v1", "wisp-shell-v2", "wisp-shell-v3"]);
   });
 });

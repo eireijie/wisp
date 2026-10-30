@@ -4,23 +4,24 @@ import SwiftUI
 // bobbing over a big title, a tall code card, and full-width pill buttons. They follow the
 // approved design (auth-Pair*, auth-Join*) and build on Palette and Chrome.
 
-/** The Peek ghost as one simple piece, drawn in a 100-point box: a dome that runs off the bottom edge. */
+/** The Will-o' wisp as one simple piece, drawn in a 100-point box: a round body with a tail flicking up to the right. */
 struct WispGhostShape: Shape {
   func path(in rect: CGRect) -> Path {
     let s = min(rect.width, rect.height) / 100
     func p(_ x: Double, _ y: Double) -> CGPoint { CGPoint(x: rect.midX + (x - 50) * s, y: rect.midY + (y - 50) * s) }
     var path = Path()
-    path.move(to: p(18, 101))
-    path.addLine(to: p(18, 62))
-    path.addCurve(to: p(50, 28), control1: p(18, 40), control2: p(32, 28))
-    path.addCurve(to: p(82, 62), control1: p(68, 28), control2: p(82, 40))
-    path.addLine(to: p(82, 101))
+    path.move(to: p(48, 88))
+    path.addCurve(to: p(19, 60), control1: p(30, 88), control2: p(19, 75))
+    path.addCurve(to: p(44, 31), control1: p(19, 44), control2: p(31, 35))
+    path.addCurve(to: p(78, 7), control1: p(57, 27), control2: p(68, 20))
+    path.addCurve(to: p(81, 52), control1: p(81, 22), control2: p(83, 36))
+    path.addCurve(to: p(48, 88), control1: p(79, 74), control2: p(66, 88))
     path.closeSubpath()
     return path
   }
 }
 
-/** Wisp's logo, "Peek": the white ghost peeking up from the bottom of the purple-to-blue tile, optionally floating up and down. */
+/** Wisp's logo, "Will-o'": the white flame-shaped wisp on the cyan-to-blue tile, optionally floating up and down. */
 struct WispMark: View {
   var size: CGFloat = 84
   var bobbing = true
@@ -30,10 +31,10 @@ struct WispMark: View {
   var body: some View {
     let eye = Color(red: 0x15 / 255, green: 0x13 / 255, blue: 0x1C / 255)
     ZStack {
-      LinearGradient(colors: [Color(red: 0xBF / 255, green: 0x5A / 255, blue: 0xF2 / 255), Color(red: 0x0A / 255, green: 0x84 / 255, blue: 0xFF / 255)], startPoint: .topLeading, endPoint: .bottomTrailing)
+      LinearGradient(colors: [Color(red: 0x64 / 255, green: 0xD2 / 255, blue: 0xFF / 255), Color(red: 0x0A / 255, green: 0x84 / 255, blue: 0xFF / 255)], startPoint: .topLeading, endPoint: .bottomTrailing)
       WispGhostShape().fill(Color.white)
-      Ellipse().fill(eye).frame(width: size * 0.084, height: size * 0.132).position(x: size * 0.53, y: size * 0.55)
-      Ellipse().fill(eye).frame(width: size * 0.084, height: size * 0.132).position(x: size * 0.70, y: size * 0.55)
+      Ellipse().fill(eye).frame(width: size * 0.072, height: size * 0.108).position(x: size * 0.41, y: size * 0.62)
+      Ellipse().fill(eye).frame(width: size * 0.072, height: size * 0.108).position(x: size * 0.57, y: size * 0.61)
     }
     .frame(width: size, height: size)
     .clipShape(RoundedRectangle(cornerRadius: size * 0.23, style: .continuous))

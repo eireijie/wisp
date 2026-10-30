@@ -224,21 +224,21 @@ export function StatusChip({ status }: { status: Agent["status"] }) {
   );
 }
 
-/** Wisp's mark: the Peek ghost, a dome peeking up from the bottom. `draw` animates its outline drawing itself (the loading state). */
+/** Wisp's mark: the Will-o' wisp, a flame-shaped ghost. `draw` animates its outline drawing itself (the loading state). */
 export function GhostMark({ size = 20, draw, className }: { size?: number; draw?: boolean; className?: string }) {
   const id = useId();
   return (
-    <svg viewBox="12 22 76 80" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={4.5} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+    <svg viewBox="12 2 76 92" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={4.5} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
       {draw ? (
-        <path className="loader-draw" pathLength={100} d="M18 100 L18 62 C18 40 32 28 50 28 C68 28 82 40 82 62 L82 100" />
+        <path className="loader-draw" pathLength={100} d="M48 88 C30 88 19 75 19 60 C19 44 31 35 44 31 C57 27 68 20 78 7 C81 22 83 36 81 52 C79 74 66 88 48 88Z" />
       ) : (
         <>
           <mask id={id}>
-            <rect x="0" y="0" width="100" height="110" fill="#fff" />
-            <ellipse cx="53" cy="55" rx="4.2" ry="6.6" fill="#000" />
-            <ellipse cx="70" cy="55" rx="4.2" ry="6.6" fill="#000" />
+            <rect x="0" y="0" width="100" height="100" fill="#fff" />
+            <ellipse cx="41" cy="62" rx="3.6" ry="5.4" fill="#000" />
+            <ellipse cx="57" cy="61" rx="3.6" ry="5.4" fill="#000" />
           </mask>
-          <path d="M18 101 L18 62 C18 40 32 28 50 28 C68 28 82 40 82 62 L82 101Z" fill="currentColor" stroke="none" mask={`url(#${id})`} />
+          <path d="M48 88 C30 88 19 75 19 60 C19 44 31 35 44 31 C57 27 68 20 78 7 C81 22 83 36 81 52 C79 74 66 88 48 88Z" fill="currentColor" stroke="none" mask={`url(#${id})`} />
         </>
       )}
     </svg>
