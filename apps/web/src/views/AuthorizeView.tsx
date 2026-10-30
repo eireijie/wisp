@@ -4,7 +4,6 @@ import { api } from "../api.ts";
 import { ArrowRight, Check, Globe, Plus } from "lucide-react";
 import { AgentAvatar, cx } from "../components/ui.tsx";
 import { AuthButton, AuthHero, AuthInput, AuthLink, AuthPage } from "../components/auth.tsx";
-import { WispGhost } from "../components/icons.tsx";
 
 const NEW = "new";
 
@@ -80,9 +79,6 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
     <AuthPage themeToggle={false} wide>
       {!info ? (
         <div className="flex flex-col items-center gap-4 text-ink">
-          <span className="auth-bob">
-            <WispGhost size={60} />
-          </span>
           <span className="sr-only">Wisp</span>
           <p className={cx("text-sm text-center", error ? "text-bad" : "text-muted")}>{error ?? "Loading…"}</p>
         </div>
@@ -93,8 +89,7 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
               <Globe size={28} strokeWidth={1.8} />
             </span>
             <ArrowRight size={22} className="text-faint" aria-hidden />
-            <WispGhost size={60} className="text-ink" />
-            <span className="sr-only">Wisp</span>
+            <span className="text-body font-medium text-ink/85">Wisp</span>
           </div>
           <div className="text-center space-y-1.5">
             <h1 className="t-title">Let {info.client} act as an agent?</h1>

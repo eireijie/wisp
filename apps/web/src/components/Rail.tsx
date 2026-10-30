@@ -1,10 +1,10 @@
-import { useRef, type ReactNode } from "react";
-import { Blocks, BookOpen, Ellipsis, LifeBuoy, ListTodo, Store } from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
+import { Blocks, BookOpen, Building2, Ellipsis, LifeBuoy, ListTodo, Settings, Store } from "lucide-react";
 import { useFeatures } from "../features.ts";
 import { useStore, useInboxCount, useChatsUnread } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
-import { AgentsIcon, ChatsIcon, ComputersIcon, InboxIcon, WispGhost } from "./icons.tsx";
-import { OrgSwitcher, useOrgs } from "./OrgSwitcher.tsx";
+import { AgentsIcon, ChatsIcon, ComputersIcon, InboxIcon } from "./icons.tsx";
+import { OrgSwitcherDialog, useOrgs } from "./OrgSwitcher.tsx";
 import { Menu, PopBadge, cx } from "./ui.tsx";
 import { useBounce } from "../motion.ts";
 
@@ -36,11 +36,40 @@ export function UserAvatarButton({ size, desktop }: { size?: number; desktop?: b
   const me = useStore((s) => s.me)!;
   const { orgs } = useOrgs();
   const elsewhere = orgs.some((o) => o.unread && !o.current && o.id !== me.workspace.id);
+  const dot = elsewhere && <span className="absolute right-0 bottom-0 size-3 rounded-full bg-badge border-2 border-app" aria-label="New messages in another organization" />;
+  if (!desktop) {
+    return (
+      <a href={href({ view: "you" })} aria-label="You and settings" title="You and settings" className="circle relative font-medium text-ink/85" style={{ width: size, height: size, fontSize: size * 0.3 }}>
+        {initialsOf(me.user.name)}
+        {dot}
+      </a>
+    );
+  }
+  return <DesktopAvatar size={size} initials={initialsOf(me.user.name)} dot={dot} />;
+}
+
+/** On desktops the avatar opens a small menu: Settings, and Switch organization (which lists every organization, New organization and Join with an invite link). */
+function DesktopAvatar({ size, initials, dot }: { size: number; initials: string; dot: ReactNode }) {
+  // The dialog sits beside the menu, not in it: both are portaled, so a click in it would count as outside the menu.
+  const [orgs, setOrgs] = useState(false);
+  const icon = { size: 16, strokeWidth: 1.8 };
   return (
-    <a href={desktop ? href({ view: "settings", page: null }) : href({ view: "you" })} aria-label="You and settings" title="You and settings" className="circle relative font-medium text-ink/85" style={{ width: size, height: size, fontSize: size * 0.3 }}>
-      {initialsOf(me.user.name)}
-      {elsewhere && <span className="absolute right-0 bottom-0 size-3 rounded-full bg-badge border-2 border-app" aria-label="New messages in another organization" />}
-    </a>
+    <>
+      <Menu
+        up
+        items={[
+          { label: "Settings", icon: <Settings {...icon} />, onSelect: () => go({ view: "settings", page: null }) },
+          { label: "Switch organization", icon: <Building2 {...icon} />, onSelect: () => setOrgs(true) },
+        ]}
+        trigger={(open, toggle) => (
+          <button onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label="You and settings" title="You and settings" className="circle relative font-medium text-ink/85 outline-none focus-visible:ring-3 focus-visible:ring-ring/40" style={{ width: size, height: size, fontSize: size * 0.3 }}>
+            {initials}
+            {dot}
+          </button>
+        )}
+      />
+      {orgs && <OrgSwitcherDialog onClose={() => setOrgs(false)} />}
+    </>
   );
 }
 
@@ -85,8 +114,7 @@ function MoreItem({ route, guest }: { route: Route; guest: boolean }) {
 }
 
 /**
- * The slim left rail on desktops: Wisp's ghost on top (it opens the organization switcher),
- * Inbox, Chats, Agents, Computers and More, and you at the bottom (it opens Settings).
+ * The slim left rail on desktops: Inbox, Chats, Agents, Computers and More, and you at the bottom (a menu with Settings and Switch organization).
  */
 export function Rail({ route }: { route: Route }) {
   const me = useStore((s) => s.me)!;
@@ -97,14 +125,7 @@ export function Rail({ route }: { route: Route }) {
   const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
   const index = route.view === "dashboard" ? 0 : route.view === "chat" || route.view === "chats" ? 1 : route.view === "agents" ? 2 : route.view === "computers" && !isGuest ? 3 : -1;
   return (
-    <nav aria-label="Wisp" className="w-[80px] shrink-0 flex flex-col items-center gap-1 pt-5 pb-4 safe-top">
-      <OrgSwitcher
-        trigger={(open, toggle) => (
-          <button onClick={toggle} aria-expanded={open} aria-haspopup="menu" aria-label={`${me.workspace.name}, switch organization`} title={me.workspace.name} className="mb-4 flex text-ink rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
-            <WispGhost size={34} />
-          </button>
-        )}
-      />
+    <nav aria-label="Wisp" className="w-[80px] shrink-0 flex flex-col items-center gap-1 pt-6 pb-4 safe-top">
       {/* the selection slides between items (56px apart); none selected, it fades out */}
       <div className="relative flex flex-col gap-1">
         <span aria-hidden className="m-ind left-0 top-0 w-[68px] h-[52px] rounded-[14px]" style={{ background: `color-mix(in srgb, var(--accent-${["inbox", "chats", "agents", "computers"][Math.max(index, 0)]}) 16%, transparent)`, transform: `translateY(${Math.max(index, 0) * 56}px)`, opacity: index < 0 ? 0 : 1 }} />

@@ -11,7 +11,6 @@ import { go, href } from "../router.ts";
 import { canApproveJoin, unavailable } from "../join.ts";
 import { AddDeviceContent } from "../components/AddDevice.tsx";
 import { AuthButton, AuthInput, AuthLink } from "../components/auth.tsx";
-import { WispGhost } from "../components/icons.tsx";
 import { MoreOptions } from "../components/MoreOptions.tsx";
 import { CopyBlock, Field, Input, cx } from "../components/ui.tsx";
 import type { HarnessesResponse } from "./settings/harnesses.tsx";
@@ -46,10 +45,7 @@ export function WelcomeView({ intro }: { intro?: boolean }) {
   const before = STEPS[index - 1] ? answers[STEPS[index - 1]] : undefined;
   return (
     <div className="fixed inset-0 z-40 flex bg-app" data-testid="setup">
-      <div className="hidden md:flex w-[84px] shrink-0 justify-center pt-5 text-ink" aria-hidden>
-        <WispGhost size={34} />
-      </div>
-      <main className="flex-1 min-w-0 flex flex-col bg-panel md:my-2.5 md:mr-2.5 md:rounded-xl">
+      <main className="flex-1 min-w-0 flex flex-col bg-panel md:m-2.5 md:rounded-xl">
         <header className="shrink-0 w-full max-w-[640px] mx-auto px-[22px] pt-[max(1.5rem,env(safe-area-inset-top))] md:pt-8 flex items-center gap-3.5">
           {index > 0 ? (
             <button className="circle circle-sm" aria-label="Back" onClick={() => setScreen(STEPS[index - 1])}>
@@ -87,15 +83,12 @@ export function WelcomeView({ intro }: { intro?: boolean }) {
   );
 }
 
-/** The conversation: Wisp's name and ghost on top, then the bubbles. */
+/** The conversation: Wisp's name on top, then the bubbles. */
 function Thread({ children }: { children: ReactNode }) {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="w-full max-w-[640px] mx-auto px-[22px] pt-[18px] md:pt-10 pb-6 flex flex-col gap-2.5">
-        <div className="flex items-center gap-2.5 mb-0.5 text-ink">
-          <WispGhost size={34} />
-          <span className="text-body font-medium text-ink/80">Wisp</span>
-        </div>
+        <span className="mb-0.5 text-body font-medium text-ink/80">Wisp</span>
         {children}
       </div>
     </div>

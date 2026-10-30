@@ -627,9 +627,6 @@ body {
 
 /* setup: each screen eases in where the last one stood */
 /* the ghost bobbing on sign-in, setup and welcome screens */
-.auth-bob { display: inline-flex; animation: auth-bob 2.6s ease-in-out infinite; }
-@keyframes auth-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-@media (prefers-reduced-motion: reduce) { .auth-bob { animation: none; } }
 .wizard-in { animation: wizard-in 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 @keyframes wizard-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) {

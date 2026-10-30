@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Building2, Check, Link2, Plus } from "lucide-react";
 import { useStore } from "../store.ts";
 import { createOrg, joinOrg, orgSummary, switchOrg, type Org } from "../orgs.ts";
-import { Button, Field, Input, Modal, Popover, cx } from "./ui.tsx";
+import { Button, Field, Input, Modal, cx } from "./ui.tsx";
 
 /** An organization's tile: a neutral rounded square with a line building, never a colored letter. */
 export function OrgTile({ size = 36 }: { org?: Pick<Org, "id" | "name">; home?: boolean; size?: number; round?: boolean }) {
@@ -108,25 +108,17 @@ export function OrgList({ onDone, onNewOrg }: { onDone: () => void; onNewOrg?: (
   );
 }
 
-/** The popover version, for the Wisp ghost at the top of the desktop rail. */
-export function OrgSwitcher({ trigger }: { trigger: (open: boolean, toggle: () => void) => ReactNode }) {
-  // The dialog lives beside the popover, not in it: it is portaled to <body>, so a click in it would count as outside the popover and close it.
+/** The organization list in a dialog, opened from "Switch organization" in the desktop avatar menu. */
+export function OrgSwitcherDialog({ onClose }: { onClose: () => void }) {
+  // New organization is its own dialog, a sibling of this one rather than a child: both are portaled.
   const [newOrg, setNewOrg] = useState(false);
+  if (newOrg) return <NewOrgDialog onClose={onClose} />;
   return (
-    <>
-      <Popover up={false} className="w-[22rem] max-w-[calc(100vw-1rem)] !rounded-xl" trigger={trigger}>
-        {(close) => (
-          <OrgList
-            onDone={close}
-            onNewOrg={() => {
-              close();
-              setNewOrg(true);
-            }}
-          />
-        )}
-      </Popover>
-      {newOrg && <NewOrgDialog onClose={() => setNewOrg(false)} />}
-    </>
+    <Modal title="Switch organization" onClose={onClose}>
+      <div className="-mx-2">
+        <OrgList onDone={onClose} onNewOrg={() => setNewOrg(true)} />
+      </div>
+    </Modal>
   );
 }
 

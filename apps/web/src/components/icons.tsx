@@ -40,13 +40,3 @@ export const ComputersIcon = (p: { size?: number; className?: string }) => (
   </Line>
 );
 
-/** Wisp's ghost, filled: the mark on the rail's top button. */
-export function WispGhost({ size = 34, className }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className}>
-      <path d="M12 2.5a7.5 7.5 0 0 0-7.5 7.5v11l2.5-1.7 2.5 1.7 2.5-1.7 2.5 1.7 2.5-1.7 2.5 1.7V10A7.5 7.5 0 0 0 12 2.5z" fill="currentColor" />
-      <circle cx="9.5" cy="10.5" r="1.3" fill="var(--app)" />
-      <circle cx="14.5" cy="10.5" r="1.3" fill="var(--app)" />
-    </svg>
-  );
-}
