@@ -1,6 +1,5 @@
 ---
 import "../styles/global.css";
-import Ghost from "../components/Ghost.astro";
 import { REPO } from "../lib/site";
 
 interface Props {
@@ -43,7 +42,6 @@ const nav = [
     <header class="site-header">
       <div class="wrap"><div class="bar glass">
         <a class="brand" href="/" aria-label="Wisp home" aria-current={current === "home" ? "page" : undefined}>
-          <span class="tile"><Ghost size={22} color="#ffffff" color2="#d9d4ff" /></span>
           <span>Wisp</span>
         </a>
         <nav aria-label="Main">
@@ -72,7 +70,6 @@ const nav = [
     <footer class="site-footer">
       <div class="wrap foot">
         <div class="foot-brand">
-          <span class="tile"><Ghost size={20} color="#ffffff" color2="#d9d4ff" /></span>
           <p>
             <strong>Wisp</strong> is free and open source under the{" "}
             <a href={`${REPO}/blob/main/LICENSE`} rel="noopener">Apache-2.0 license</a>.
@@ -131,24 +128,9 @@ const nav = [
         color: var(--ink);
         text-decoration: none;
         font-family: var(--font-head);
-        font-weight: 800;
+        font-weight: 600;
         font-size: 1.3rem;
-        letter-spacing: -0.02em;
-      }
-      /* the ghost on a dark tile, like the app icon, so it reads in light and dark mode */
-      .tile {
-        display: inline-grid;
-        place-items: center;
-        width: 36px;
-        height: 36px;
-        border-radius: 12px;
-        background: #141414;
-        box-shadow: 0 0 0 1px oklch(1 0 0 / 0.08);
-      }
-      .site-footer .tile {
-        width: 30px;
-        height: 30px;
-        border-radius: 10px;
+        letter-spacing: -0.03em;
       }
       nav ul {
         list-style: none;
@@ -178,7 +160,7 @@ const nav = [
       nav ul {
         flex-wrap: nowrap;
       }
-      /* phones: the ghost alone stands for the name, so the links stay on one line in the capsule */
+      /* phones: tighter padding so the wordmark and links stay on one line in the capsule */
       @media (max-width: 480px) {
         .bar {
           padding: 0 6px 0 8px;
@@ -187,12 +169,8 @@ const nav = [
           padding: 8px 10px;
           font-size: 0.93rem;
         }
-        .brand > span:not(.tile) {
-          position: absolute;
-          width: 1px;
-          height: 1px;
-          overflow: hidden;
-          clip-path: inset(50%);
+        .brand {
+          font-size: 1.2rem;
         }
       }
       .site-footer {
