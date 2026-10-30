@@ -309,6 +309,7 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["background", "effort", "TEXT"],
   // NULL means no limit, so existing rows get the default of 24 from the column itself
   ["background", "daily_cap", "INTEGER DEFAULT 24"],
+  ["background", "quiet_streak", "INTEGER NOT NULL DEFAULT 0"],
   // from when agents could borrow a device's screen; only migrateLoans reads it now
   ["approvals", "loan_json", "TEXT"],
   ["approvals", "login_json", "TEXT"],

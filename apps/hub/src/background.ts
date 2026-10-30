@@ -29,6 +29,10 @@ export const ESTIMATED_CHECK_TOKENS = 25_000;
 export const SLOW_DOWN_AT = 0.8;
 const MIN_MINUTES = 10;
 const MAX_MINUTES = 24 * 60;
+/** An agent with nothing to watch is looked at again this often (no tokens: the hub only checks its sources). */
+const IDLE_RECHECK_MINUTES = 60;
+/** Quiet checks in a row that keep doubling the wait (2^6 × an hour is already past a day). */
+const MAX_QUIET_STREAK = 6;
 
 const minutes = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -68,6 +72,9 @@ export function startOfDay(at: Date, timeZone: string, plusDays = 0): Date {
  * and messages the person only when something needs them. Follow-ups are the one-off version:
  * "8am tomorrow, remind Sam the essay is due".
  */
+export const NOTHING_TO_WATCH = "nothing to watch yet";
+export const QUIET_LATELY = "quiet lately";
+
 export class Background {
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -128,6 +135,12 @@ export class Background {
       }
       if (this.capReached(b.agentId, b.userId, b.dailyCap, at)) {
         store.setBackground(b.agentId, b.userId, { nextAt: startOfDay(at, tz, 1).toISOString(), nextReason: "daily limit reached" });
+        continue;
+      }
+      // no apps, no computer, no shared notes, no tasks: a check would only spend tokens finding that out
+      if (!this.hasSomethingToWatch(b.agentId, b.lastAt)) {
+        if (b.nextReason !== NOTHING_TO_WATCH) this.hub.broadcast(ws, { type: "background_changed", agentId: b.agentId });
+        store.setBackground(b.agentId, b.userId, { nextAt: new Date(at.getTime() + IDLE_RECHECK_MINUTES * 60_000).toISOString(), nextReason: NOTHING_TO_WATCH });
         continue;
       }
       this.wake(b.agentId, b.userId, [], at);
@@ -319,13 +332,75 @@ export class Background {
     return { nextAt, minutes: m, on: !!b?.enabled };
   }
 
-  /** A check ended: keep the agent's note to itself; nothing is posted. */
-  finished(run: { id: string; agentId: string; requestedBy: string | null }, note: string) {
+  /**
+   * A check ended: keep the agent's note to itself; nothing is posted. Checks that keep saying nothing
+   * (no message to anyone, no follow-up due, and the person hasn't written since the check before)
+   * double the wait from the second in a row, up to a day; anything else starts the pace over.
+   */
+  finished(run: { id: string; agentId: string; requestedBy: string | null; channelId?: string }, note: string, at = new Date()) {
+    const followups = this.pendingFollowups.get(run.id)?.length ?? 0;
     this.pendingFollowups.delete(run.id);
-    const agent = this.hub.store.agent(run.agentId);
+    const { store } = this.hub;
+    const agent = store.agent(run.agentId);
     if (!agent || !run.requestedBy) return;
-    if (this.hub.store.background(run.agentId, run.requestedBy)) this.hub.store.setBackground(run.agentId, run.requestedBy, { lastNote: note.trim().slice(0, 2000) });
+    const b = store.background(run.agentId, run.requestedBy);
+    if (b) {
+      const quiet = !followups && this.wasQuiet(run.id, run.agentId, run.requestedBy);
+      const streak = quiet ? Math.min(MAX_QUIET_STREAK, b.quietStreak + 1) : 0;
+      const patch: Parameters<typeof store.setBackground>[2] = { lastNote: note.trim().slice(0, 2000), quietStreak: streak };
+      // one quiet check is normal; from the second in a row the wait doubles each time
+      if (streak > 1) {
+        const from = b.lastAt ? new Date(b.lastAt).getTime() : at.getTime();
+        const later = new Date(from + Math.min(MAX_MINUTES, b.everyMinutes * 2 ** (streak - 1)) * 60_000);
+        if (!b.nextAt || later > new Date(b.nextAt)) Object.assign(patch, { nextAt: later.toISOString(), nextReason: QUIET_LATELY });
+      }
+      store.setBackground(run.agentId, run.requestedBy, patch);
+    }
     this.hub.broadcast(agent.workspaceId, { type: "background_changed", agentId: agent.id });
+  }
+
+  /** The check posted nothing anywhere, and the person hasn't written to the agent since the check before it. */
+  private wasQuiet(runId: string, agentId: string, userId: string) {
+    const { db } = this.hub.store;
+    const started = (db.prepare("SELECT created_at AS at FROM runs WHERE id = ?").get(runId) as { at: string } | undefined)?.at;
+    if (!started) return false;
+    const spoke = db.prepare("SELECT 1 FROM messages WHERE author_kind = 'agent' AND author_id = ? AND created_at >= ? AND (thread_id IS NULL OR thread_id != ?) LIMIT 1").get(agentId, started, BACKGROUND_THREAD);
+    if (spoke) return false;
+    const before = (db.prepare("SELECT created_at AS at FROM runs WHERE agent_id = ? AND kind = 'background' AND requested_by = ? AND created_at < ? AND status != 'queued' ORDER BY created_at DESC LIMIT 1").get(agentId, userId, started) as { at: string } | undefined)?.at;
+    // the first check has nothing to compare with
+    if (!before) return false;
+    const agent = this.hub.store.agent(agentId);
+    const dm = agent && this.hub.store.dmChannel(agent.workspaceId, userId, agentId);
+    const wrote = dm && db.prepare("SELECT 1 FROM messages WHERE channel_id = ? AND author_kind = 'user' AND author_id = ? AND created_at >= ? LIMIT 1").get(dm.id, userId, before);
+    return !wrote;
+  }
+
+  /** The person wrote to the agent: checks go back to the usual pace. */
+  heardFrom(agentId: string, userId: string, at = new Date()) {
+    const { store } = this.hub;
+    const b = store.background(agentId, userId);
+    if (!b?.enabled || (!b.quietStreak && b.nextReason !== NOTHING_TO_WATCH)) return;
+    const soon = new Date(at.getTime() + b.everyMinutes * 60_000);
+    const sooner = !b.nextAt || soon < new Date(b.nextAt);
+    store.setBackground(agentId, userId, { quietStreak: 0, ...(sooner ? { nextAt: soon.toISOString(), nextReason: "" } : {}) });
+    const agent = store.agent(agentId);
+    if (agent) this.hub.broadcast(agent.workspaceId, { type: "background_changed", agentId });
+  }
+
+  /**
+   * Anything a check could find: apps, a computer, tasks waiting on it, or notes it can read (beyond its
+   * own) that changed since its last check. Notes alone don't count otherwise: they only change inside Wisp.
+   */
+  hasSomethingToWatch(agentId: string, since: string | null = null) {
+    const { store, access } = this.hub;
+    const agent = store.agent(agentId);
+    if (!agent) return false;
+    if (agent.computerId || this.hub.connectors.forAgent(agentId).length) return true;
+    if (store.db.prepare("SELECT 1 FROM tasks WHERE to_agent_id = ? AND status IN ('open','in_progress') LIMIT 1").get(agentId)) return true;
+    if (!since) return false;
+    const after = new Date(since).getTime();
+    const can = access.checker(agent.workspaceId, access.agentViewer(agent));
+    return this.hub.vault(agent.workspaceId).list().some((n) => n.updatedAt > after && !n.path.startsWith(`agents/${agentId}/`) && can(n.path).level !== "none");
   }
 
   /**

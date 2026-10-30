@@ -159,10 +159,12 @@ struct BackgroundView: View {
 
   private func statusText(_ work: BackgroundWork) -> String {
     if work.checking == true { return store.agent(agent.id)?.status == .offline ? "Waiting for its device" : "Checking now" }
+    // why the next check waits, when the hub stretched it
+    let why = work.nextReason == "nothing to watch yet" || work.nextReason == "quiet lately" ? " · \(work.nextReason!)" : ""
     if let last = work.lastAt.flatMap(Wire.date) {
-      return "Checked " + last.formatted(.relative(presentation: .named)) + (work.lastNote.map { $0.isEmpty ? "" : ": \($0)" } ?? "")
+      return "Checked " + last.formatted(.relative(presentation: .named)) + why + (work.lastNote.map { $0.isEmpty ? "" : ": \($0)" } ?? "")
     }
-    return "Hasn't checked yet"
+    return "Hasn't checked yet" + why
   }
 
   // MARK: pages

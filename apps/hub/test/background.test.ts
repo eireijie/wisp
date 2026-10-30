@@ -7,7 +7,7 @@ import type { AgentEvent } from "@wisp/core";
 import { WispClient } from "@wisp/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
-import { afterQuietHours, inQuietHours, parseWhen, startOfDay } from "../src/background.ts";
+import { afterQuietHours, inQuietHours, NOTHING_TO_WATCH, parseWhen, QUIET_LATELY, startOfDay } from "../src/background.ts";
 import type { Hub } from "../src/hub.ts";
 import { openDb } from "../src/db.ts";
 import { Store } from "../src/store.ts";
@@ -194,6 +194,64 @@ describe("background work", () => {
     expect(hub.store.background(agentId, me)!.nextReason).toBe("after quiet hours");
     expect(b.quietStart).toBe("00:00");
     hub.store.setBackground(agentId, me, { enabled: false, quietStart: "22:00", quietEnd: "07:00" });
+  });
+
+  it("doesn't wake an agent with nothing to watch, and does once it has something", async () => {
+    const node = hub.store.agent(agentId)!.nodeId;
+    const idleId = (await owner.request("POST", "/api/agents", { handle: "idle", name: "Idle", harness: "custom", nodeId: node })).id;
+    hub.store.setBackground(idleId, me, { enabled: true, quietStart: "00:00", quietEnd: "00:00", nextAt: null });
+    const n = calls.length;
+    hub.background.tick();
+    expect(calls.length).toBe(n);
+    const b = hub.store.background(idleId, me)!;
+    expect(b.nextReason).toBe(NOTHING_TO_WATCH);
+    expect((new Date(b.nextAt!).getTime() - Date.now()) / 60_000).toBeGreaterThan(55);
+    // a note someone changed since its last check is, and so is a task waiting on it
+    const since = new Date().toISOString();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(hub.background.hasSomethingToWatch(idleId, since)).toBe(false);
+    await owner.request("PUT", "/api/vault/note", { path: "shared/plans.md", content: "# Plans\n\nMove on Friday." });
+    expect(hub.background.hasSomethingToWatch(idleId, since)).toBe(true);
+    hub.store.db.prepare("INSERT INTO tasks (id, workspace_id, from_kind, from_id, to_agent_id, title, brief, status, created_at, updated_at) VALUES ('t_idle', ?, 'user', ?, ?, 'Look into it', '', 'open', ?, ?)").run(hub.store.agent(idleId)!.workspaceId, me, idleId, new Date().toISOString(), new Date().toISOString());
+    expect(hub.background.hasSomethingToWatch(idleId)).toBe(true);
+    hub.store.setBackground(idleId, me, { enabled: false });
+  });
+
+  it("waits longer after quiet checks in a row, and goes back to the usual pace when the person writes", async () => {
+    await idle();
+    onCheck = async () => "nothing new";
+    hub.store.setBackground(agentId, me, { enabled: true, everyMinutes: 60, quietStreak: 0, quietStart: "00:00", quietEnd: "00:00" });
+    const check = async () => {
+      expect(hub.background.wake(agentId, me)).toBeTruthy();
+      await idle();
+      return hub.store.background(agentId, me)!;
+    };
+    const hours = (b: { nextAt: string | null; lastAt: string | null }) => Math.round((new Date(b.nextAt!).getTime() - new Date(b.lastAt!).getTime()) / 3_600_000);
+    let b = await check();
+    b = await check();
+    expect(b.quietStreak).toBeGreaterThanOrEqual(1);
+    const streak = b.quietStreak;
+    b = await check();
+    expect(b.quietStreak).toBe(streak + 1);
+    expect(b.nextReason).toBe(QUIET_LATELY);
+    expect(hours(b)).toBe(Math.min(24, 2 ** (b.quietStreak - 1)));
+    // the person writes: back to every hour
+    await owner.send(dm().id, "any news?");
+    await waitFor(() => hub.store.background(agentId, me)!.quietStreak === 0 || undefined);
+    await idle();
+    b = hub.store.background(agentId, me)!;
+    expect((new Date(b.nextAt!).getTime() - Date.now()) / 60_000).toBeLessThanOrEqual(61);
+    // and a check that writes to someone isn't quiet
+    onCheck = async (agent) => {
+      await agent.messagePerson("Your package shipped.");
+      return "told them";
+    };
+    hub.store.setBackground(agentId, me, { quietStreak: 3 });
+    const spoke = await check();
+    onCheck = async () => "nothing new";
+    expect(hub.store.messages(dm().id).some((m) => m.body === "Your package shipped.")).toBe(true);
+    expect(spoke.quietStreak).toBe(0);
+    hub.store.setBackground(agentId, me, { enabled: false, quietStreak: 0, quietStart: "22:00", quietEnd: "07:00" });
   });
 
   it("shows agents the draft behind an approval card, and the answer", async () => {
