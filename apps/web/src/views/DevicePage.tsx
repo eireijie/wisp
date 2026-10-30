@@ -62,7 +62,7 @@ export function DevicePage({ nodeId }: { nodeId: string }) {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="shrink-0 px-4 md:px-6 pt-5 pb-3 flex items-center gap-3 safe-top">
+      <header className="shrink-0 px-4 md:px-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-3 flex items-center gap-3">
         <BackToComputers />
         <DeviceIcon online={n.online} />
         <div className="flex-1 min-w-0">

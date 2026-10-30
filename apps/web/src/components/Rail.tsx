@@ -97,7 +97,7 @@ export function Rail({ route }: { route: Route }) {
   const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
   const index = route.view === "dashboard" ? 0 : route.view === "chat" || route.view === "chats" ? 1 : route.view === "agents" ? 2 : route.view === "computers" && !isGuest ? 3 : -1;
   return (
-    <nav aria-label="Wisp" className="w-[80px] shrink-0 flex flex-col items-center gap-1 pt-5 pb-4 safe-top">
+    <nav aria-label="Wisp" className="w-[80px] shrink-0 flex flex-col items-center gap-1 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4">
       <OrgSwitcher
         trigger={(open, toggle) => (
           <button onClick={toggle} aria-expanded={open} aria-haspopup="menu" aria-label={`${me.workspace.name}, switch organization`} title={me.workspace.name} className="mb-4 flex text-ink rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/40">

@@ -56,7 +56,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       {/* phones: you and + on top, then the big title; desktops: the title and the actions side by side */}
-      <header className="md:hidden shrink-0 flex items-center justify-between px-[18px] pt-3 pb-2 safe-top">
+      <header className="md:hidden shrink-0 flex items-center justify-between px-[18px] pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
         <UserAvatarButton size={52} />
         {canEdit && (
           <button onClick={() => setCreating(true)} className="circle" aria-label="New agent">

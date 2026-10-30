@@ -136,7 +136,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
         </button>
       </header>
       {/* phones: back, and over a row's page a title with the agent's name under it */}
-      <header className="md:hidden shrink-0 flex items-center gap-3 px-[18px] pt-3 pb-2 safe-top">
+      <header className="md:hidden shrink-0 flex items-center gap-3 px-[18px] pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
         <a href={active === "overview" ? "#/agents" : back} className="circle" aria-label={active === "overview" ? "Back to agents" : `Back to ${agent.name}`}>
           <ChevronLeft size={22} />
         </a>

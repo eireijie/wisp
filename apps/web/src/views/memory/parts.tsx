@@ -57,7 +57,7 @@ export function Radio({ on, square }: { on: boolean; square?: boolean }) {
 /** The phone page header: a back circle, the name in a pill, and one more circle. */
 export function PhoneBar({ title, onBack, trailing, close }: { title: string; onBack?: () => void; trailing?: ReactNode; close?: boolean }) {
   return (
-    <header className="shrink-0 px-4 pt-3 pb-3 flex items-center gap-3 safe-top">
+    <header className="shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 flex items-center gap-3">
       {onBack ? (
         <button onClick={onBack} className="circle" aria-label={close ? "Close" : "Back"}>
           {close ? <X size={20} /> : <ChevronLeft size={22} />}
