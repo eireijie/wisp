@@ -125,7 +125,7 @@ export function Rail({ route }: { route: Route }) {
   const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
   const index = route.view === "dashboard" ? 0 : route.view === "chat" || route.view === "chats" ? 1 : route.view === "agents" ? 2 : route.view === "computers" && !isGuest ? 3 : -1;
   return (
-    <nav aria-label="Wisp" className="w-[80px] shrink-0 flex flex-col items-center gap-1 pt-6 pb-4 safe-top">
+    <nav aria-label="Wisp" className="w-[80px] shrink-0 flex flex-col items-center gap-1 pt-[max(0.5rem,env(safe-area-inset-top))] pb-4">
       {/* the selection slides between items (56px apart); none selected, it fades out */}
       <div className="relative flex flex-col gap-1">
         <span aria-hidden className="m-ind left-0 top-0 w-[68px] h-[52px] rounded-[14px]" style={{ background: `color-mix(in srgb, var(--accent-${["inbox", "chats", "agents", "computers"][Math.max(index, 0)]}) 16%, transparent)`, transform: `translateY(${Math.max(index, 0) * 56}px)`, opacity: index < 0 ? 0 : 1 }} />
