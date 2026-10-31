@@ -73,7 +73,7 @@ describe("checkForUpdate", () => {
   it("explains a copy that isn't a git checkout", async () => {
     const plain = fs.mkdtempSync(path.join(dir, "plain-"));
     const c = await checkForUpdate(plain, { runner });
-    expect(c).toMatchObject({ commit: null, canUpdate: false });
+    expect(c).toMatchObject({ commit: null, canUpdate: false, managedByApp: false });
     expect(c.reason).toMatch(/git/);
   });
 
@@ -81,7 +81,7 @@ describe("checkForUpdate", () => {
     const bundled = fs.mkdtempSync(path.join(dir, "bundled-"));
     fs.writeFileSync(path.join(bundled, "package.json"), JSON.stringify({ name: "wisp-runtime" }));
     const c = await checkForUpdate(bundled, { runner });
-    expect(c).toMatchObject({ commit: null, canUpdate: false });
+    expect(c).toMatchObject({ commit: null, canUpdate: false, managedByApp: true });
     expect(c.reason).toContain("Check for Updates");
     expect(c.reason).not.toMatch(/git/);
   });

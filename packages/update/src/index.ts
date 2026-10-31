@@ -35,6 +35,8 @@ export interface UpdateCheck extends Version {
   /** "abc1234 What changed", newest first */
   changes: string[];
   canUpdate: boolean;
+  /** the Wisp desktop app updates this copy itself, so there is nothing to check or do here */
+  managedByApp: boolean;
   /** one sentence for people: up to date, what's available, or why updating isn't possible */
   reason: string;
   checkedAt: string;
@@ -91,9 +93,10 @@ export async function version(root = REPO_ROOT, runner: Runner = run): Promise<V
 export async function checkForUpdate(root = REPO_ROOT, opts: { fetch?: boolean; runner?: Runner } = {}): Promise<UpdateCheck> {
   const runner = opts.runner ?? run;
   const v = await version(root, runner);
-  const result = (fields: Partial<UpdateCheck> & { reason: string }): UpdateCheck => ({ ...v, behind: null, changes: [], canUpdate: false, checkedAt: new Date().toISOString(), ...fields });
+  const result = (fields: Partial<UpdateCheck> & { reason: string }): UpdateCheck => ({ ...v, behind: null, changes: [], canUpdate: false, managedByApp: false, checkedAt: new Date().toISOString(), ...fields });
   if (!isCheckout(root)) {
     return result({
+      managedByApp: isBundled(root),
       reason: isBundled(root)
         ? "This copy came with the Wisp app, which updates itself. To check now, choose Check for Updates in the app's menu on that computer."
         : fs.existsSync("/.dockerenv")

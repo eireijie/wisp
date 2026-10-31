@@ -47,6 +47,7 @@ struct UpdatesView: View {
   private var page: some View {
     let check = info?.check
     let canUpdate = check?.canUpdate == true
+    let managedByApp = check?.managedByApp == true
     return SettingsPage("About", subtitle: "Wisp \(version)", id: "about") {
       if let commit = info?.version?.commit {
         CardLabel("This hub runs Wisp \(commit)\(info?.version?.date.flatMap(Wire.date).map { " from " + $0.formatted(.dateTime.month().day()) } ?? "")")
@@ -54,15 +55,17 @@ struct UpdatesView: View {
       CardGroup {
         HStack(spacing: 12) {
           VStack(alignment: .leading, spacing: 2) {
-            Text(canUpdate ? "Update available" : check?.behind == 0 ? "Up to date" : check == nil ? (checking ? "Checking…" : "Not checked yet") : "Can't update here")
+            Text(canUpdate ? "Update available" : check?.behind == 0 ? "Up to date" : check == nil ? (checking ? "Checking…" : "Not checked yet") : managedByApp ? "Updates with the app" : "Can't update here")
               .font(.system(size: 15)).foregroundStyle(canUpdate ? Palette.blue : check?.behind == 0 ? Palette.statusOnline : Palette.text)
             if let reason = check?.reason { Text(reason).font(.system(size: 13)).foregroundStyle(Palette.faint).fixedSize(horizontal: false, vertical: true) }
           }
           Spacer(minLength: 8)
-          Button(checking ? "Checking…" : "Check now") {
-            checking = true
-            action.run { defer { checking = false }; info = try await store.connection().post("/api/updates/check", Empty()) }
-          }.buttonStyle(.pill(.secondary, small: true)).disabled(checking || action.busy).accessibilityIdentifier("about-check")
+          if !managedByApp {
+            Button(checking ? "Checking…" : "Check now") {
+              checking = true
+              action.run { defer { checking = false }; info = try await store.connection().post("/api/updates/check", Empty()) }
+            }.buttonStyle(.pill(.secondary, small: true)).disabled(checking || action.busy).accessibilityIdentifier("about-check")
+          }
         }.padding(.horizontal, 18).padding(.vertical, 12).frame(minHeight: 62)
         if canUpdate, let changes = check?.changes, !changes.isEmpty {
           VStack(alignment: .leading, spacing: 8) {

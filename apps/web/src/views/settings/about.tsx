@@ -9,7 +9,7 @@ import { Card, PageHeader, Row, Section } from "./parts.tsx";
 
 interface UpdateInfo {
   version: { commit: string | null; date: string | null };
-  check: { behind: number | null; changes: string[]; canUpdate: boolean; reason: string } | null;
+  check: { behind: number | null; changes: string[]; canUpdate: boolean; managedByApp?: boolean; reason: string } | null;
   update: { state: "idle" | "updating" | "restarting" | "failed"; message: string; log: string[] };
 }
 
@@ -127,15 +127,19 @@ export function AboutPage() {
                 <Pill tone="accent">Update available</Pill>
               ) : c.behind === 0 ? (
                 <Pill tone="ok">Up to date</Pill>
+              ) : c.managedByApp ? (
+                <Pill>Updates with the app</Pill>
               ) : (
                 <Pill tone="warn">Can't update here</Pill>
               )
             }
             hint={c?.reason}
           >
-            <Button onClick={check} disabled={checking}>
-              {checking ? "Checking…" : "Check now"}
-            </Button>
+            {c?.managedByApp ? undefined : (
+              <Button onClick={check} disabled={checking}>
+                {checking ? "Checking…" : "Check now"}
+              </Button>
+            )}
           </Row>
           {c?.canUpdate && c.changes.length > 0 && (
             <div className="px-[18px] py-3 space-y-1.5">
