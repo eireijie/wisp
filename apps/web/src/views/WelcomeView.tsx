@@ -168,6 +168,9 @@ function PhoneStep({ onFinish }: { onFinish: () => void }) {
   );
 }
 
+/** The device's message when it has no Node.js (see NO_NODE in the node package). */
+export const NO_NODE = /Node\.js isn't installed on this computer/;
+
 /** Keep a detected sign-in on the device; install a new harness there when requested. */
 export async function makeFirstAgent(device: DeviceInfo, harness: string, name: string, agents: Agent[], computers: ComputerInfo[]) {
   const installed = device.harnesses?.some((h) => h.id === harness);
@@ -284,6 +287,7 @@ function AgentStep({ devices, onNext }: { devices: DeviceInfo[] | null; onNext: 
   if (created) return <AgentCreated agent={created} onNext={onNext} />;
   const current = settings.find((s) => s.harness === selected);
   const needsSignIn = !!device?.mine && !!current && account(current)?.signedIn === false;
+  const noNode = !!error && NO_NODE.test(error);
   return (
     <>
       <Thread title="Create your agent" sub="Pick the AI that powers it.">
@@ -340,7 +344,17 @@ function AgentStep({ devices, onNext }: { devices: DeviceInfo[] | null; onNext: 
             Waiting for this computer to connect; you can skip this for now.
           </p>
         )}
-        <Problem>{error}</Problem>
+        {noNode ? (
+          <p role="alert" className="text-sm text-bad">
+            {harnessLabel(selected)} needs Node.js, and this computer doesn't have it.{" "}
+            <a href="https://nodejs.org" target="_blank" rel="noreferrer" className="text-info hover:underline">
+              Get Node.js
+            </a>
+            , install it, then try again.
+          </p>
+        ) : (
+          <Problem>{error}</Problem>
+        )}
       </Thread>
       <Actions>
         {needsSignIn ? (
@@ -350,7 +364,7 @@ function AgentStep({ devices, onNext }: { devices: DeviceInfo[] | null; onNext: 
         ) : (
           <SetupButton disabled={busy || !device || !name.trim() || (!device.mine && !installed.some((h) => h.id === selected))} onClick={() => void create()}>
             {busy && <Loader2 size={16} className="animate-spin" />}
-            {busy ? "Getting ready…" : `Make ${name.trim() || "Atlas"}`}
+            {busy ? "Getting ready…" : noNode ? "Try again" : `Make ${name.trim() || "Atlas"}`}
           </SetupButton>
         )}
         <AuthLink onClick={onNext} disabled={busy} className="self-center">
@@ -618,20 +632,42 @@ function AwayStep({ onDone }: { onDone: () => void }) {
   // the page `login` answers with; later status checks may not repeat it
   const [loginUrl, setLoginUrl] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // what our own push found, tied to the state it was found in so it clears when that changes
+  const [found, setFound] = useState<{ state: string; text: string } | null>(null);
+  const [slow, setSlow] = useState(false);
   const state = info?.tailscale.state;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  useEffect(() => {
+    if (state !== "starting") return setSlow(false);
+    const t = setTimeout(() => setSlow(true), STARTING_MS);
+    return () => clearTimeout(t);
+  }, [state, attempt]);
   useEffect(() => {
     if (choice !== "tailscale" || !info || !allowed || !state) return;
     if (awayEnabled(info)) return onDone();
+    // a state we don't push (error, starting, missing) forgets the last push, so a recovery pushes again
+    if (state !== "needs-login" && state !== "running" && state !== "stopped") pushed.current = null;
     if (pushed.current === state) return;
-    const fail = (e: unknown) => setError(unavailable(e, "Tailscale"));
     if (state === "needs-login" && !info.tailscale.authUrl) {
       pushed.current = state;
-      useAccessStore.getState().act("login").then((next) => setLoginUrl(next.tailscale.authUrl ?? null), fail);
     } else if (state === "running" || state === "stopped") {
       pushed.current = state;
-      enableTailscale().then((ready) => ready && onDone(), fail);
-    }
+    } else return;
+    void advanceTailscale(state, !!info.tailscale.authUrl).then((r) => {
+      if (r.done) return onDone();
+      if (r.loginUrl) setLoginUrl(r.loginUrl);
+      // a late answer about a state we've already left is old news
+      if (r.problem && stateRef.current === state) setFound({ state, text: r.problem });
+    });
   }, [choice, info, state, allowed, attempt]);
+  const tryAgain = () => {
+    setFound(null);
+    setSlow(false);
+    pushed.current = null;
+    setAttempt((n) => n + 1);
+    void useAccessStore.getState().refresh(true);
+  };
   const startCloudflare = async () => {
     setBusy(true);
     setError(null);
@@ -653,46 +689,8 @@ function AwayStep({ onDone }: { onDone: () => void }) {
     onDone();
   };
   if (choice === "tailscale") {
-    const authUrl = info?.tailscale.authUrl ?? loginUrl;
-    return (
-      <>
-        <Thread title="Connect Tailscale" sub="Wisp moves on by itself once both are done.">
-          <Group>
-            <StatusRow done={!!state && state !== "missing"} text="Tailscale is installed">
-              {state === "missing" && info && (
-                <a href={info.download} target="_blank" rel="noreferrer" className="block text-[13px] text-info hover:underline">
-                  Install Tailscale
-                </a>
-              )}
-            </StatusRow>
-            <StatusRow done={state === "running"} text="Sign in to Tailscale">
-              {authUrl && state !== "running" && (
-                <a href={authUrl} target="_blank" rel="noreferrer" className="block text-[13px] text-info hover:underline">
-                  Open the Tailscale sign-in page
-                </a>
-              )}
-            </StatusRow>
-          </Group>
-          <Problem>{error}</Problem>
-        </Thread>
-        <Actions>
-          {error && (
-            <SetupButton
-              onClick={() => {
-                setError(null);
-                pushed.current = null;
-                setAttempt((n) => n + 1);
-              }}
-            >
-              Try again
-            </SetupButton>
-          )}
-          <AuthLink className="self-center" onClick={only}>
-            Only at home for now
-          </AuthLink>
-        </Actions>
-      </>
-    );
+    const problem = tailscaleProblem({ info, failed, found: found && found.state === state ? found.text : null, slow });
+    return <TailscaleScreen info={info} authUrl={info?.tailscale.authUrl ?? loginUrl} problem={problem} onRetry={tryAgain} onSkip={only} />;
   }
   if (choice === "cloudflare") {
     return (
@@ -741,6 +739,76 @@ function AwayStep({ onDone }: { onDone: () => void }) {
           Yes, with Cloudflare
         </SetupButton>
         <AuthLink className="self-center" onClick={only}>
+          Only at home for now
+        </AuthLink>
+      </Actions>
+    </>
+  );
+}
+
+const STARTING_MS = 20_000;
+
+/** One automatic step forward for a Tailscale state; says what to show when it can't move on. */
+export async function advanceTailscale(
+  state: string,
+  hasAuthUrl: boolean,
+  io: { login: () => Promise<AccessInfo>; enable: () => Promise<boolean> } = { login: () => useAccessStore.getState().act("login"), enable: () => enableTailscale() },
+): Promise<{ done?: true; loginUrl?: string; problem?: string }> {
+  try {
+    if (state === "needs-login" && !hasAuthUrl) {
+      const url = (await io.login()).tailscale.authUrl;
+      return url ? { loginUrl: url } : { problem: "Wisp couldn't get the Tailscale sign-in page. Try again." };
+    }
+    if (state === "running" || state === "stopped") {
+      return (await io.enable()) ? { done: true } : { problem: "Tailscale isn't ready yet. Open the Tailscale app, make sure you're signed in and connected, then try again." };
+    }
+  } catch (e) {
+    return { problem: unavailable(e, "Tailscale") };
+  }
+  return {};
+}
+
+/** What to tell the person when the Tailscale screen can't move on; null while things are fine or still working. */
+export function tailscaleProblem({ info, failed, found, error, slow }: { info: AccessInfo | null; failed: boolean; found?: string | null; error?: string | null; slow?: boolean }): string | null {
+  if (failed) return "Wisp couldn't check Tailscale on this computer. Try again.";
+  if (error) return error;
+  if (found) return found;
+  const t = info?.tailscale;
+  if (!t || t.state === "missing") return null;
+  if (t.error) return t.error;
+  if (t.state === "error") return "Tailscale didn't answer. Open the Tailscale app, then try again.";
+  if (t.state === "starting" && slow) return "Tailscale is taking a while to connect. Open the Tailscale app to check, then try again.";
+  return null;
+}
+
+export function TailscaleScreen({ info, authUrl, problem, onRetry, onSkip }: { info: AccessInfo | null; authUrl?: string | null; problem: string | null; onRetry: () => void; onSkip: () => void }) {
+  const state = info?.tailscale.state;
+  return (
+    <>
+      <Thread title="Connect Tailscale" sub="Wisp moves on by itself once both are done.">
+        <Group>
+          <StatusRow done={!!state && state !== "missing"} text="Tailscale is installed">
+            {state === "missing" && info && (
+              <a href={info.download} target="_blank" rel="noreferrer" className="block text-[13px] text-info hover:underline">
+                Install Tailscale
+              </a>
+            )}
+          </StatusRow>
+          <StatusRow done={state === "running"} text="Sign in to Tailscale">
+            {authUrl && state !== "running" && (
+              <a href={authUrl} target="_blank" rel="noreferrer" className="block text-[13px] text-info hover:underline">
+                Open the Tailscale sign-in page
+              </a>
+            )}
+          </StatusRow>
+        </Group>
+        <Problem>{problem}</Problem>
+        {!problem && state === "starting" && <Waiting>Tailscale is connecting</Waiting>}
+        {!problem && state === "needs-login" && !authUrl && <Waiting>Getting the sign-in page</Waiting>}
+      </Thread>
+      <Actions>
+        {problem && <SetupButton onClick={onRetry}>Try again</SetupButton>}
+        <AuthLink className="self-center" onClick={onSkip}>
           Only at home for now
         </AuthLink>
       </Actions>

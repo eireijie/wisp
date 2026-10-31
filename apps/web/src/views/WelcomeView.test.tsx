@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Agent } from "@wisp/core";
 import { api } from "../api.ts";
-import { HarnessChoice, makeFirstAgent, serverAddress, SETUP_LABELS } from "./WelcomeView.tsx";
+import { advanceTailscale, HarnessChoice, makeFirstAgent, NO_NODE, serverAddress, SETUP_LABELS, TailscaleScreen, tailscaleProblem } from "./WelcomeView.tsx";
 import type { AccessInfo } from "../access.ts";
 import type { DeviceInfo } from "../devices.ts";
 
@@ -73,5 +73,76 @@ describe("Wisp setup after the account", () => {
     vi.mocked(api).mockRejectedValueOnce(new Error("Install failed"));
     await expect(makeFirstAgent(device, "kimi", "Atlas", [], [])).rejects.toThrow("Install failed");
     expect(api).toHaveBeenCalledTimes(1);
+  });
+  it("recognises the device's missing Node.js message, and nothing else", () => {
+    expect(NO_NODE.test("Node.js isn't installed on this computer, and Kimi is installed with it. Install Node.js from https://nodejs.org, then try again.")).toBe(true);
+    expect(NO_NODE.test("npm can't write its global folder on Mac (permission denied). Install it there yourself: npm install -g kimi")).toBe(false);
+    expect(NO_NODE.test("npm install -g kimi failed:\nnetwork")).toBe(false);
+  });
+  it("installs again on retry once Node.js is there", async () => {
+    vi.mocked(api).mockRejectedValueOnce(new Error("Node.js isn't installed on this computer, and Kimi is installed with it."));
+    await expect(makeFirstAgent(device, "kimi", "Atlas", [], [])).rejects.toThrow("Node.js");
+    vi.mocked(api).mockReset().mockResolvedValue({});
+    await makeFirstAgent(device, "kimi", "Atlas", [], []);
+    expect(api).toHaveBeenNthCalledWith(1, "POST", "/api/nodes/mac/install", { harness: "kimi" });
+  });
+});
+
+describe("Tailscale screen never sits silently", () => {
+  const ts = (over: Record<string, unknown>) => ({ publicUrl: null, lan: [], download: "https://tailscale.com/download", hubPlatform: "darwin", tailscale: { state: "running", dnsName: null, serving: false, funnel: false, error: null, authUrl: null, ...over } }) as unknown as AccessInfo;
+  const show = (info: AccessInfo | null, problem: string | null) =>
+    renderToStaticMarkup(createElement(TailscaleScreen, { info, authUrl: info?.tailscale.authUrl, problem, onRetry: () => {}, onSkip: () => {} }));
+  it("shows the error state's message with Try again and the way out", () => {
+    const info = ts({ state: "error", error: "Tailscale is installed but not running. Open the Tailscale app." });
+    const problem = tailscaleProblem({ info, failed: false });
+    expect(problem).toBe("Tailscale is installed but not running. Open the Tailscale app.");
+    const html = show(info, problem);
+    expect(html).toContain("not running");
+    expect(html).toContain("Try again");
+    expect(html).toContain("Only at home for now");
+  });
+  it("has a message even when the error state carries none", () => {
+    expect(tailscaleProblem({ info: ts({ state: "error" }), failed: false })).toMatch(/didn't answer/);
+  });
+  it("clears by itself once Tailscale recovers", () => {
+    expect(tailscaleProblem({ info: ts({ state: "needs-login" }), failed: false })).toBeNull();
+    expect(show(ts({ state: "needs-login", authUrl: "https://login.tailscale.com/a/x" }), null)).not.toContain("Try again");
+  });
+  it("says it is connecting, then asks to try again if it never finishes", () => {
+    const info = ts({ state: "starting" });
+    expect(tailscaleProblem({ info, failed: false })).toBeNull();
+    expect(show(info, null)).toContain("Tailscale is connecting");
+    const slow = tailscaleProblem({ info, failed: false, slow: true });
+    expect(slow).toMatch(/taking a while/);
+    expect(show(info, slow)).toContain("Try again");
+  });
+  it("reports a failed check of this computer, even with no status yet", () => {
+    const problem = tailscaleProblem({ info: null, failed: true });
+    expect(show(null, problem)).toContain("Try again");
+  });
+  it("shows a serve or HTTPS failure that arrives with a running state", () => {
+    const text = "Tailscale Serve is off for your tailnet. Turn it on, then try again: https://login.tailscale.com/f/serve?node=abc";
+    expect(tailscaleProblem({ info: ts({ error: text }), failed: false })).toBe(text);
+  });
+  it("is not silent when sign-in gives no page", async () => {
+    const login = vi.fn().mockResolvedValue(ts({ state: "needs-login", authUrl: null }));
+    const r = await advanceTailscale("needs-login", false, { login, enable: vi.fn() });
+    expect(r.problem).toMatch(/sign-in page/);
+  });
+  it("opens the sign-in page it is given", async () => {
+    const login = vi.fn().mockResolvedValue(ts({ state: "needs-login", authUrl: "https://login.tailscale.com/a/x" }));
+    expect(await advanceTailscale("needs-login", false, { login, enable: vi.fn() })).toEqual({ loginUrl: "https://login.tailscale.com/a/x" });
+  });
+  it("is not silent when enabling resolves false, and moves on when it resolves true", async () => {
+    const enable = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    expect((await advanceTailscale("running", true, { login: vi.fn(), enable })).problem).toMatch(/isn't ready/);
+    expect(await advanceTailscale("stopped", true, { login: vi.fn(), enable })).toEqual({ done: true });
+  });
+  it("turns a thrown failure into a message", async () => {
+    const enable = vi.fn().mockRejectedValue(new Error("HTTPS certificates are off for your tailnet."));
+    expect((await advanceTailscale("running", true, { login: vi.fn(), enable })).problem).toContain("HTTPS certificates");
+  });
+  it("does nothing for states it does not push", async () => {
+    expect(await advanceTailscale("error", false, { login: vi.fn(), enable: vi.fn() })).toEqual({});
   });
 });
