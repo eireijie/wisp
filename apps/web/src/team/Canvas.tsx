@@ -3,6 +3,7 @@ import { Maximize2, Minus, Plus, Trash2 } from "lucide-react";
 import { DEFAULT_ROUNDS, stepGraph, stepOrder, type ChannelTeam, type TeamStep } from "@wisp/core";
 import { useStore } from "../store.ts";
 import { AgentAvatar, cx } from "../components/ui.tsx";
+import { nextText, whenText } from "./ScheduleForm.tsx";
 import { ADD_KINDS, BOX_H, BOX_W, fromCanvas, numberOf, stepById, titleOf, toCanvas, type AddAt, type AddKind, KIND_MARK } from "./flow.ts";
 import { KindIcon, MessageChip, StepNum, useHandoffName } from "./parts.tsx";
 
@@ -112,7 +113,8 @@ export function StepCanvas({
 
   const g = useMemo(() => stepGraph(steps), [steps]);
   const order = useMemo(() => stepOrder(steps), [steps]);
-  const starts = order.filter((s) => !(g.ins.get(s.id) ?? []).length);
+  const starts = order.filter((s) => s.kind !== "schedule" && (g.ins.get(s.id) ?? []).every((i) => stepById(team, i)?.kind === "schedule"));
+  const schedules = order.filter((s) => s.kind === "schedule");
   const ends = order.filter((s) => !(g.outs.get(s.id) ?? []).length);
 
   // the "A message comes in" chip sits left of the first steps, level with them
@@ -120,8 +122,10 @@ export function StepCanvas({
     if (!starts.length) return { x: 0, y: 0 };
     const xs = starts.map((s) => pos.get(s.id)!.x);
     const ys = starts.map((s) => pos.get(s.id)!.y + BOX_H / 2);
+    // with a schedule in front of the first steps, the chip goes under it so the arrows stay clear
+    if (schedules.length) return { x: Math.min(...schedules.map((s) => pos.get(s.id)!.x)), y: Math.max(...schedules.map((s) => pos.get(s.id)!.y)) + BOX_H + 28 };
     return { x: Math.min(...xs) - CHIP_W - 56, y: (Math.min(...ys) + Math.max(...ys)) / 2 - 20 };
-  }, [starts, pos]);
+  }, [starts, schedules, pos]);
 
   const edges = useMemo(() => {
     const out: Edge[] = [];
@@ -422,21 +426,33 @@ function Box({ step, team, at, selected, problem, dragging, agents, onKey, onDel
   const mark = KIND_MARK[step.kind];
   const handoff = useHandoffName(step.handoffTo);
   const n = numberOf(team, step.id);
-  const uses = (step.inputs ?? []).length > 1 ? `Uses ${(step.inputs ?? []).map((i) => numberOf(team, i)).sort((a, b) => a - b).join(" and ")}` : null;
+  const results = (step.inputs ?? []).map((i) => numberOf(team, i)).filter(Boolean).sort((a, b) => a - b);
+  const uses = results.length > 1 ? `Uses ${results.join(" and ")}` : null;
   return (
     <div
       data-step={step.id}
       role="button"
       tabIndex={0}
       aria-pressed={selected}
-      aria-label={`Step ${n}, ${titleOf(step)}${problem ? `. ${problem}` : ""}`}
+      aria-label={`${step.kind === "schedule" ? `Schedule, ${whenText(step)}` : `Step ${n}, ${titleOf(step)}`}${problem ? `. ${problem}` : ""}`}
       onKeyDown={(e) => e.target === e.currentTarget && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onKey())}
       className={cx("group absolute cursor-grab rounded-xl border text-left outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring", dragging && "cursor-grabbing shadow-panel", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card", selected && "border-ink/60 ring-2 ring-ink/25")}
       style={{ left: at.x, top: at.y, width: BOX_W, height: BOX_H }}
     >
-      <button type="button" data-ui aria-label={`Delete step ${n}`} title="Delete step" onClick={onDelete} className={cx("absolute -right-2.5 -top-2.5 z-[1] grid size-7 place-items-center rounded-full border border-control-line bg-control text-bad shadow-panel hover:bg-hover focus-visible:opacity-100 group-hover:opacity-100", selected ? "opacity-100" : "pointer-events-none opacity-0 group-hover:pointer-events-auto focus-visible:pointer-events-auto")}>
+      <button type="button" data-ui aria-label={step.kind === "schedule" ? "Delete schedule" : `Delete step ${n}`} title="Delete step" onClick={onDelete} className={cx("absolute -right-2.5 -top-2.5 z-[1] grid size-7 place-items-center rounded-full border border-control-line bg-control text-bad shadow-panel hover:bg-hover focus-visible:opacity-100 group-hover:opacity-100", selected ? "opacity-100" : "pointer-events-none opacity-0 group-hover:pointer-events-auto focus-visible:pointer-events-auto")}>
         <Trash2 size={14} />
       </button>
+      {step.kind === "schedule" ? (
+        <div className="px-3.5 pt-3">
+          <div className="mb-0.5 flex items-center gap-1 text-[11px] font-medium text-muted">
+            <KindIcon kind="schedule" size={12} />
+            Schedule
+          </div>
+          <div className="line-clamp-2 text-body font-medium leading-tight">{whenText(step)}</div>
+          <div className="mt-1.5 truncate text-[13px] text-muted">{nextText(step)}</div>
+        </div>
+      ) : (
+      <>
       <div className="flex items-start gap-2 px-3.5 pt-3">
         <StepNum n={n} />
         <div className="min-w-0 flex-1">
@@ -470,6 +486,8 @@ function Box({ step, team, at, selected, problem, dragging, agents, onKey, onDel
         )}
         {uses && <span className="ml-auto inline-flex h-[22px] shrink-0 items-center rounded-full border border-line bg-panel px-1.5 text-[10.5px] text-muted">{uses}</span>}
       </div>
+      </>
+      )}
     </div>
   );
 }

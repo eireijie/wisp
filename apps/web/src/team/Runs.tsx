@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, Hand } from "lucide-react";
-import { stepOrder, type TeamFlow, type TeamStep } from "@wisp/core";
+import { workSteps, type TeamFlow, type TeamStep } from "@wisp/core";
 import { api } from "../api.ts";
 import { href } from "../router.ts";
 import { useStore } from "../store.ts";
@@ -33,7 +33,7 @@ export function FlowStrip({ channelId, threadId }: { channelId: string; threadId
     };
   }, [channelId, threadId, version]);
   if (!flow || !team?.steps?.length) return null;
-  const order = stepOrder(team.steps);
+  const order = workSteps(team.steps);
   const lanes = lanesOf(flow);
   const number = (id: string) => order.findIndex((s) => s.id === id) + 1;
 

@@ -1,3 +1,4 @@
+import { describeCron, parseCron } from "./schedule.ts";
 import type { ChannelTeam, ChannelTeamNode } from "./types.ts";
 
 /**
@@ -23,8 +24,9 @@ export interface TeamRole {
  * - handoff: hands the work to another team, and optionally waits for its answer
  * - branch: "if / else": routes by a condition an agent decides, or by a simple rule on the result
  * - custom: a step whose whole behavior is its prompt
+ * - schedule: no work of its own: at its times it asks the team `prompt` and starts the steps its arrows point to
  */
-export type TeamStepKind = "do" | "review" | "hand_out" | "ask" | "handoff" | "branch" | "custom";
+export type TeamStepKind = "do" | "review" | "hand_out" | "ask" | "handoff" | "branch" | "custom" | "schedule";
 
 /** A simple rule on a result, for a branch that needs no agent to decide. Case doesn't matter. */
 export interface StepRule {
@@ -75,6 +77,14 @@ export interface TeamStep {
   /** branch: where "yes" and "no" go (a step before this one makes a loop) */
   ifTrue?: string | null;
   ifFalse?: string | null;
+  /** schedule: when it runs, as cron */
+  schedule?: string;
+  /** schedule: the time zone `schedule` is read in */
+  timezone?: string;
+  /** schedule: false rests it without losing it */
+  enabled?: boolean;
+  /** schedule: the person it runs for, set by the hub to whoever last changed it */
+  scheduledBy?: string | null;
   /** where it sits on the chart */
   x: number;
   y: number;
@@ -83,6 +93,8 @@ export interface TeamStep {
 export const DEFAULT_ROUNDS = 3;
 export const MAX_ROUNDS_LIMIT = 10;
 export const MAX_STEPS = 40;
+/** The status text on the message that opens a scheduled run, so apps can draw it as one. */
+export const SCHEDULE_MARK = "Schedule";
 
 /** A team that runs on steps rather than a plain chart of who hands work to whom. */
 export function hasSteps(team: Pick<ChannelTeam, "steps"> | null | undefined): boolean {
@@ -91,7 +103,7 @@ export function hasSteps(team: Pick<ChannelTeam, "steps"> | null | undefined): b
 
 /** The kinds that an agent does (the rest are a person, another team, or a rule). */
 export function stepNeedsAgent(step: Pick<TeamStep, "kind" | "rule">): boolean {
-  if (step.kind === "ask" || step.kind === "handoff") return false;
+  if (step.kind === "ask" || step.kind === "handoff" || step.kind === "schedule") return false;
   if (step.kind === "branch" && step.rule) return false;
   return true;
 }
@@ -173,10 +185,16 @@ export function normalizeSteps(steps: TeamStep[]): TeamStep[] {
   });
 }
 
-/** The steps nothing leads to: where a new request starts, all at once. */
+/** The steps nothing leads to but a schedule: where a new message starts, all at once. */
 export function startSteps(steps: TeamStep[]): TeamStep[] {
   const g = stepGraph(steps);
-  return steps.filter((s) => !g.ins.get(s.id)!.length);
+  const kind = new Map(steps.map((s) => [s.id, s.kind]));
+  return steps.filter((s) => s.kind !== "schedule" && g.ins.get(s.id)!.every((i) => kind.get(i) === "schedule"));
+}
+
+/** The steps that do work, in the order they happen: what step numbers count. */
+export function workSteps(steps: TeamStep[]): TeamStep[] {
+  return stepOrder(steps).filter((s) => s.kind !== "schedule");
 }
 
 /** The first step: a step nothing leads to, else the first one listed. */
@@ -243,6 +261,22 @@ export function isGraphTeam(team: { steps?: Pick<TeamStep, "nexts" | "inputs">[]
 
 // --- checking ------------------------------------------------------------------------
 
+/** What's wrong with a schedule box on its own, or null. */
+export function scheduleProblem(s: Pick<TeamStep, "schedule" | "timezone" | "prompt">): string | null {
+  if (!(s.prompt ?? "").trim()) return "Say what the schedule asks the team.";
+  try {
+    parseCron(s.schedule ?? "");
+  } catch {
+    return "Say when the schedule runs.";
+  }
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: s.timezone || "UTC" });
+  } catch {
+    return "The schedule's time zone isn't one Wisp knows.";
+  }
+  return null;
+}
+
 /** What's wrong with a team's roles and steps, in plain words, or null when they work. */
 export function stepsProblem(team: Pick<ChannelTeam, "roles" | "steps">): string | null {
   const roles = team.roles ?? [];
@@ -279,6 +313,10 @@ export function stepsProblem(team: Pick<ChannelTeam, "roles" | "steps">): string
       }
     }
     if (s.kind === "handoff" && !s.handoffTo) return `Pick the team “${label(s)}” hands the work to.`;
+    if (s.kind === "schedule") {
+      const problem = scheduleProblem(s);
+      if (problem) return problem;
+    }
     if (s.kind === "branch") {
       if (!s.rule && !(s.condition ?? "").trim()) return `Say what “${label(s)}” checks for.`;
       if (s.rule && !s.rule.value.trim()) return `Say what “${label(s)}” looks for in the result.`;
@@ -291,6 +329,12 @@ export function stepsProblem(team: Pick<ChannelTeam, "roles" | "steps">): string
   }
   if (!steps.some((s) => s.kind !== "ask" && s.kind !== "handoff" && stepNeedsAgent(s))) return "Add at least one step that an agent does.";
   const g = stepGraph(steps);
+  for (const s of steps) {
+    if (s.kind !== "schedule") continue;
+    if (g.ins.get(s.id)!.length) return "Nothing can lead to a schedule. It starts the steps its arrows point to.";
+    if (!g.outs.get(s.id)!.length) return "Point the schedule at the steps it starts.";
+  }
+  if (steps.some((s) => g.back.get(s.id)!.some((t) => steps.find((x) => x.id === t)?.kind === "schedule"))) return "Work can't go back to a schedule.";
   // forward arrows never go round: loops go through a repeat, ask-me or if/else step
   const left = new Map(steps.map((s) => [s.id, g.ins.get(s.id)!.length]));
   const queue = steps.filter((s) => !left.get(s.id)).map((s) => s.id);
@@ -440,11 +484,18 @@ export interface FlowLine {
 
 /** How a team works, one plain line per step. `nameOf` gives an agent's name; `teamName` the name of a team by channel id. */
 export function describeFlow(team: Pick<ChannelTeam, "roles" | "steps">, nameOf: (agentId: string | null) => string, teamName: (channelId: string) => string = () => "another"): FlowLine[] {
-  const steps = team.steps ?? [];
+  const steps = (team.steps ?? []).filter((s) => s.kind !== "schedule");
   const order = stepOrder(steps);
   const num = (id: string | null | undefined) => order.findIndex((s) => s.id === id) + 1;
   const g = stepGraph(steps);
   const lines: FlowLine[] = [];
+  for (const s of team.steps ?? []) {
+    if (s.kind !== "schedule") continue;
+    const starts = joinWords((s.nexts ?? []).map(num).filter(Boolean).sort((a, b) => a - b).map(String));
+    const when = s.schedule ? describeCron(s.schedule).replace(/^Every/, "every") : "at its times";
+    const rest = `${s.enabled === false ? "is off. When on, it starts" : "starts"} ${starts ? `step${starts.length > 1 ? "s" : ""} ${starts}` : "nothing yet"} ${when}`;
+    lines.push({ stepId: s.id, n: 0, together: false, who: "Schedule", rest, text: `Schedule ${rest}.` });
+  }
   let prevKey = "";
   for (const [i, s] of order.entries()) {
     const ins = g.ins.get(s.id)!;
@@ -506,6 +557,7 @@ export const STEP_KIND_LABELS: Record<TeamStepKind, string> = {
   handoff: "Hand off to a team",
   branch: "If / else",
   custom: "Custom",
+  schedule: "Schedule",
 };
 
 /** A ready-made team: its roles (unfilled), how they work together, and a sample of how it sounds. */
@@ -690,7 +742,7 @@ export function templateFromTeam(team: Pick<ChannelTeam, "roles" | "steps">, nam
     name,
     blurb,
     roles: (team.roles ?? []).map(({ agentId: _a, ...r }) => r),
-    steps: (team.steps ?? []).map(({ x: _x, y: _y, agentId: _g, handoffTo: _h, ...s }) => ({ ...s, ...(s.kind === "handoff" ? { handoffTo: null } : {}) })),
+    steps: (team.steps ?? []).map(({ x: _x, y: _y, agentId: _g, handoffTo: _h, scheduledBy: _b, ...s }) => ({ ...s, ...(s.kind === "handoff" ? { handoffTo: null } : {}) })),
   };
 }
 
@@ -749,6 +801,8 @@ export interface TeamFlow {
   id: string;
   workspaceId: string;
   channelId: string;
+  /** the schedule box that started it, if one did */
+  scheduleId?: string;
   /** the person's message; the steps happen in its thread */
   threadId: string;
   /** waiting = a person has to decide (rounds ran out, a run failed, a role has nobody, an ask-me step) */

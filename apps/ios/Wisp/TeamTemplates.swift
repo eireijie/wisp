@@ -154,6 +154,10 @@ extension Store {
     if let note, !note.isEmpty { body["note"] = AnyEncodable(note) }
     return try await fetch { try await $0.post("/api/flows/\(id)/decide", body) }
   }
+  /** start a team's schedule now */
+  func runSchedule(channelId: String, stepId: String) async throws {
+    let _: TeamFlow = try await fetch { try await $0.post("/api/channels/\(channelId)/schedules/\(stepId)/run", Empty()) }
+  }
   /** templates people here saved from their own teams */
   func teamTemplates() async throws -> [TeamTemplate] {
     try await fetch { try await $0.get("/api/team-templates") }

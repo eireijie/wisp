@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { FlowStrip } from "../team/Runs.tsx";
-import { Archive, Bot, ChevronLeft, ChevronRight, Check, CircleDot, Eye, FileText, GitPullRequest, Brain, ArrowDown, ArrowUp, AtSign, Camera, Loader2, Mic, MessageSquare, MoreHorizontal, Monitor, Paperclip, Phone, Plus, RotateCcw, Shield, ShieldAlert, SquareTerminal, UserPlus, Users, X, Zap, ChevronDown, Hash, Info, AudioLines, CornerUpLeft, Pin, ListChecks, Square, ArrowRightLeft } from "lucide-react";
-import { parseMentions, type AccessLevel, type Agent, type ContextUsage, type HarnessCatalog, type Message, type MessagePart } from "@wisp/core";
+import { Archive, Bot, Clock, ChevronLeft, ChevronRight, Check, CircleDot, Eye, FileText, GitPullRequest, Brain, ArrowDown, ArrowUp, AtSign, Camera, Loader2, Mic, MessageSquare, MoreHorizontal, Monitor, Paperclip, Phone, Plus, RotateCcw, Shield, ShieldAlert, SquareTerminal, UserPlus, Users, X, Zap, ChevronDown, Hash, Info, AudioLines, CornerUpLeft, Pin, ListChecks, Square, ArrowRightLeft } from "lucide-react";
+import { parseMentions, SCHEDULE_MARK, type AccessLevel, type Agent, type ContextUsage, type HarnessCatalog, type Message, type MessagePart } from "@wisp/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { conversationKey, useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
@@ -891,6 +891,7 @@ function SystemItem({ m, replies, onReplies, working = [] }: { m: Message; repli
   const task = m.parts.find((p) => p.type === "task");
   // a step Wisp handed out: a row that opens the work in its own sub-thread
   if (task && task.type === "task") return <HandoffRow m={m} taskId={task.taskId} replies={replies} working={working} onOpen={onReplies} />;
+  if (m.parts.some((p) => p.type === "status" && p.text === SCHEDULE_MARK)) return <ScheduleRow m={m} replies={replies} onReplies={onReplies} />;
   return (
     <div className="px-5 py-1.5 text-xs text-muted flex items-center gap-2" data-message-id={m.id}>
       <span className="h-px flex-1 bg-line" />
@@ -898,6 +899,30 @@ function SystemItem({ m, replies, onReplies, working = [] }: { m: Message; repli
       {m.body && <span className="text-center">{m.body.replace(/\*\*/g, "")}</span>}
       {m.parts.map((p) => p.type === "routine" && <RoutineChip key={p.routineId} id={p.routineId} />)}
       <span className="h-px flex-1 bg-line" />
+    </div>
+  );
+}
+
+/** The message that opens a scheduled run: what the team was asked, and how far it's got. */
+function ScheduleRow({ m, replies, onReplies }: { m: Message; replies?: number; onReplies?: () => void }) {
+  return (
+    <div className="flex gap-3 px-5 py-2" data-message-id={m.id}>
+      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-chip text-muted">
+        <Clock size={16} aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="text-[13.5px] font-semibold">Schedule</span>
+          <span className="text-xs text-muted">{new Date(m.createdAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}</span>
+        </div>
+        <div className="mt-0.5 text-body">{m.body}</div>
+        <FlowStrip channelId={m.channelId} threadId={m.id} />
+        {onReplies && (
+          <button type="button" onClick={onReplies} className="mt-1 text-[13px] text-muted hover:text-ink">
+            {replies ? `${replies} ${replies === 1 ? "reply" : "replies"}` : "Open the thread"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

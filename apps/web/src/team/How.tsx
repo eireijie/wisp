@@ -27,8 +27,8 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export function HowLine({ line, numbered = true, big = false, plain = false }: { line: FlowLine; numbered?: boolean; big?: boolean; plain?: boolean }) {
   return (
     <li className={cx("flex items-start gap-3", big ? "text-body" : "text-body")}>
-      {plain && <b className="w-5 shrink-0 text-right font-medium tabular-nums text-ink">{line.n}.</b>}
-      {numbered && !plain && (
+      {plain && <b className="w-5 shrink-0 text-right font-medium tabular-nums text-ink">{line.n > 0 && `${line.n}.`}</b>}
+      {numbered && !plain && line.n > 0 && (
         <span className="mt-px">
           <StepNum n={line.n} size={big ? 26 : 22} />
         </span>

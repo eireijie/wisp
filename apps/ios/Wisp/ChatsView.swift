@@ -488,7 +488,7 @@ struct ChatRow: View {
       if text.isEmpty, !m.files.isEmpty { text = "Sent \(m.files.count == 1 ? "a file" : "\(m.files.count) files")" }
       if !text.isEmpty {
         if m.author.kind == .user && m.author.id == store.me?.id { return "You: \(text)" }
-        if entry.isTeam { return "\(store.name(of: m.author)): \(text)" }
+        if entry.isTeam && m.author.id != "system" { return "\(store.name(of: m.author)): \(text)" }
         return text
       }
     }

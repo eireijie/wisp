@@ -115,6 +115,10 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
         "Set up how a channel's team works, when a person describes it (\"Opus plans, GPT challenges it until it approves, then Opus hands out the work\"). Give each role a name, a description every agent on the team will read, and the agent who fills it; then the steps in order. A new message in the channel goes through the steps: Wisp hands each step to its role's agent. Kinds: do (does it, passes the result on), review (approves, or sends it back to an earlier step, up to max_rounds before asking a person), hand_out (splits the work into pieces for hand_to roles; review_by checks each piece), ask (a person approves it from the Inbox; send_back_to is where changes go). Replaces the channel's roles and steps. Only the workspace's lead or the channel's lead can.",
       inputSchema: {
         channel: z.string().describe("e.g. #launch-site"),
+        schedules: z
+          .array(z.object({ cron: z.string().describe('when, as cron, e.g. "0 9 * * 1" for Mondays at 9:00'), ask: z.string().describe("what the team gets asked each time"), timezone: z.string().optional().describe("IANA name, e.g. America/New_York") }))
+          .optional()
+          .describe("times the team starts on its own, at its first steps; each result still goes along the steps. Leave out to keep the schedules it has"),
         roles: z.array(z.object({ name: z.string(), description: z.string(), agent: z.string().describe("agent handle") })),
         steps: z.array(
           z.object({
@@ -131,8 +135,8 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
         ),
       },
     },
-    safe(async ({ channel, roles, steps }) => {
-      await client.setTeamSteps(channel, { roles, steps });
+    safe(async ({ channel, roles, steps, schedules }) => {
+      await client.setTeamSteps(channel, { roles, steps, schedules });
       return text(`#${channel.replace(/^#/, "")} now works in ${steps.length} step${steps.length === 1 ? "" : "s"} with ${roles.length} role${roles.length === 1 ? "" : "s"}. Tell the person it's set up; they can change it in the channel's Team tab.`);
     }),
   );

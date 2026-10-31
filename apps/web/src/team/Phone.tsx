@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, Flag, Plus } from "lucide-react";
 import { stepOrder, type ChannelTeam, type TeamStep } from "@wisp/core";
 import { useStore } from "../store.ts";
 import { AgentAvatar, Button, Modal, cx } from "../components/ui.tsx";
+import { nextText, whenText } from "./ScheduleForm.tsx";
 import { ADD_KINDS, movingAfter, numberOf, rowInputs, stepRows, titleOf, type AddAt, type AddKind, KIND_MARK } from "./flow.ts";
 import { kindsFor } from "./Canvas.tsx";
 import { KindIcon, MessageChip, StepNum, agentOfStep, useHandoffName } from "./parts.tsx";
@@ -38,7 +39,8 @@ function StepCard({ team, step, wide, problem, onOpen, onHold }: { team: Channel
   const agent = agentOfStep(team, agents, step);
   const mark = KIND_MARK[step.kind];
   const handoff = useHandoffName(step.handoffTo);
-  const uses = (step.inputs ?? []).length > 1 ? `Uses ${(step.inputs ?? []).map((i) => numberOf(team, i)).sort((a, b) => a - b).join(" and ")}` : null;
+  const results = (step.inputs ?? []).map((i) => numberOf(team, i)).filter(Boolean).sort((a, b) => a - b);
+  const uses = results.length > 1 ? `Uses ${results.join(" and ")}` : null;
   return (
     <button
       type="button"
@@ -60,7 +62,18 @@ function StepCard({ team, step, wide, problem, onOpen, onHold }: { team: Channel
         held.current = true;
         onHold();
       }}
-      aria-label={`Step ${numberOf(team, step.id)}, ${titleOf(step)}`} className={cx("min-w-0 select-none rounded-xl border p-3.5 text-left [-webkit-touch-callout:none]", wide ? "w-full" : "flex-1", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card")}>
+      aria-label={step.kind === "schedule" ? `Schedule, ${whenText(step)}` : `Step ${numberOf(team, step.id)}, ${titleOf(step)}`} className={cx("min-w-0 select-none rounded-xl border p-3.5 text-left [-webkit-touch-callout:none]", wide ? "w-full" : "flex-1", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card")}>
+      {step.kind === "schedule" ? (
+        <>
+          <div className="mb-0.5 flex items-center gap-1 text-[12px] font-medium text-muted">
+            <KindIcon kind="schedule" size={13} />
+            Schedule
+          </div>
+          <div className="text-body font-medium leading-tight">{whenText(step)}</div>
+          <div className="mt-1.5 text-[14px] text-muted">{nextText(step)}</div>
+        </>
+      ) : (
+      <>
       <div className="flex items-start gap-2.5">
         <StepNum n={numberOf(team, step.id)} />
         <div className="min-w-0 flex-1">
@@ -91,6 +104,8 @@ function StepCard({ team, step, wide, problem, onOpen, onHold }: { team: Channel
         )}
         {uses && <span className="ml-auto inline-flex h-[22px] items-center rounded-full border border-line bg-panel px-2 text-[11px] text-muted">{uses}</span>}
       </div>
+      </>
+      )}
     </button>
   );
 }
@@ -99,15 +114,17 @@ function StepCard({ team, step, wide, problem, onOpen, onHold }: { team: Channel
 export function PhoneFlow({ team, problems, banner, onOpen, onHold, onAdd }: { team: ChannelTeam; problems: Map<string, string>; banner: React.ReactNode; onOpen: (id: string) => void; onHold: (id: string) => void; onAdd: (at: AddAt) => void }) {
   const rows = stepRows(team.steps ?? []);
   const last = rows.at(-1) ?? [];
+  // a schedule box heads the chart instead (its form says a message still starts the team)
+  const scheduled = (team.steps ?? []).some((s) => s.kind === "schedule");
   return (
     <div className="mx-auto flex w-full max-w-md flex-col items-center px-4 pb-10 pt-2">
       {banner}
-      <MessageChip />
+      {!scheduled && <MessageChip />}
       {rows.map((row, i) => {
         const before = i === 0 ? 0 : rows[i - 1].length;
         return (
           <div key={i} className="flex w-full flex-col items-center">
-            <Connector from={before} to={row.length} plus={row.length === 1} onAdd={() => onAdd({ between: { from: rowInputs(row), to: row.map((s) => s.id) } })} />
+            {(i > 0 || !scheduled) && <Connector from={before} to={row.length} plus={row.length === 1} onAdd={() => onAdd({ between: { from: rowInputs(row), to: row.map((s) => s.id) } })} />}
             <div className="flex w-full items-start gap-2.5">
               {row.map((s) => (
                 <StepCard key={s.id} team={team} step={s} wide={row.length === 1} problem={problems.get(s.id)} onOpen={() => onOpen(s.id)} onHold={() => onHold(s.id)} />
@@ -129,7 +146,7 @@ export function PhoneFlow({ team, problems, banner, onOpen, onHold, onAdd }: { t
 
 /** Pick the kind of step to add; "After" says where when it isn't between two steps. */
 export function AddStepSheet({ team, at, onPick, onClose }: { team: ChannelTeam; at: AddAt; onPick: (kind: AddKind, anchor: string | null) => void; onClose: () => void }) {
-  const order = stepOrder(team.steps ?? []);
+  const order = stepOrder(team.steps ?? []).filter((s) => s.kind !== "schedule");
   const [anchor, setAnchor] = useState<string | null>(at.after ?? order.at(-1)?.id ?? null);
   const kinds = kindsFor(order.length === 0, at);
   return (
@@ -167,7 +184,7 @@ export function AddStepSheet({ team, at, onPick, onClose }: { team: ChannelTeam;
 
 /** Change the order steps happen in: a step moves up or down one place. */
 export function ReorderSheet({ team, onChange, onClose }: { team: ChannelTeam; onChange: (t: ChannelTeam) => void; onClose: () => void }) {
-  const order = stepOrder(team.steps ?? []);
+  const order = stepOrder(team.steps ?? []).filter((s) => s.kind !== "schedule");
   return (
     <Modal title="Reorder steps" onClose={onClose}>
       <ol className="overflow-hidden rounded-3xl border border-line bg-card divide-y divide-line">

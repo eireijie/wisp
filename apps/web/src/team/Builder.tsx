@@ -36,6 +36,7 @@ export interface BuilderProps {
 const shape = (t: ChannelTeam) => JSON.stringify((t.steps ?? []).map((s) => [s.id, s.inputs, s.nexts, s.ifTrue, s.ifFalse]));
 
 const TOOLBAR: { kind: AddKind; label: string }[] = [
+  { kind: "schedule", label: "Schedule" },
   { kind: "agent", label: "Agent" },
   { kind: "beside", label: "Side by side" },
   { kind: "review", label: "Repeat" },

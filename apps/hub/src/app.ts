@@ -62,6 +62,7 @@ export async function buildHub(opts: HubOptions) {
   store.migrateTeamSteps();
   await hub.ensureBuiltinSkills(undefined, true);
   hub.routines.start();
+  hub.schedules.start();
   hub.background.start();
   // edits made in Obsidian on this machine show up in Wisp
   const stopWatching = vault.watch({
