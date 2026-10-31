@@ -3,7 +3,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Agent } from "@wisp/core";
 import { api } from "../api.ts";
-import { HarnessChoice, makeFirstAgent, ReadyChecklist, SETUP_LABELS } from "./WelcomeView.tsx";
+import { HarnessChoice, makeFirstAgent, serverAddress, SETUP_LABELS } from "./WelcomeView.tsx";
+import type { AccessInfo } from "../access.ts";
 import type { DeviceInfo } from "../devices.ts";
 
 vi.mock("../api.ts", () => ({ api: vi.fn() }));
@@ -11,20 +12,26 @@ vi.mock("../theme.ts", () => ({ motionReduced: () => false }));
 afterEach(() => vi.mocked(api).mockReset());
 const device: DeviceInfo = { id: "mac", name: "My Mac", mine: true, online: true, agents: [], harnesses: [{ id: "codex", version: null }] };
 
-describe("four-step Wisp setup", () => {
-  it("has exactly four steps and no experience question", () => {
-    expect(Object.keys(SETUP_LABELS)).toEqual(["ready", "agent", "anywhere", "devices"]);
+describe("Wisp setup after the account", () => {
+  it("goes outside your home, address, agent, devices", () => {
+    expect(Object.keys(SETUP_LABELS)).toEqual(["anywhere", "address", "agent", "devices"]);
   });
-  it.each([
-    ["darwin", "Mac"],
-    ["win32", "PC"],
-    ["linux", "computer"],
-  ])("shows live readiness for %s", (platform, label) => {
-    const html = renderToStaticMarkup(createElement(ReadyChecklist, { platform, devices: [device] }));
-    expect(html).toContain(`Wisp is running on this ${label}`);
-    expect(html).toContain("Found Codex");
-    expect(html).toContain("About 2 min, you can keep going.");
-    expect(html).not.toContain("Warren");
+  describe("server address", () => {
+    const home = { origin: "http://localhost:4747", protocol: "http:", hostname: "localhost" };
+    const info = (over: Partial<AccessInfo>) => ({ publicUrl: null, lan: ["http://192.168.1.20:4747"], tailscale: { funnel: false }, ...over }) as AccessInfo;
+    it("is the Tailscale address once it's on, and says who can reach it", () => {
+      const a = serverAddress(info({ publicUrl: "https://mac.example.ts.net" }), home);
+      expect(a?.url).toBe("https://mac.example.ts.net");
+      expect(a?.note).toContain("Any device on your Tailscale");
+    });
+    it("is the home address when staying at home, and says so", () => {
+      const a = serverAddress(info({}), home);
+      expect(a?.url).toBe("http://192.168.1.20:4747");
+      expect(a?.note).toContain("home network");
+    });
+    it("is the page's own address on a cloud server", () => {
+      expect(serverAddress(null, { origin: "https://wisp.example.com", protocol: "https:", hostname: "wisp.example.com" })?.url).toBe("https://wisp.example.com");
+    });
   });
   it("uses a plain line icon and an accessible harness selection", () => {
     const html = renderToStaticMarkup(createElement(HarnessChoice, { title: "Codex", body: "Signed in", selected: true, onClick() {} }));

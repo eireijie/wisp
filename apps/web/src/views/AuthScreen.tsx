@@ -12,7 +12,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [needsCode, setNeedsCode] = useState(false);
   const [linkedCode] = useState(linkedSetupCode);
-  const [form, setForm] = useState({ email: "", password: "", name: "", workspaceName: "", setupCode: linkedCode });
+  const [form, setForm] = useState({ email: "", password: "", name: "", setupCode: linkedCode });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState(inviteCode);
@@ -48,7 +48,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
     setError(null);
     try {
       const r = needsSetup
-        ? await api<{ token: string }>("POST", "/api/setup", { ...form, workspaceName: form.workspaceName.trim() || `${form.name.trim()}'s Wisp`, features: "simple", setupCode: form.setupCode.trim() || undefined })
+        ? await api<{ token: string }>("POST", "/api/setup", { ...form, workspaceName: `${form.name.trim()}'s Wisp`, features: "simple", setupCode: form.setupCode.trim() || undefined })
         : joining
           ? await api<{ token: string }>("POST", "/api/invites/accept", { code, name: form.name, email: form.email, password: form.password })
           : await api<{ token: string }>("POST", "/api/auth/login", { email: form.email, password: form.password });
@@ -166,15 +166,16 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
   return (
     <AuthPage>
       <form onSubmit={submit} className="flex flex-col">
-        <AuthHero title={needsSetup ? "Set up Wisp" : joining ? `Join ${invite?.workspace ?? "the workspace"}` : "Sign in to Wisp"}>
-          {needsSetup
-            ? "You'll be the owner of this organization."
-            : joining
-              ? invite
-                ? `You're invited as ${invite.role === "owner" ? "an owner" : `a ${invite.role}`}.`
-                : "Checking your invite…"
-              : "Where people and agents work together."}
-        </AuthHero>
+        {needsSetup ? (
+          <div className="flex flex-col gap-2">
+            <h1 className="text-[22px] font-semibold tracking-[-0.02em] leading-tight">Create your account</h1>
+            <p className="text-sm text-muted">You'll use this to sign in from your other devices.</p>
+          </div>
+        ) : (
+          <AuthHero title={joining ? `Join ${invite?.workspace ?? "the workspace"}` : "Sign in to Wisp"}>
+            {joining ? (invite ? `You're invited as ${invite.role === "owner" ? "an owner" : `a ${invite.role}`}.` : "Checking your invite…") : "Where people and agents work together."}
+          </AuthHero>
+        )}
         {joining && invite && (
           <p className="mt-6 flex items-center gap-3 rounded-xl bg-card px-4 py-3 text-body">
             <Check size={18} className="text-ok shrink-0" aria-hidden />
@@ -187,17 +188,10 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
               <AuthInput value={form.name} onChange={set("name")} autoComplete="name" placeholder="Your name" aria-label="Your name" required />
             </AuthField>
           )}
-          {needsSetup && (
-            <>
-              <AuthField label="Your Wisp">
-                <AuthInput value={form.workspaceName} onChange={set("workspaceName")} placeholder={form.name.trim() ? `${form.name.trim()}'s Wisp` : "Your Wisp"} aria-label="Your Wisp" />
-              </AuthField>
-              {needsCode && !linkedCode && (
-                <AuthField label="Setup code" hint="On the computer Wisp runs on, run wisp setup-code.">
-                  <AuthInput value={form.setupCode} onChange={set("setupCode")} placeholder="abcd-efgh-jkmn" autoComplete="off" autoCapitalize="none" spellCheck={false} aria-label="Setup code" required />
-                </AuthField>
-              )}
-            </>
+          {needsSetup && needsCode && !linkedCode && (
+            <AuthField label="Setup code" hint="On the computer Wisp runs on, run wisp setup-code.">
+              <AuthInput value={form.setupCode} onChange={set("setupCode")} placeholder="abcd-efgh-jkmn" autoComplete="off" autoCapitalize="none" spellCheck={false} aria-label="Setup code" required />
+            </AuthField>
           )}
           <AuthField label="Email">
             <AuthInput type="email" value={form.email} onChange={set("email")} autoComplete="email" placeholder="you@example.com" aria-label="Email" required />
@@ -217,7 +211,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
           <AuthError>{error}</AuthError>
         </div>
         <div className="mt-8 flex flex-col items-center gap-1.5">
-          <AuthButton disabled={busy || (joining && !invite)}>{needsSetup ? "Start Wisp" : joining ? (invite ? `Join ${invite.workspace}` : "Join") : "Sign in"}</AuthButton>
+          <AuthButton className={needsSetup ? "h-[42px] rounded-lg" : undefined} disabled={busy || (joining && !invite)}>{needsSetup ? "Continue" : joining ? (invite ? `Join ${invite.workspace}` : "Join") : "Sign in"}</AuthButton>
           {joining && <AuthLink onClick={leaveInvite}>I already have an account</AuthLink>}
           {!needsSetup && !joining && (
             <AuthLink

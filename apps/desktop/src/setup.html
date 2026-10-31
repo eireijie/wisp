@@ -6,7 +6,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:" />
 <title>Wisp</title>
 <style>
-  /* Wisp's look: a dark ground with a rounded panel, tall rounded fields, pill buttons. Light follows the system. */
+  /* Wisp's look: a dark ground with a panel, tight corners, plain left-aligned titles. Light follows the system. */
   :root {
     --ground: #ececef; --panel: #ffffff; --card: #f2f2f5; --control: #ffffff; --control-line: rgb(0 0 0 / 0.12);
     --ink: #17171a; --muted: #5f5f68; --faint: #8a8a94; --line: rgb(0 0 0 / 0.08);
@@ -31,24 +31,28 @@
     display: grid; place-items: center; padding: 24px; min-height: 100vh; -webkit-font-smoothing: antialiased;
   }
   main {
-    width: 100%; max-width: 560px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 32px;
-    display: flex; flex-direction: column; gap: 18px;
+    width: 100%; max-width: 472px; min-height: 500px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 32px;
+    display: flex; flex-direction: column; gap: 14px;
   }
-  header { display: grid; justify-items: center; text-align: center; gap: 10px; }
-  header svg { width: 64px; height: 64px; color: var(--ink); }
-  h1 { font-size: 22px; font-weight: 600; margin: 6px 0 0; letter-spacing: -0.02em; }
-  header p { margin: 0; color: var(--muted); max-width: 400px; }
+  header { display: grid; gap: 14px; }
+  header svg { width: 44px; height: 44px; color: var(--ink); }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.02em; line-height: 1.2; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
   header p:empty { display: none; }
   /* only the first screen has the big welcome; the others lead with their own title (and the ghost keeps floating while Wisp starts) */
   main[data-screen]:not([data-screen="welcome"]):not([data-screen="starting"]):not([data-screen="unreachable"]) header { display: none; }
   main[data-screen="starting"] header div, main[data-screen="unreachable"] header div { display: none; }
-  section > h2 { font-size: 20px; font-weight: 600; margin: 0 0 6px; text-align: center; letter-spacing: -0.02em; }
-  section > p { margin: 0 0 14px; color: var(--muted); text-align: center; }
+  section { display: flex; flex-direction: column; flex: 1; }
+  /* the screens that fill the panel: what you do next sits at the bottom */
+  main > div:not([hidden]) { display: flex; flex-direction: column; flex: 1; }
+  .push { flex: 1; min-height: 14px; }
+  section > h2 { font-size: 22px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.02em; line-height: 1.2; }
+  section > p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
   h3 { font-size: 13px; font-weight: 500; color: var(--muted); margin: 8px 0 8px 6px; }
   .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
   .row > button { flex: 1; min-width: 140px; }
   button {
-    font: inherit; font-weight: 500; font-size: 15px; height: 44px; border-radius: 22px; padding: 0 22px; cursor: pointer;
+    font: inherit; font-weight: 500; font-size: 15px; height: 42px; border-radius: 8px; padding: 0 22px; cursor: pointer;
     border: 1px solid var(--control-line); background: var(--control); color: var(--ink);
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
   }
@@ -56,13 +60,10 @@
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); box-shadow: none; }
   button.link { border: 0; background: none; box-shadow: none; height: 44px; padding: 0 12px; color: var(--link); font-weight: 500; }
   button.link:hover { text-decoration: underline; }
-  button.back {
-    width: 38px; height: 38px; padding: 0; border-radius: 50%; display: inline-grid; place-items: center; color: var(--ink);
-    align-self: flex-start; margin: -6px 0 0;
-  }
-  button.back svg { width: 18px; height: 18px; }
+  button.wide { width: 100%; flex: none; }
+  button.link.wide { font-size: 14px; }
   input, select {
-    font: inherit; font-size: 15px; width: 100%; height: 44px; padding: 0 16px; border-radius: 12px;
+    font: inherit; font-size: 15px; width: 100%; height: 42px; padding: 0 12px; border-radius: 8px;
     border: 1px solid var(--line); background: var(--card); color: var(--ink); outline: none;
   }
   input::placeholder { color: var(--faint); }
@@ -72,41 +73,23 @@
   .field > span, .field:not(:has(span)) { padding-left: 6px; }
   .hint { font-size: 13px; color: var(--faint); margin: 8px 6px 0; }
   .error { color: var(--bad); margin: 10px 6px 0; font-size: 14px; }
-  .group { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .group { background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
   /* the choices on the first screen */
-  .choices { display: grid; gap: 12px; margin-top: 6px; }
+  .choices { gap: 14px; }
   .choice {
-    display: flex; align-items: center; gap: 16px; text-align: left; padding: 12px 16px; border-radius: 12px; height: auto; min-height: 64px;
-    background: var(--card); border: 1px solid var(--line); box-shadow: none; font-weight: 400; width: 100%;
+    display: flex; align-items: center; gap: 14px; text-align: left; padding: 14px; border-radius: 8px; height: auto;
+    background: var(--card); border: 1px solid var(--line); box-shadow: none; font-weight: 400; width: 100%; flex: none;
   }
   .choice:hover { border-color: var(--faint); }
   .choice.primary { background: var(--card); border-color: var(--ink); color: var(--ink); }
-  .choice .tile { width: 40px; height: 40px; border-radius: 10px; background: var(--tile); display: grid; place-items: center; flex: none; }
-  .choice .tile svg { width: 22px; height: 22px; }
+  .choice > svg { width: 22px; height: 22px; flex: none; }
   .choice .text { flex: 1; display: grid; gap: 3px; }
   .choice strong { font-size: 15px; font-weight: 500; }
   .choice .text span { color: var(--muted); font-size: 13px; }
-  .choice .chev { color: var(--faint); width: 18px; height: 18px; flex: none; }
-  .other-ways { margin-top: 2px; color: var(--muted); }
-  .other-ways summary { cursor: pointer; text-align: center; font-size: 15px; font-weight: 500; color: var(--link); list-style: none; min-height: 44px; display: grid; place-items: center; }
-  .other-ways summary::-webkit-details-marker { display: none; }
-  .other-ways summary:hover { text-decoration: underline; }
-  .other-ways .choice { margin-top: 12px; }
-  .other-ways p { font-size: 13px; text-align: center; }
+  .bar { height: 4px; background: var(--chip); border-radius: 2px; overflow: hidden; margin-bottom: 14px; }
+  .bar i { display: block; height: 4px; width: 40%; background: var(--ink); border-radius: 2px; animation: slide 1.4s ease-in-out infinite alternate; }
+  @keyframes slide { from { transform: translateX(-20%); } to { transform: translateX(170%); } }
   a { color: var(--link); }
-  /* a switch row */
-  label.check {
-    display: flex; gap: 14px; align-items: center; justify-content: space-between; background: var(--card); border-radius: 12px;
-    padding: 12px 16px; min-height: 56px; color: var(--ink); margin: 6px 0 16px; cursor: pointer; font-size: 15px;
-  }
-  label.check small { display: block; color: var(--muted); font-size: 13px; }
-  label.check input {
-    appearance: none; -webkit-appearance: none; width: 51px; height: 31px; min-width: 51px; padding: 0; border-radius: 16px; border: 0;
-    background: var(--off); position: relative; flex: none; order: 2; cursor: pointer; transition: background 120ms;
-  }
-  label.check input::after { content: ""; position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #fff; transition: transform 120ms; }
-  label.check input:checked { background: var(--blue); }
-  label.check input:checked::after { transform: translateX(20px); }
   /* found Wisps and waiting rows */
   .found { display: grid; margin: 0; }
   .found:empty { display: none; }
@@ -127,10 +110,11 @@
     font-size: 34px; font-weight: 600; letter-spacing: 0.2em; font-variant-numeric: tabular-nums; margin: 6px 0 18px;
     background: var(--card); border-radius: 12px; padding: 20px 18px 20px calc(18px + 0.2em);
   }
-  .checks { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
-  .checks li { display: flex; gap: 10px; align-items: center; color: var(--muted); }
+  .checks { list-style: none; padding: 0; margin: 0 0 12px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+  .checks li { display: flex; gap: 12px; align-items: center; padding: 12px 14px; font-size: 14px; border-top: 1px solid var(--line); }
+  .checks li:first-child { border-top: 0; }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .dot.ok { background: var(--ok); } .dot.no { background: var(--faint); } .checks .dot.bad { background: var(--bad); }
+  .dot.ok { background: var(--ok); } .dot.no { background: var(--off); } .dot.wait { background: var(--muted); } .checks .dot.bad { background: var(--bad); }
   @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
   pre {
     font: 11.5px ui-monospace, Menlo, monospace; background: var(--card); border-radius: 10px; padding: 12px;
@@ -143,7 +127,7 @@
   ol.steps { margin: 0 0 14px; padding-left: 20px; color: var(--muted); }
   ol.steps li { margin-bottom: 4px; }
   .plans { display: grid; gap: 8px; margin: 4px 0 14px; }
-  .plan { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border: 1px solid var(--line); background: var(--card); border-radius: 12px; cursor: pointer; }
+  .plan { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); background: var(--card); border-radius: 8px; cursor: pointer; }
   .plan:has(input:checked) { border-color: var(--ink); }
   .plan input { flex: none; width: auto; height: auto; margin: 0; accent-color: var(--ink); }
   .plan .spec { flex: 1; }
@@ -151,7 +135,7 @@
   .plan .price { font-weight: 600; white-space: nowrap; }
   .tag { font-size: 11.5px; background: var(--chip); border-radius: 6px; padding: 1px 6px; margin-left: 6px; font-weight: 500; color: var(--muted); }
   :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
-  @media (prefers-reduced-motion: reduce) { .float, .status-row .dots i, .checks .dot.wait { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .float, .status-row .dots i, .checks .dot.wait, .bar i { animation: none; } }
   @media (max-width: 520px) { main { padding: 24px 18px; } }
   [hidden] { display: none !important; }
 </style>
@@ -161,47 +145,58 @@
   <header>
     <svg class="float" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5a7.5 7.5 0 0 0-7.5 7.5v11l2.5-1.7 2.5 1.7 2.5-1.7 2.5 1.7 2.5-1.7 2.5 1.7V10A7.5 7.5 0 0 0 12 2.5z"/><circle cx="9.5" cy="10.5" r="1.3" fill="var(--panel)"/><circle cx="14.5" cy="10.5" r="1.3" fill="var(--panel)"/></svg>
     <div>
-      <h1 id="title">Welcome to Wisp</h1>
-      <p id="subtitle">Wisp lives on one computer. Your other devices join it.</p>
+      <h1 id="title">Welcome to Wisp!</h1>
+      <p id="subtitle">How do you want to begin?</p>
     </div>
   </header>
 
   <div id="welcome" class="choices" hidden>
     <button class="choice primary" id="pick-create">
-      <span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2 20h20"/></svg></span>
-      <span class="text"><strong>Start Wisp on this computer</strong><span>First time? Pick this one.</span></span>
-      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2 20h20"/></svg>
+      <span class="text"><strong>Self-Host</strong><span>Your server runs on this computer.</span></span>
     </button>
-    <button class="choice" id="pick-join">
-      <span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span>
-      <span class="text"><strong>Join my Wisp</strong><span>It's already on another computer.</span></span>
-      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+    <button class="choice" id="pick-cloud">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4.25 4.25 0 0 1-.5 8.5Z"/></svg>
+      <span class="text"><strong>Cloud</strong><span>Your server stays on in your own Hetzner account.</span></span>
     </button>
-    <details class="other-ways" id="other-ways">
-      <summary>Other ways: a cloud server, Docker</summary>
-      <button class="choice" id="pick-cloud">
-        <span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4.25 4.25 0 0 1-.5 8.5Z"/></svg></span>
-        <span class="text"><strong>Start Wisp with Hetzner</strong><span>Your Wisp stays on in your own Hetzner account.</span></span>
-        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-      </button>
-      <p>For Docker, follow the <a href="https://github.com/eireijie/wisp/blob/main/docs/deploy.md#docker" target="_blank">Docker instructions</a>.</p>
-    </details>
+    <div class="push"></div>
+    <button class="link wide" id="pick-join">Already have a Wisp? Join it</button>
   </div>
 
   <div id="create" hidden>
-    <button class="back" data-back aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <section>
-      <h2>Start Wisp on this computer</h2>
-      <p>Wisp keeps running here when you close the window.</p>
-      <label class="check"><span>Let agents work on this computer<small class="device-name"></small></span><input type="checkbox" id="create-device" checked /></label>
-      <div class="row"><button class="primary" id="create-go">Start Wisp</button></div>
+      <h2>Host the server here</h2>
+      <p>Install the Wisp server on this computer. All your devices will connect to it.</p>
+      <ul class="checks">
+        <li><span class="dot ok"></span>Keeps running when you close this window</li>
+        <li><span class="dot ok"></span>Agents can work on this computer</li>
+      </ul>
       <p class="error" id="create-error" hidden></p>
       <pre id="log" hidden></pre>
+      <div class="push"></div>
+      <button class="primary wide" id="create-go">Install server</button>
+      <button class="link wide" data-back>Back</button>
     </section>
   </div>
 
+  <section id="installing" hidden>
+    <h2>Installing…</h2>
+    <p>This can take a minute.</p>
+    <div class="bar" aria-hidden="true"><i></i></div>
+    <ul class="checks" role="status">
+      <li><span class="dot ok"></span>Server is in place</li>
+      <li><span class="dot wait"></span>Starting it</li>
+    </ul>
+  </section>
+
+  <section id="ready" hidden>
+    <h2>Your server is running</h2>
+    <p>It's on this <span id="ready-computer">computer</span>, and your devices will connect to it.</p>
+    <div class="push"></div>
+    <button class="primary wide" id="ready-go">Continue</button>
+  </section>
+
   <div id="join" hidden>
-    <button class="back" data-back aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <section>
       <h2>Join my Wisp</h2>
       <p>Find your Wisp on this Wi-Fi, or paste an invite link.</p>
@@ -216,6 +211,8 @@
         <div class="row" style="margin-top:14px"><button class="primary" type="submit" id="join-go">Join</button></div>
       </form>
       <p class="error" id="join-error" role="alert" hidden></p>
+      <div class="push"></div>
+      <button class="link wide" data-back>Back</button>
     </section>
   </div>
 
@@ -233,10 +230,9 @@
   </section>
 
   <div id="cloud" hidden>
-    <button class="back" data-back aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <section id="cloud-connect">
-      <h2>Start Wisp in your Hetzner account</h2>
-      <p>Wisp runs in your own <a href="https://www.hetzner.com/cloud" target="_blank">Hetzner Cloud</a> account, so it stays on.</p>
+      <h2>Connect your Hetzner account</h2>
+      <p>Your server runs in your own <a href="https://www.hetzner.com/cloud" target="_blank">Hetzner Cloud</a> account, and Hetzner bills you directly.</p>
       <ol class="steps">
         <li>Sign in at <a href="https://console.hetzner.com" target="_blank">console.hetzner.com</a> (or sign up) and open a project.</li>
         <li>Go to <strong>Security → API keys</strong>, click <strong>Generate API key</strong>, and choose <strong>Read &amp; Write</strong>.</li>
@@ -247,13 +243,15 @@
           <input id="cloud-token" type="password" placeholder="Paste it here." aria-label="API key" autocomplete="off" spellcheck="false" />
         </label>
         <p class="hint" style="margin:-6px 6px 14px">This key stays in this window until setup finishes.</p>
-        <div class="row"><button class="primary" type="submit" id="cloud-token-go">Continue</button></div>
+        <button class="primary wide" type="submit" id="cloud-token-go">Continue</button>
       </form>
       <p class="error" id="cloud-token-error" hidden></p>
+      <div class="push"></div>
+      <button class="link wide" data-back>Back</button>
     </section>
 
     <section id="cloud-choose" hidden>
-      <h2>Choose your computer</h2>
+      <h2>Choose your server</h2>
       <label class="field"><span>Location</span><select id="cloud-location"></select></label>
       <div class="plans" id="cloud-plans" role="radiogroup" aria-label="Size"></div>
       <p class="hint" id="cloud-billing" style="text-align:left"></p>
@@ -262,14 +260,13 @@
         <label class="field"><input id="cloud-name" autocomplete="name" placeholder="Name" aria-label="Name" required /></label>
         <label class="field"><input id="cloud-email" type="email" autocomplete="email" placeholder="Email" aria-label="Email" required /></label>
         <label class="field"><input id="cloud-password" type="password" autocomplete="new-password" minlength="8" required placeholder="Password" aria-label="Password" /></label>
-        <label class="check"><span>Let agents work on this computer<small class="device-name"></small></span><input type="checkbox" id="cloud-device" checked /></label>
-        <div class="row"><button class="primary" type="submit" id="cloud-go">Start Wisp</button></div>
+        <button class="primary wide" type="submit" id="cloud-go">Start Wisp</button>
       </form>
       <p class="error" id="cloud-error" hidden></p>
     </section>
 
     <section id="cloud-progress" hidden>
-      <h2 id="cloud-progress-title">Getting your Wisp ready…</h2>
+      <h2 id="cloud-progress-title">Getting your server ready…</h2>
       <p>This usually takes 3 to 5 minutes.</p>
       <ul class="checks" id="cloud-checks"></ul>
       <p class="error" id="cloud-fail" hidden></p>
@@ -279,6 +276,8 @@
         <button class="link" id="cloud-keep">Keep it</button>
       </div>
       <p class="hint" id="cloud-fail-hint" style="text-align:center" hidden></p>
+      <div class="push"></div>
+      <button class="link wide" data-back hidden>Back</button>
     </section>
   </div>
 
@@ -302,7 +301,7 @@
   const $ = (id) => document.getElementById(id);
   const state = JSON.parse(new URLSearchParams(location.search).get("state") || "{}");
   const setup = window.wispSetup;
-  const SCREENS = ["welcome", "create", "join", "cloud", "waiting", "starting", "unreachable"];
+  const SCREENS = ["welcome", "create", "installing", "ready", "join", "cloud", "waiting", "starting", "unreachable"];
   const show = (id) => {
     SCREENS.forEach((s) => ($(s).hidden = s !== id));
     document.querySelector("main")?.setAttribute("data-screen", id);
@@ -310,8 +309,7 @@
   const err = (id, msg) => { $(id).hidden = !msg; $(id).textContent = msg || ""; };
 
   setup.check().then((c) => {
-    document.querySelectorAll(".device-name").forEach((el) => (el.textContent = `${c.deviceName} appears in Devices.`));
-    $("create-device").checked = $("cloud-device").checked = c.device !== false;
+    $("ready-computer").textContent = c.platform === "darwin" ? "Mac" : c.platform === "win32" ? "PC" : "computer";
     if (state.step === "create" && c.problem && !state.problem) err("create-error", c.problem);
   });
 
@@ -446,8 +444,8 @@
 
   function goWelcome() {
     stopJoin();
-    $("title").textContent = "Welcome to Wisp";
-    $("subtitle").textContent = "Wisp lives on one computer. Your other devices join it.";
+    $("title").textContent = "Welcome to Wisp!";
+    $("subtitle").textContent = "How do you want to begin?";
     show("welcome");
   }
 
@@ -465,7 +463,7 @@
     if (state.log) { $("log").hidden = false; $("log").textContent = state.log; }
   } else goWelcome();
 
-  $("pick-create").onclick = () => startWisp();
+  $("pick-create").onclick = () => show("create");
   $("pick-join").onclick = goJoin;
   $("scan").onclick = scan;
   $("cancel-join").onclick = goJoin;
@@ -476,12 +474,20 @@
   $("switch").onclick = goWelcome;
   async function startWisp() {
     err("create-error", "");
-    $("starting-title").textContent = "Getting ready…";
-    show("starting");
-    const r = await setup.create({ device: $("create-device").checked });
-    if (r && !r.ok) { show("create"); err("create-error", r.error); }
+    $("log").hidden = true;
+    show("installing");
+    const r = await setup.create({ device: true });
+    if (r?.ok) return show("ready");
+    show("create");
+    err("create-error", r?.error || "The server didn't start.");
+    if (r?.log) { $("log").hidden = false; $("log").textContent = r.log; }
   };
   $("create-go").onclick = startWisp;
+  $("ready-go").onclick = () => {
+    $("starting-title").textContent = "Opening your Wisp…";
+    show("starting");
+    setup.open();
+  };
   $("join-form").onsubmit = (e) => { e.preventDefault(); requestJoin($("url").value.trim()); };
 
   // ------------------------------------------------ create one in your cloud account
@@ -494,9 +500,9 @@
   const cloudCard = (id) => ["cloud-connect", "cloud-choose", "cloud-progress"].forEach((c) => ($(c).hidden = c !== id));
   const money = (n) => new Intl.NumberFormat(undefined, { style: "currency", currency: offer.currency }).format(n);
   const STEPS = [
-    ["create", "Getting your Hetzner computer ready"],
+    ["create", "Creating your Hetzner server"],
     ["boot", "Starting it up"],
-    ["https", "Installing Wisp and getting an HTTPS certificate"],
+    ["https", "Installing Wisp and getting a certificate"],
     ["account", "Making your account"],
   ];
 
@@ -581,12 +587,12 @@
     err("cloud-error", "");
     failed = null;
     $("cloud-fail").hidden = $("cloud-fail-actions").hidden = $("cloud-fail-hint").hidden = true;
-    $("cloud-progress-title").textContent = "Getting your Wisp ready…";
+    $("cloud-progress-title").textContent = "Getting your server ready…";
     cloudCard("cloud-progress");
     document.querySelectorAll("[data-back]").forEach((b) => (b.hidden = true));
     progress(resume == null ? "create" : "boot");
     const account = { name: $("cloud-name").value.trim(), email: $("cloud-email").value.trim(), password: $("cloud-password").value };
-    const r = await setup.cloudCreate(cloudToken, { type: p?.type, location: p?.location, account, device: $("cloud-device").checked, resume });
+    const r = await setup.cloudCreate(cloudToken, { type: p?.type, location: p?.location, account, device: true, resume });
     if (r.ok) {
       cloudToken = "";
       $("starting-title").textContent = `Opening ${new URL(r.url).host}…`;
@@ -606,6 +612,7 @@
 
   function showCloudFailure(server) {
     failed = server;
+    document.querySelectorAll("[data-back]").forEach((b) => (b.hidden = false));
     $("cloud-fail-actions").hidden = false;
     $("cloud-fail-hint").hidden = false;
     $("cloud-fail-hint").textContent = `Hetzner bills for ${server.name} until you delete it in their console.`;
