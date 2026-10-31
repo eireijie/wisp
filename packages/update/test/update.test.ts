@@ -76,6 +76,15 @@ describe("checkForUpdate", () => {
     expect(c).toMatchObject({ commit: null, canUpdate: false });
     expect(c.reason).toMatch(/git/);
   });
+
+  it("points the desktop app's own copy at the app's updater", async () => {
+    const bundled = fs.mkdtempSync(path.join(dir, "bundled-"));
+    fs.writeFileSync(path.join(bundled, "package.json"), JSON.stringify({ name: "wisp-runtime" }));
+    const c = await checkForUpdate(bundled, { runner });
+    expect(c).toMatchObject({ commit: null, canUpdate: false });
+    expect(c.reason).toContain("Check for Updates");
+    expect(c.reason).not.toMatch(/git/);
+  });
 });
 
 describe("runUpdate", () => {
