@@ -186,7 +186,7 @@ struct ChannelView: View {
       Button { showDetails = true } label: {
         NamePill(title: store.title(of: current)) {
           if let agent = store.dmAgent(current) { AgentAvatar(agent: agent, size: 36, showStatus: false) }
-          else { TeamGhosts(agents: teamAgents, seed: current.name, size: 34) }
+          else { TeamGhosts(agents: teamAgents, seed: current.name, size: 34, iconFileId: current.settings?.iconFileId) }
         }
         .overlay(alignment: .bottom) {
           if current.archivedAt != nil { Text("Archived").font(.system(size: 11)).foregroundStyle(Palette.muted).offset(y: 14) }
@@ -530,7 +530,7 @@ struct EmptyChannel: View {
       } else {
         let team = channel.team(agents: store.agents)
         let agents = (team?.nodes ?? []).compactMap { store.agent($0.agentId) }
-        TeamGhosts(agents: agents, seed: channel.name, size: 64)
+        TeamGhosts(agents: agents, seed: channel.name, size: 64, iconFileId: channel.settings?.iconFileId)
         Text(channel.name).font(.system(size: 20, weight: .semibold))
         Text(intro(team)).font(.system(size: 15)).foregroundStyle(Palette.muted)
         if channel.archivedAt == nil {

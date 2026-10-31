@@ -13,6 +13,7 @@ import { activityPhrase } from "./agentActivity.ts";
 import { cleanPreview } from "./CommandPalette.tsx";
 import { loopLine } from "./Loops.tsx";
 import { UserAvatarButton } from "./Rail.tsx";
+import { useTeamImage } from "./teamImage.ts";
 
 const COLLAPSE_KEY = "wisp.chats.collapsed";
 const loadCollapsed = (): Record<string, boolean> => {
@@ -56,24 +57,26 @@ export function shortTime(at: number, clock: "auto" | "12h" | "24h"): string {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-/** Two ghosts overlapped for a team; one for a chat with an agent. */
-export function ChatAvatar({ chat, size }: { chat: Pick<Chat, "kind" | "agent" | "channel">; size: number }) {
+/** A team's chosen image, else its first two agents' ghosts overlapped; one ghost for a chat with an agent. */
+export function ChatAvatar({ chat, size, ghostsOnly = false }: { chat: Pick<Chat, "kind" | "agent" | "channel">; size: number; ghostsOnly?: boolean }) {
   const agents = useStore((s) => s.agents);
   const teams = useTeams();
+  const image = useTeamImage(chat.kind === "team" && !ghostsOnly ? chat.channel?.settings?.iconFileId : null);
   if (chat.kind === "dm") return <AgentAvatar agent={chat.agent ?? undefined} size={size} live />;
+  if (image.loading) return <span className="inline-block shrink-0 rounded-full bg-chip" style={{ width: size, height: size }} aria-hidden />;
+  if (image.url) return <img src={image.url} alt="" className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
   const team = teams.find((t) => t.channelId === chat.channel?.id);
   const members = (team?.members ?? []).map((m) => agents.find((a) => a.id === m.agentId)).filter((a): a is Agent => !!a);
+  // nobody on the team yet: a ghost of the team's own, the same each time
+  if (members.length < 2) return <AgentAvatar agent={members[0] ?? ({ name: chat.channel?.name ?? "team", harness: "" } as Pick<Agent, "name" | "harness">)} size={size} live={!!members[0]} />;
   const small = Math.round(size * 0.72);
-  // like the iPhone: a team with fewer than two agents shows stand-in ghosts, the same each time
-  const seed = chat.channel?.name ?? "team";
-  const shown = [0, 1].map((i) => members[i] ?? ({ name: seed + i, harness: "" } as Pick<Agent, "name" | "harness">));
   return (
     <span className="relative inline-block shrink-0" style={{ width: size * 1.1, height: size }} aria-hidden>
       <span className="absolute left-0 top-0">
-        <AgentAvatar agent={shown[0]} size={small} interactive={false} />
+        <AgentAvatar agent={members[0]} size={small} live />
       </span>
       <span className="absolute right-0 bottom-0 rounded-full" style={{ filter: "drop-shadow(1.5px 0 0 var(--panel)) drop-shadow(-1.5px 0 0 var(--panel)) drop-shadow(0 1.5px 0 var(--panel)) drop-shadow(0 -1.5px 0 var(--panel))" }}>
-        <AgentAvatar agent={shown[1]} size={small} interactive={false} />
+        <AgentAvatar agent={members[1]} size={small} live />
       </span>
     </span>
   );

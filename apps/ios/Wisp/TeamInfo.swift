@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 /**
@@ -16,6 +17,7 @@ struct TeamInfoPage: View {
   @State private var notify = false
   @State private var context = false
   @State private var adding = false
+  @State private var choosingIcon = false
   @State private var confirm: String?
   @State private var action = FormAction()
 
@@ -48,7 +50,15 @@ struct TeamInfoPage: View {
   var body: some View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
-        TeamGhosts(agents: (team?.nodes ?? []).compactMap { store.agent($0.agentId) }, seed: current.name, size: 40)
+        Button { choosingIcon = true } label: {
+          TeamGhosts(agents: (team?.nodes ?? []).compactMap { store.agent($0.agentId) }, seed: current.name, size: 40, iconFileId: current.settings?.iconFileId)
+            .frame(minHeight: 44)
+            .allowsHitTesting(false)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!editable)
+        .accessibilityLabel("Change team icon")
         VStack(alignment: .leading, spacing: 0) {
           Text(current.name).font(.system(size: 19, weight: .semibold)).lineLimit(1)
           Text(count).font(.system(size: 13)).foregroundStyle(Palette.muted)
@@ -85,6 +95,7 @@ struct TeamInfoPage: View {
     .onChange(of: current.memberCount) { Task { await load() } }
     .onChange(of: current.pinnedIds) { Task { await load() } }
     .sheet(isPresented: $notify) { NotifySheet(channel: current) }
+    .sheet(isPresented: $choosingIcon) { TeamIconSheet(channel: current, agents: (team?.nodes ?? []).compactMap { store.agent($0.agentId) }) }
     .sheet(isPresented: $context) {
       NavigationStack { ContextAccessSheet(channel: current, agents: agentMembers).toolbar(.hidden, for: .navigationBar) }
     }
@@ -345,5 +356,97 @@ struct ContextAccessSheet: View {
   private func sub(_ c: AgentContextInfo?) -> String {
     guard let c else { return "…" }
     return [c.model ?? "Automatic", c.effort?.capitalized].compactMap { $0 }.joined(separator: " · ")
+  }
+}
+
+/** Pick what a team's icon shows: its first two agents, or an image. */
+private struct TeamIconSheet: View {
+  @Environment(Store.self) private var store
+  @Environment(\.dismiss) private var dismiss
+  var channel: Channel
+  var agents: [Agent]
+  @State private var photo: PhotosPickerItem?
+  @State private var busy = false
+  @State private var failure: String?
+
+  private var chosen: String? { channel.settings?.iconFileId }
+
+  var body: some View {
+    VStack(spacing: 6) {
+      Text("Team icon").font(.system(size: 16, weight: .semibold)).padding(.bottom, 8)
+      Button { run("Couldn't change the icon. Try again.") { try await save(.null) } } label: {
+        TeamIconRow(selected: chosen == nil, title: "First two agents") { TeamGhosts(agents: agents, seed: channel.name, size: 44) }
+      }
+      .buttonStyle(.plain)
+      PhotosPicker(selection: $photo, matching: .images) {
+        TeamIconRow(selected: chosen != nil, title: busy ? "Uploading…" : chosen == nil ? "Choose image" : "Choose another image") {
+          if chosen != nil { TeamGhosts(agents: agents, seed: channel.name, size: 44, iconFileId: chosen) }
+          else {
+            Image(systemName: "photo").font(.system(size: 18)).frame(width: 44, height: 44).background(Palette.faint.opacity(0.2), in: Circle()).frame(width: 44 * 1.14, alignment: .leading)
+          }
+        }
+      }
+      .buttonStyle(.plain)
+      if let failure { Text(failure).font(.system(size: 13)).foregroundStyle(Palette.red) }
+      Spacer(minLength: 0)
+    }
+    .disabled(busy)
+    .padding(16)
+    .presentationDetents([.height(240)])
+    .background(Palette.sheet.ignoresSafeArea())
+    .onChange(of: photo) { _, item in
+      guard let item else { return }
+      photo = nil
+      run("Couldn't use that image. Try another one.") {
+        guard let data = try await item.loadTransferable(type: Data.self), let png = Self.squareIcon(data) else { throw API.Failure(status: 0, message: "Couldn't read that photo.") }
+        let file = try await store.uploadFile(png, name: "team-icon.png", mime: "image/png", channelId: channel.id)
+        try await save(AnyEncodable(file.id))
+      }
+    }
+  }
+
+  private func save(_ icon: AnyEncodable) async throws {
+    try await store.updateChannel(channel.id, ["settings": AnyEncodable(["iconFileId": icon])])
+    dismiss()
+  }
+
+  private func run(_ failed: String, _ work: @escaping () async throws -> Void) {
+    busy = true
+    failure = nil
+    Task {
+      do { try await work() } catch { failure = failed }
+      busy = false
+    }
+  }
+
+  /** The middle square of a picture, small enough to load quickly in every chat row. */
+  private static func squareIcon(_ data: Data) -> Data? {
+    guard let image = UIImage(data: data) else { return nil }
+    let side = min(image.size.width, image.size.height), out = min(side, 512)
+    guard side > 0 else { return nil }
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 1
+    let scale = out / side
+    return UIGraphicsImageRenderer(size: CGSize(width: out, height: out), format: format).pngData { _ in
+      image.draw(in: CGRect(x: (out - image.size.width * scale) / 2, y: (out - image.size.height * scale) / 2, width: image.size.width * scale, height: image.size.height * scale))
+    }
+  }
+}
+
+private struct TeamIconRow<Art: View>: View {
+  var selected: Bool
+  var title: String
+  @ViewBuilder var art: Art
+
+  var body: some View {
+    HStack(spacing: 12) {
+      art
+      Text(title).font(.system(size: 15, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading)
+      if selected { Image(systemName: "checkmark").font(.system(size: 15, weight: .semibold)).accessibilityLabel("Selected") }
+    }
+    .padding(.horizontal, 10).padding(.vertical, 8)
+    .frame(minHeight: 64)
+    .background(selected ? Palette.faint.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 10))
+    .contentShape(Rectangle())
   }
 }

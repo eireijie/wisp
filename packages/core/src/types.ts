@@ -194,6 +194,8 @@ export interface ChannelSettings {
   instructions: string;
   /** the channel's agent team, drawn as a flow chart; null = no team (the older rules above apply) */
   team: ChannelTeam | null;
+  /** the image chosen as the team's icon (a file shared in this channel); unset = its first two agents' ghosts */
+  iconFileId?: string | null;
 }
 
 /**

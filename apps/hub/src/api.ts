@@ -562,11 +562,16 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       .max(40)
       .optional(),
   });
-  const CHANNEL_SETTINGS = z.object({ defaultAgentId: z.string().nullable(), replyInThread: z.boolean(), instructions: z.string().max(4_000), team: CHANNEL_TEAM.nullable() }).partial();
+  const CHANNEL_SETTINGS = z.object({ defaultAgentId: z.string().nullable(), replyInThread: z.boolean(), instructions: z.string().max(4_000), team: CHANNEL_TEAM.nullable(), iconFileId: z.string().max(100).nullable() }).partial();
   const ours = (c: Caller, agentId: string) => store.agent(agentId)?.workspaceId === c.workspaceId;
   /** What's wrong with the settings (an agent from elsewhere, a chart that doesn't work), or null. */
   const settingsProblem = (c: Caller, settings: z.infer<typeof CHANNEL_SETTINGS> | undefined, current?: ChannelTeam | null, selfId?: string): string | null => {
     if (settings?.defaultAgentId && !ours(c, settings.defaultAgentId)) return "agent not found";
+    if (settings?.iconFileId) {
+      // everyone who sees the team must be able to load its icon, so it's an image shared in this very channel
+      const icon = store.file(settings.iconFileId);
+      if (!selfId || icon?.workspaceId !== c.workspaceId || icon.channelId !== selfId || !/^image\/(png|jpeg|gif|webp)$/.test(icon.mime)) return "That image can't be used as the team's icon.";
+    }
     const team = settings?.team;
     if (!team) return null;
     if (team.nodes.some((n) => !ours(c, n.agentId)) || (team.reportsTo && !ours(c, team.reportsTo)) || team.roles?.some((r) => r.agentId && !ours(c, r.agentId)) || team.steps?.some((s) => s.agentId && !ours(c, s.agentId))) return "agent not found";

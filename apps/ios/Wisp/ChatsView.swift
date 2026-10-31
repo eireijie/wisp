@@ -412,7 +412,7 @@ struct ChatRow: View {
   @ViewBuilder private var avatar: some View {
     switch entry.kind {
     case .agent(let a): SoloGhost(agent: store.agent(a.id) ?? a, size: 76)
-    case .team(let c): TeamGhosts(agents: teamAgents(c), seed: c.name, size: 76)
+    case .team(let c): TeamGhosts(agents: teamAgents(c), seed: c.name, size: 76, iconFileId: c.settings?.iconFileId)
     }
   }
 
