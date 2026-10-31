@@ -20,7 +20,7 @@ export interface OnboardingState {
 }
 
 /** The setup's screens, in order. */
-export const STEPS = ["ready", "agent", "anywhere", "devices"] as const;
+export const STEPS = ["anywhere", "address", "agent", "devices"] as const;
 export type StepId = (typeof STEPS)[number];
 export type SetupChoices = Partial<Record<StepId, boolean>>;
 const useSetupRevision = create<{ revision: number }>(() => ({ revision: 0 }));
@@ -38,9 +38,10 @@ export function completeSetupStep(workspaceId: string, step: StepId) {
 /** Visiting a step never completes it; explicit skips count as a choice. */
 export function stepsDone(s: OnboardingState | null, choices: SetupChoices = {}): Record<StepId, boolean> {
   return {
-    ready: !!choices.ready,
-    agent: !!choices.agent || !!s?.agents.length,
     anywhere: !!choices.anywhere || !!s?.reachable || onPublicAddress() || accessSkipped(),
+    // a setup finished before this step existed has nothing left to show
+    address: !!choices.address || !!choices.devices,
+    agent: !!choices.agent || !!s?.agents.length,
     devices: !!choices.devices,
   };
 }
@@ -116,9 +117,9 @@ export function useOnboarding(pollMs?: number) {
 
 /** Each setup step as a plain next thing to do, for "Continue setup" and Help. */
 export const NEXT_STEP: Record<StepId, string> = {
-  ready: "Get your Wisp ready",
-  agent: "Make your first agent",
   anywhere: "Use Wisp away from home",
+  address: "See your Wisp server address",
+  agent: "Make your first agent",
   devices: "Add your phone and other computers",
 };
 

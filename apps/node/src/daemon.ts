@@ -17,6 +17,7 @@ import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
 import { HarnessLogins } from "./harness-login.ts";
 import { type DockerVm } from "./computers/docker.ts";
 import { mcpBundle } from "./vm-tools.ts";
+import { NO_NODE, findNpmDir, withDir } from "./npm.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
 import { agentFolder } from "./agent-dir.ts";
 import { bringBack, mergeBranch, prepareCheckout, prepareClone } from "./git.ts";
@@ -648,25 +649,30 @@ export class NodeDaemon {
   private async installHarness(id: string): Promise<string> {
     const pkg = harnessInfo(id)?.install?.npm;
     if (!pkg) throw new Error(`${harnessLabel(id)} isn't installed with npm; install it on ${this.cfg.name} with its own installer`);
-    const npm = process.platform === "win32" ? "npm.cmd" : path.join(path.dirname(process.execPath), "npm");
+    // look again each time: someone may have installed Node.js since the last try, and a GUI-launched app has a short PATH
+    const npmDir = findNpmDir();
+    if (!npmDir) throw new Error(`${NO_NODE}, and ${harnessLabel(id)} is installed with it. Install Node.js from https://nodejs.org, then try again.`);
+    const npm = process.platform === "win32" ? "npm.cmd" : path.join(npmDir, "npm");
+    const env = withDir(npmDir);
     this.log(`installing ${harnessLabel(id)} (${pkg})`);
     const out = await new Promise<{ code: number | null; text: string }>((resolve) => {
-      const child = spawn(fs.existsSync(npm) || process.platform === "win32" ? npm : "npm", ["install", "-g", "--no-audit", "--no-fund", pkg], { stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32" });
+      const child = spawn(npm, ["install", "-g", "--no-audit", "--no-fund", pkg], { stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32", env });
       let text = "";
       child.stdout.on("data", (d) => (text = (text + d).slice(-8000)));
       child.stderr.on("data", (d) => (text = (text + d).slice(-8000)));
       const timer = setTimeout(() => child.kill("SIGKILL"), 15 * 60_000);
-      child.on("error", (e) => (clearTimeout(timer), resolve({ code: -1, text: e.message })));
+      child.on("error", (e) => (clearTimeout(timer), resolve({ code: -1, text: (e as NodeJS.ErrnoException).code === "ENOENT" ? "ENOENT" : e.message })));
       child.on("close", (code) => (clearTimeout(timer), resolve({ code, text })));
     });
     if (out.code !== 0) {
+      if (out.text === "ENOENT") throw new Error(`${NO_NODE}, and ${harnessLabel(id)} is installed with it. Install Node.js from https://nodejs.org, then try again.`);
       const last = out.text.trim().split("\n").slice(-6).join("\n");
       throw new Error(/EACCES|permission denied/i.test(out.text) ? `npm can't write its global folder on ${this.cfg.name} (permission denied). Install it there yourself: npm install -g ${pkg}` : `npm install -g ${pkg} failed:\n${last}`);
     }
     // npm's global bin may not be on this process's PATH (a background service starts with a short one)
-    const prefix = await new Promise<string>((resolve) => execFile(npm, ["prefix", "-g"], (err, stdout) => resolve(err ? "" : stdout.trim())));
+    const prefix = await new Promise<string>((resolve) => execFile(npm, ["prefix", "-g"], { env, shell: process.platform === "win32" }, (err, stdout) => resolve(err ? "" : stdout.trim())));
     const bin = prefix && (process.platform === "win32" ? prefix : path.join(prefix, "bin"));
-    if (bin && !(process.env.PATH ?? "").split(path.delimiter).includes(bin)) process.env.PATH = `${bin}${path.delimiter}${process.env.PATH ?? ""}`;
+    for (const dir of [bin, npmDir]) if (dir && !(process.env.PATH ?? "").split(path.delimiter).includes(dir)) process.env.PATH = `${dir}${path.delimiter}${process.env.PATH ?? ""}`;
     this.log(`installed ${harnessLabel(id)}`);
     return out.text.trim().split("\n").slice(-3).join("\n");
   }

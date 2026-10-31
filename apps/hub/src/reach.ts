@@ -108,6 +108,10 @@ export function explainTailscaleError(stderr: string, platform = process.platfor
   const t = stderr.trim();
   if (/access denied|permission denied|must be root|operator/i.test(t))
     return platform === "linux" ? "Wisp isn't allowed to change Tailscale on this computer. Run this once in a terminal, then try again: sudo tailscale set --operator=$USER" : "Wisp isn't allowed to change Tailscale on this computer. Open the Tailscale app and try again.";
+  if (/serve.*not enabled|not enabled on your tailnet/i.test(t)) {
+    const link = t.match(/https:\/\/login\.tailscale\.com\/\S+/)?.[0] ?? "https://login.tailscale.com/admin/dns";
+    return `Tailscale Serve is off for your tailnet. Turn it on, then try again: ${link}`;
+  }
   if (/HTTPS.*(not enabled|disabled)|enable HTTPS/i.test(t)) return "HTTPS certificates are off for your tailnet. Turn on HTTPS in the Tailscale admin console (DNS → HTTPS Certificates), then try again: https://login.tailscale.com/admin/dns";
   if (/funnel.*(not enabled|not allowed|disabled|attribute)/i.test(t)) return "Funnel isn't allowed on your tailnet yet. Allow it in the Tailscale admin console, then try again: https://login.tailscale.com/admin/acls";
   if (/doesn't appear to be running|failed to connect|not running/i.test(t)) return "Tailscale is installed but not running. Open the Tailscale app (or start the tailscaled service), then try again.";
