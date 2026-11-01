@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { Bell, BookOpen, ChevronLeft, ChevronRight, Cpu, Database, Gauge, Info, KeyRound, Link2, Mic, Monitor, Palette, Plug, Settings, ShieldCheck, SlidersHorizontal, Smartphone, Sparkles, Store, User, Users, Wifi, Wrench, Building2, Bot, SquareTerminal } from "lucide-react";
+import { Bell, BookOpen, ChevronLeft, ChevronRight, Cpu, Database, Gauge, Info, KeyRound, Link2, Mic, Monitor, Palette, Plug, Settings, ShieldCheck, SlidersHorizontal, Smartphone, Sparkles, Store, User, Users, Wifi, Wrench, Building2, Bot, SquareTerminal, Brain } from "lucide-react";
 import { resolveFeatures, type Features } from "@wisp/core";
 import { useStore } from "../store.ts";
 import { go, href, type SettingsPage } from "../router.ts";
@@ -9,6 +9,7 @@ import { AppearancePage, NotificationsPage, PreferencesPage, ProfilePage, Securi
 import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage, PeoplePage } from "./settings/workspace.tsx";
 import { RuntimesPage } from "./settings/runtimes.tsx";
 import { HarnessesPage } from "./settings/harnesses.tsx";
+import { ModelsPage } from "./settings/models.tsx";
 import { VoicePage } from "./settings/voice.tsx";
 import { MemoryPage } from "./settings/memory.tsx";
 import { DevicesPage } from "./settings/devices.tsx";
@@ -56,7 +57,8 @@ const NAV: NavSection[] = [
     pages: [
       { id: "agents", label: "Agents policy", icon: ic(Bot), noGuests: true },
       { id: "agent-defaults", label: "Agent defaults", icon: ic(Wrench), noGuests: true },
-      { id: "harnesses", label: "AI tool settings", icon: ic(SquareTerminal), noGuests: true },
+      { id: "models", label: "Models", icon: ic(Brain), noGuests: true },
+      { id: "harnesses", label: "Harnesses", icon: ic(SquareTerminal), noGuests: true },
       { id: "runtimes", label: "Agent runtimes", icon: ic(Cpu), noGuests: true },
       { id: "logins", label: "Agent logins", icon: ic(KeyRound), noGuests: true },
       { id: "apps", label: "Connected apps", icon: ic(Store), noGuests: true },
@@ -113,6 +115,7 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   people: () => <PeoplePage />,
   agents: () => <AgentsPolicyPage />,
   runtimes: () => <RuntimesPage />,
+  models: () => <ModelsPage />,
   harnesses: () => <HarnessesPage />,
   memory: () => <MemoryPage />,
   computers: () => <ComputersPage />,

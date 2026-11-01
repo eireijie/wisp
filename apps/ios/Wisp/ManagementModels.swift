@@ -54,6 +54,9 @@ struct AgentModels: Decodable {
     var defaultEffort: String?
   }
   var catalog: Catalog?
+  /** the model connection it runs on, and that connection's models as its harness runs them */
+  var connection: RunConnection?
+  var models: [ConnectionModel]?
 
   func settings(model: String, effort: String, fast: Bool) -> Fields? {
     guard let catalog else { return nil }

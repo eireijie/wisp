@@ -174,6 +174,61 @@ export function loginCommand(harness: string, provider?: string): { command: str
   throw new Error(`Wisp can't sign ${harness} in yet; sign in on the device`);
 }
 
+/**
+ * Runs a command in a pseudo-terminal 400 columns wide and relays it, for sign-ins that only run in
+ * a terminal (`claude setup-token` draws its screen with Ink and prints nothing without one). Wide,
+ * so the link and the token it prints aren't wrapped; Enter from Wisp is sent as a terminal's \r.
+ */
+const PTY_RELAY = String.raw`
+import os, pty, sys, select, fcntl, termios, struct
+pid, fd = pty.fork()
+if pid == 0:
+    fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 50, 400, 0, 0))
+    os.execvp(sys.argv[1], sys.argv[1:])
+watch = [fd, 0]
+while True:
+    r, _, _ = select.select(watch, [], [])
+    if fd in r:
+        try:
+            data = os.read(fd, 4096)
+        except OSError:
+            break
+        if not data:
+            break
+        os.write(1, data)
+    if 0 in r:
+        data = os.read(0, 4096)
+        if data:
+            os.write(fd, data.replace(b"\n", b"\r"))
+        else:
+            watch = [fd]
+_, status = os.waitpid(pid, 0)
+sys.exit(os.waitstatus_to_exitcode(status) if hasattr(os, "waitstatus_to_exitcode") else status >> 8)
+`;
+
+/**
+ * How a device signs in to a model provider for a connection (models.ts), in a scratch folder the
+ * caller points the harness at (`home` is the variable to set). What the sign-in leaves behind is
+ * read by `secretFrom`, so the hub can keep it:
+ * - Claude: `claude setup-token`, a one-year token for the subscription, printed at the end (needs a terminal, so it runs in one)
+ * - ChatGPT: `codex login --device-auth`, a link and code; the sign-in lands in auth.json
+ * - Grok: `hermes auth add xai-oauth`, a link and code; the sign-in lands in Hermes's credential pool
+ */
+export function modelLoginCommand(provider: string, harness: string, binary?: string): { command: string; args: string[]; home: string; wantsInput: boolean } {
+  if (provider === "anthropic" && harness === "claude-code") {
+    if (process.platform === "win32") throw new Error("Claude's sign-in for Wisp needs a Mac or Linux device; or connect an API key instead");
+    return { command: "python3", args: ["-c", PTY_RELAY, binary ?? "claude", "setup-token"], home: "CLAUDE_CONFIG_DIR", wantsInput: true };
+  }
+  if (provider === "openai" && harness === "codex") return { command: binary ?? "codex", args: ["login", "--device-auth", "-c", `cli_auth_credentials_store="file"`], home: "CODEX_HOME", wantsInput: false };
+  if (provider === "xai" && harness === "hermes") return { command: binary ?? "hermes", args: ["auth", "add", "xai-oauth", "--type", "oauth", "--no-browser"], home: "HERMES_HOME", wantsInput: false };
+  throw new Error(`Wisp can't sign in to ${provider} with ${harness}`);
+}
+
+/** The long-lived token `claude setup-token` prints (sk-ant-oat01-…), from its output. Exported for tests. */
+export function setupTokenFrom(output: string): string | null {
+  return /sk-ant-oat\d*-[A-Za-z0-9_-]{20,}/.exec(output.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, ""))?.[0] ?? null;
+}
+
 /** Whether an account's folder holds a login, from the files harnesses keep it in (null: can't tell). */
 function signedIn(harness: string, dir: string): { signedIn: boolean | null } {
   if (harness === "codex") return { signedIn: fs.existsSync(path.join(dir, "auth.json")) };

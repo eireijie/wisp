@@ -245,6 +245,17 @@ export class Store {
     this.db.prepare("UPDATE nodes SET catalog_json = ? WHERE id = ?").run(JSON.stringify(catalog), nodeId);
   }
 
+  /** What a VM on a device has installed (each harness and its models), as the device reported it. */
+  setComputerCatalog(nodeId: string, computerId: string, catalog: HarnessCatalog[]) {
+    this.db.prepare("INSERT INTO computer_catalogs (node_id, computer_id, catalog_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT (node_id, computer_id) DO UPDATE SET catalog_json = excluded.catalog_json, updated_at = excluded.updated_at").run(nodeId, computerId, JSON.stringify(catalog), new Date().toISOString());
+  }
+
+  /** A VM's catalog, or null when its device hasn't reported one yet. */
+  computerCatalog(nodeId: string, computerId: string): HarnessCatalog[] | null {
+    const r = this.db.prepare("SELECT catalog_json FROM computer_catalogs WHERE node_id = ? AND computer_id = ?").get(nodeId, computerId) as { catalog_json: string } | undefined;
+    return r ? JSON.parse(r.catalog_json) : null;
+  }
+
   nodeCatalog(nodeId: string): HarnessCatalog[] {
     const r = this.db.prepare("SELECT catalog_json FROM nodes WHERE id = ?").get(nodeId) as { catalog_json: string } | undefined;
     return r ? JSON.parse(r.catalog_json) : [];
@@ -394,6 +405,7 @@ export class Store {
     this.db.transaction(() => {
       this.db.prepare("UPDATE agents SET computer_id = NULL WHERE computer_id = ?").run(computerId);
       this.db.prepare("DELETE FROM computers WHERE id = ?").run(computerId);
+      this.db.prepare("DELETE FROM computer_catalogs WHERE computer_id = ?").run(computerId);
     })();
   }
 
@@ -939,10 +951,10 @@ export class Store {
   run(runId: string) {
     return this.db
       .prepare(
-        "SELECT id, agent_id AS agentId, channel_id AS channelId, thread_id AS threadId, trigger_message_id AS triggerMessageId, status, hop, discussion_id AS discussionId, phase, requested_by AS requestedBy, kind FROM runs WHERE id = ?",
+        "SELECT id, agent_id AS agentId, channel_id AS channelId, thread_id AS threadId, trigger_message_id AS triggerMessageId, status, hop, discussion_id AS discussionId, phase, requested_by AS requestedBy, kind, created_at AS createdAt, finished_at AS finishedAt FROM runs WHERE id = ?",
       )
       .get(runId) as
-      | { id: string; agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; status: string; hop: number; discussionId: string | null; phase: string | null; requestedBy: string | null; kind: "background" | null }
+      | { id: string; agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; status: string; hop: number; discussionId: string | null; phase: string | null; requestedBy: string | null; kind: "background" | null; createdAt: string; finishedAt: string | null }
       | undefined;
   }
 

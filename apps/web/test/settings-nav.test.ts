@@ -12,7 +12,7 @@ describe("settings navigation", () => {
     expect(ids(settingsNav(false, FEATURE_PRESETS.everything))).toEqual([
       ["You", ["profile", "notifications", "appearance", "preferences", "voice", "security"]],
       ["Workspace", ["general", "people", "usage"]],
-      ["Agents", ["agents", "agent-defaults", "harnesses", "runtimes", "logins", "apps", "connections", "memory"]],
+      ["Agents", ["agents", "agent-defaults", "models", "harnesses", "runtimes", "logins", "apps", "connections", "memory"]],
       ["Devices", ["devices", "computers", "access", "mobile"]],
       ["More", ["data", "updates"]],
     ]);

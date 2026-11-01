@@ -75,6 +75,8 @@ struct Agent: Codable, Identifiable, Hashable {
     var respondPeople: [String]?
     /** the person who made it; they (or an owner) decide who it answers */
     var createdBy: String?
+    /** the model connection it runs on (Settings → Models); nil runs on its computer's own sign-in */
+    var connectionId: String?
   }
   enum Status: String, Codable { case online, busy, offline }
 

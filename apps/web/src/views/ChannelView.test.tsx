@@ -15,7 +15,7 @@ vi.mock("react", async (original) => ({
   useState: (value: any) => [typeof value === "function" ? value() : value, vi.fn()],
 }));
 vi.mock("../store.ts", () => ({
-  useStore: Object.assign((select: (s: any) => any) => select(h.state), { getState: () => h.state }),
+  useStore: Object.assign((select: (s: any) => any) => select(h.state), { getState: () => h.state, subscribe: () => () => {} }),
   conversationKey: (channelId: string, threadId?: string) => threadId ? `${channelId}/t/${threadId}` : channelId,
   useNames: () => ({ agent: () => undefined }),
 }));

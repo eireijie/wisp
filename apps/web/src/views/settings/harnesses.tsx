@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowUp, ChevronLeft, Copy, ExternalLink, Loader2, Plus, Share2, UserPen, Download, LogIn, UserMinus, FileCog } from "lucide-react";
+import { ArrowUp, ChevronLeft, Copy, ExternalLink, Loader2, Plus, Share2, UserPen, LogIn, UserMinus, FileCog } from "lucide-react";
 import { harnessLabel, type Connector, type HarnessCatalog, type HarnessLogin, type HarnessSettings, type HarnessSettingsChange, type HarnessSettingItem } from "@wisp/core";
 import { api } from "../../api.ts";
 import { useDevices } from "../../devices.ts";
 import { href } from "../../router.ts";
 import { useStore } from "../../store.ts";
-import { CopyBlock, cx } from "../../components/ui.tsx";
+import { AgentAvatar, CopyBlock, cx } from "../../components/ui.tsx";
+import { useHarnessComputers } from "../../models.ts";
+import { PageHeader } from "./parts.tsx";
 import { MoreOptions } from "../../components/MoreOptions.tsx";
 import { HarnessLogo } from "../../components/HarnessLogo.tsx";
 import { Badge, Circle, Dlg, Item, Label, Panel, Pick, Prim, Sec, Seg, Switch, TextBox, Tile } from "../../components/MarketParts.tsx";
@@ -30,149 +32,169 @@ const HarnessTile = ({ harness, size = 40 }: { harness: string; size?: number })
   </Tile>
 );
 
-/** Signed in, needs a sign-in, or unknown (the device can't tell), from the account the page shows. */
-function signState(s: HarnessSettings): { text: string; badge: "Signed in" | "Sign in" | null } {
-  const a = s.accounts.find((x) => x.id === s.account) ?? s.accounts[0];
-  if (!a || a.signedIn === null) return { text: a?.who ?? "Account", badge: null };
-  return a.signedIn ? { text: a.who ?? a.label, badge: "Signed in" } : { text: "Not signed in", badge: "Sign in" };
-}
-
 /**
  * Each harness's own settings on one of your devices, read from and written to its config file
  * there: the account it's signed in as, the model and provider it uses, its apps, plugins and skills.
  * Agents can change the same things when you ask them in chat.
  */
+/**
+ * Settings → Harnesses: what runs agents on each computer (each device, and each VM, whose
+ * harnesses are its own), with versions and the agents on each. A device's harness opens its
+ * settings here (accounts, model, skills, apps); the model itself is picked separately.
+ */
 export function HarnessesPage() {
+  const { computers, error, reload } = useHarnessComputers();
   const devices = useDevices(10_000);
+  const agents = useStore((s) => s.agents);
   const mine = useMemo(() => (devices ?? []).filter((d) => d.mine), [devices]);
-  const [pick, setPick] = useState("");
-  const device = mine.find((d) => d.id === pick) ?? mine.find((d) => d.online) ?? mine[0];
-  const [data, setData] = useState<HarnessesResponse | null>(null);
-  /** the harness open: on phones the list shows until one is picked, on larger screens the first is open */
-  const [tab, setTab] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [installing, setInstalling] = useState(false);
-  const online = !!device?.online;
+  const [open, setOpen] = useState<{ deviceId: string; harness: string } | null>(null);
+  const [installing, setInstalling] = useState<string | "pick" | null>(null);
+  const installOn = mine.find((d) => d.id === installing);
 
+  if (open) {
+    const device = mine.find((d) => d.id === open.deviceId);
+    return (
+      <div className="max-w-3xl space-y-5">
+        <button type="button" onClick={() => setOpen(null)} className="-ml-1 inline-flex h-8 items-center gap-1 rounded-lg px-1.5 text-[13px] text-muted hover:bg-hover hover:text-ink">
+          <ChevronLeft size={16} /> Harnesses
+        </button>
+        {device ? <DeviceHarness device={device} harness={open.harness} /> : <p className="text-[13px] text-muted">That device isn't yours.</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl">
+      <PageHeader title="Harnesses">What runs your agents on each computer. Pick the model separately.</PageHeader>
+      {error && <p className="mb-4 px-1 text-[13px] text-bad">{error}</p>}
+      {computers === null ? (
+        !error && (
+          <p className="flex items-center gap-2 text-[13px] text-muted">
+            <Loader2 size={14} className="animate-spin" /> Loading…
+          </p>
+        )
+      ) : computers.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-line p-4 text-[13px] text-muted">
+          No computers yet.{" "}
+          <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>
+            Connect one
+          </a>
+          .
+        </p>
+      ) : (
+        <div className="space-y-5">
+          {computers.map((c) => {
+            const device = c.kind === "device" ? mine.find((d) => d.id === c.id) : undefined;
+            const host = c.kind === "vm" ? computers.find((x) => x.kind === "device" && x.id === c.nodeId)?.name : null;
+            return (
+              <section key={`${c.kind}:${c.id}`}>
+                <div className="mb-1.5 flex items-baseline justify-between gap-3 px-1">
+                  <h3 className="truncate text-[14px] font-semibold">{c.name}</h3>
+                  <span className="shrink-0 text-[12px] text-faint">
+                    {c.kind === "vm" ? `VM${host ? ` on ${host}` : ""}` : "Device"}
+                    {c.online ? "" : " · offline"}
+                  </span>
+                </div>
+                <div className="overflow-hidden rounded-xl border border-line bg-card divide-y divide-line">
+                  {!c.reported ? (
+                    <p className="px-4 py-3 text-[13px] text-faint">{c.online ? "Start it to see its harnesses." : "Its harnesses show up when its device is back."}</p>
+                  ) : c.harnesses.length === 0 ? (
+                    <p className="px-4 py-3 text-[13px] text-faint">No harnesses yet.</p>
+                  ) : (
+                    c.harnesses.map((h) => (
+                      <div key={h.id} className="flex min-h-12 items-center gap-3 px-4 py-2">
+                        <span className="grid w-5 shrink-0 place-items-center text-muted">
+                          <HarnessLogo harness={h.id} size={16} />
+                        </span>
+                        <span className="w-28 shrink-0 truncate text-[14px] sm:w-36">{h.label}</span>
+                        <span className="hidden w-20 shrink-0 truncate text-[12px] text-faint tabular-nums sm:block">{h.version ?? ""}</span>
+                        <span className="flex min-w-0 flex-1 items-center gap-1">
+                          {h.agents.slice(0, 6).map((u) => (
+                            <span key={u.id} title={u.name}>
+                              <AgentAvatar agent={agents.find((a) => a.id === u.id) ?? { name: u.name, handle: u.handle, harness: h.id }} size={18} interactive={false} />
+                            </span>
+                          ))}
+                          {h.agents.length > 6 && <span className="text-[12px] text-faint">+{h.agents.length - 6}</span>}
+                        </span>
+                        {device && (
+                          <button type="button" disabled={!c.online} title={c.online ? undefined : `${c.name} is offline`} onClick={() => setOpen({ deviceId: device.id, harness: h.id })} className="inline-flex h-8 shrink-0 items-center rounded-lg bg-chip px-3 text-[13px] font-medium hover:bg-hover disabled:opacity-50">
+                            Settings
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            );
+          })}
+          {mine.length > 0 && (
+            <button type="button" onClick={() => setInstalling(mine.length === 1 ? mine[0].id : "pick")} className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-line bg-card px-4 text-left text-[14px] text-accent-text hover:bg-hover">
+              <Plus size={16} /> Add a harness to a computer
+            </button>
+          )}
+        </div>
+      )}
+      {installing === "pick" && (
+        <Dlg title="Add a harness" sub="Pick the computer" onClose={() => setInstalling(null)}>
+          <div className="overflow-hidden rounded-xl border border-line bg-card divide-y divide-line">
+            {mine.map((d) => (
+              <button key={d.id} type="button" disabled={!d.online} onClick={() => setInstalling(d.id)} className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left text-[14px] hover:bg-hover disabled:opacity-50">
+                {d.name}
+                <span className="text-[12px] text-faint">{d.online ? "" : "Offline"}</span>
+              </button>
+            ))}
+          </div>
+        </Dlg>
+      )}
+      {installOn && (
+        <InstallHarness
+          device={installOn}
+          onClose={() => {
+            setInstalling(null);
+            reload();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** One harness's settings on one of your devices: its accounts, model, skills and apps. */
+function DeviceHarness({ device, harness }: { device: { id: string; name: string; online: boolean }; harness: string }) {
+  const [data, setData] = useState<HarnessesResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     setData(null);
     setError(null);
-    if (!device?.id || !online) return;
+    if (!device.online) return;
     let live = true;
-    api<HarnessesResponse>("GET", `/api/nodes/${device.id}/harness-settings`).then(
+    api<HarnessesResponse>("GET", `/api/nodes/${device.id}/harness-settings?harness=${encodeURIComponent(harness)}`).then(
       (r) => live && setData(r),
       (e) => live && setError((e as Error).message),
     );
     return () => {
       live = false;
     };
-  }, [device?.id, online]);
-
-  const current = data?.harnesses.find((h) => h.harness === tab) ?? (tab === null ? undefined : data?.harnesses[0]);
-  const shown = current ?? data?.harnesses[0];
+  }, [device.id, device.online, harness]);
   const replace = (s: HarnessSettings) => setData((d) => d && { ...d, harnesses: d.harnesses.map((h) => (h.harness === s.harness ? s : h)) });
-  /** Show one harness as one of its accounts (or again, after a sign-in). */
-  const load = async (harness: string, account: string) => {
-    if (!device) return;
+  /** Show the harness as one of its accounts (or again, after a sign-in). */
+  const load = async (account: string) => {
     const r = await api<HarnessesResponse>("GET", `/api/nodes/${device.id}/harness-settings?harness=${encodeURIComponent(harness)}&account=${encodeURIComponent(account)}`);
     const s = r.harnesses.find((h) => h.harness === harness);
     if (s) setData((d) => d && { ...d, agents: r.agents, harnesses: d.harnesses.map((h) => (h.harness === harness ? s : h)) });
   };
-
-  if (devices === null) return <p className="text-sm text-muted">Loading…</p>;
-  if (!device)
+  const settings = data?.harnesses.find((h) => h.harness === harness);
+  if (!device.online) return <p className="px-1 text-[13px] text-muted">{device.name} is offline. Its harness settings show up when it's back.</p>;
+  if (error) return <p className="whitespace-pre-wrap px-1 text-[13px] text-bad">{error}</p>;
+  if (!data)
     return (
-      <p className="rounded-2xl border border-dashed border-line p-4 text-sm text-muted">
-        No devices of yours yet.{" "}
-        <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>
-          Connect one
-        </a>
-        .
+      <p className="flex items-center gap-2 px-1 text-[13px] text-muted">
+        <Loader2 size={14} className="animate-spin" /> Reading {harnessLabel(harness)} on {device.name}…
       </p>
     );
-
-  const list = (
-    <div className="space-y-4">
-      <Panel>
-        {mine.length > 1 ? (
-          <SelectRow title="Computer" label="Computer" value={device.id} onChange={(v) => (setPick(v), setTab(null))}>
-            {mine.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-                {d.online ? "" : " (offline)"}
-              </option>
-            ))}
-          </SelectRow>
-        ) : (
-          <Item title={device.name} sub="On" />
-        )}
-      </Panel>
-      {!online ? (
-        <p className="px-1 text-sm text-muted">{device.name} is offline. Its harness settings show up when it's back.</p>
-      ) : error ? (
-        <p className="whitespace-pre-wrap px-1 text-sm text-bad">{error}</p>
-      ) : !data ? (
-        <p className="flex items-center gap-2 px-1 text-sm text-muted">
-          <Loader2 size={14} className="animate-spin" /> Reading {device.name}'s harnesses…
-        </p>
-      ) : (
-        <>
-          {data.harnesses.length === 0 ? (
-            <p className="px-1 text-sm text-muted">No harnesses on {device.name} yet.</p>
-          ) : (
-            <Panel>
-              {data.harnesses.map((h) => {
-                const st = signState(h);
-                return (
-                  <Item
-                    key={h.harness}
-                    icon={<HarnessTile harness={h.harness} />}
-                    title={harnessLabel(h.harness)}
-                    sub={st.text}
-                    right={st.badge ? <Badge tone={st.badge === "Signed in" ? "green" : "grey"}>{st.badge}</Badge> : undefined}
-                    onClick={() => setTab(h.harness)}
-                    selected={shown?.harness === h.harness}
-                    label={`${harnessLabel(h.harness)}, ${st.text}`}
-                  />
-                );
-              })}
-            </Panel>
-          )}
-          <Panel>
-            <Item icon={<Download size={18} strokeWidth={1.7} className="text-muted" />} title="Install a harness" onClick={() => setInstalling(true)} />
-          </Panel>
-        </>
-      )}
-    </div>
-  );
-
-  const detail =
-    online && data && shown ? (
-      <HarnessPanel key={`${device.id}:${shown.harness}`} device={data.device} settings={shown} agents={data.agents} catalog={data.catalog.find((c) => c.harness === shown.harness)} onChange={replace} onLoad={(account) => load(shown.harness, account)} />
-    ) : null;
-
-  return (
-    <>
-      {/* phones: the list, or one harness with a way back; larger screens: both side by side */}
-      <div className="md:hidden">
-        {current && detail ? (
-          <div className="space-y-5">
-            <Circle label="Back to harnesses" onClick={() => setTab(null)}>
-              <ChevronLeft size={22} />
-            </Circle>
-            {detail}
-          </div>
-        ) : (
-          list
-        )}
-      </div>
-      <div className="hidden min-w-0 space-y-6 md:block">
-        {list}
-        {detail}
-      </div>
-      {installing && <InstallHarness device={device} onClose={() => setInstalling(false)} />}
-    </>
-  );
+  if (!settings) return <p className="px-1 text-[13px] text-muted">{harnessLabel(harness)} isn't on {device.name} anymore.</p>;
+  return <HarnessPanel key={`${device.id}:${harness}`} device={data.device} settings={settings} agents={data.agents} catalog={data.catalog.find((c) => c.harness === harness)} onChange={replace} onLoad={load} />;
 }
 
 /** A row in a card: its title over a picker that fills the row, so long names never spill out. */

@@ -39,7 +39,7 @@ export async function commandsIn(dir: string, prefix = ""): Promise<CommandOptio
 }
 
 /** Claude Code's built-in commands that work when it runs headless, as Wisp runs it. */
-const CLAUDE_BUILTINS: CommandOption[] = [
+export const CLAUDE_BUILTINS: CommandOption[] = [
   { name: "compact", description: "Shrink the conversation so it can keep going", hint: "what to keep", kind: "command", via: "raw" },
   { name: "review", description: "Review a pull request", kind: "command", via: "raw" },
   { name: "security-review", description: "Look for security problems in the changes on this branch", kind: "command", via: "raw" },

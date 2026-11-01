@@ -41,6 +41,13 @@ struct AgentContextInfo: Decodable, Equatable {
   var access: String?
   var contextUsed: Int?
   var contextWindow: Int?
+  var harnessVersion: String?
+  /** effort levels the model in use offers (else the harness's) */
+  var efforts: [String]?
+  /** the model connection it runs on; nil on its computer's own sign-in */
+  var connection: RunConnection?
+  /** the subscription's usage as last reported */
+  var plan: PlanUsage?
 
   var level: AccessLevel { AccessLevel(access) }
   /** 0...1, nil before the first reply */

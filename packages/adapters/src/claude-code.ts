@@ -1,9 +1,9 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AccessLevel, AgentEvent, HarnessCatalog } from "@wisp/core";
-import type { AdapterEvent, HarnessAdapter, RunInput, RunResult } from "./types.ts";
-import { claudeCommands } from "./commands.ts";
+import { planFromWindows, type AccessLevel, type AgentEvent, type HarnessCatalog, type PlanUsage, type PlanWindow } from "@wisp/core";
+import type { AdapterEvent, CatalogPlace, HarnessAdapter, RunInput, RunResult } from "./types.ts";
+import { CLAUDE_BUILTINS, claudeCommands } from "./commands.ts";
 import { RunFiles, commandVersion, launched, runJsonl } from "./process.ts";
 
 const PERMISSION_MODE: Record<AccessLevel, string> = { "read-only": "plan", edit: "acceptEdits", full: "bypassPermissions" };
@@ -63,16 +63,23 @@ export const claudeCode: HarnessAdapter = {
   label: "Claude Code",
   binary: "claude",
 
-  async catalog(): Promise<HarnessCatalog> {
+  async catalog(place?: CatalogPlace): Promise<HarnessCatalog> {
     // Claude Code has no model-list command; these aliases always resolve to the latest model of each tier.
     // the user's default model, if they set one in Claude Code's settings
-    const settings = await fs.readFile(path.join(os.homedir(), ".claude", "settings.json"), "utf8").then((t) => JSON.parse(t), () => ({}));
+    const settingsFile = place ? `${place.home}/.claude/settings.json` : path.join(os.homedir(), ".claude", "settings.json");
+    const text = place ? await place.readFile(settingsFile) : await fs.readFile(settingsFile, "utf8").catch(() => null);
+    let settings: any = {};
+    try {
+      settings = text ? JSON.parse(text) : {};
+    } catch {}
+    const version = place ? await place.exec(this.binary, ["--version"], { timeout: 15_000 }).then((o) => o.trim().split("\n")[0] || null, () => null) : await commandVersion(this.binary);
     return {
       harness: this.id,
-      version: await commandVersion(this.binary),
+      version,
       defaultModel: typeof settings.model === "string" ? settings.model : undefined,
       efforts: EFFORTS,
-      commands: await claudeCommands(),
+      // in a VM: its built-in commands (its own skill folders there aren't read from here)
+      commands: place ? CLAUDE_BUILTINS : await claudeCommands(),
       models: [
         { id: "fable", label: "Fable", description: "Most capable, for the hardest work." },
         { id: "opus", label: "Opus", description: "Deep reasoning for complex, multi-step tasks.", fast: { description: "Faster output, higher usage" } },
@@ -90,6 +97,7 @@ export const claudeCode: HarnessAdapter = {
     const streamed = new Set<string>();
     let lastAssistant: any = null;
     let result: any = null;
+    let plan: PlanUsage | undefined;
 
     const files = new RunFiles("wisp-claude-");
     let proc;
@@ -103,6 +111,7 @@ export const claudeCode: HarnessAdapter = {
           onEvent(e);
         }
         if (m.type === "assistant" && m.message?.usage) lastAssistant = m;
+        if (m.type === "rate_limit_event") plan = claudePlan(m.rate_limit_info) ?? plan;
         if (m.type === "result") {
           result = m;
           if (typeof m.result === "string") finalText = m.result;
@@ -115,7 +124,8 @@ export const claudeCode: HarnessAdapter = {
 
     if (input.signal?.aborted) throw new Error("cancelled");
     const usage = claudeUsage(lastAssistant, result);
-    if (usage) onEvent({ ...usage, effort: input.effort ?? null });
+    if (usage) onEvent({ ...usage, effort: input.effort ?? null, ...(plan ? { plan } : {}) });
+    else if (plan) onEvent({ type: "usage", plan });
     if (error) throw new Error(error);
     if (proc.exitCode !== 0 && !finalText) throw new Error(lastLine(proc.stderr) || `claude exited with code ${proc.exitCode}`);
     return { finalText, sessionId };
@@ -143,6 +153,24 @@ export function claudeUsage(lastAssistant: any, result: any): Extract<AgentEvent
     // fresh, cache-written and cache-read input all count as read
     ...(total ? { inputTokens: (total.input_tokens ?? 0) + (total.cache_creation_input_tokens ?? 0) + cached, outputTokens: total.output_tokens ?? 0, cachedInputTokens: cached } : {}),
   };
+}
+
+const CLAUDE_WINDOWS: Record<string, string> = { five_hour: "5-hour", seven_day: "weekly", seven_day_opus: "weekly Opus", seven_day_sonnet: "weekly Sonnet", seven_day_overage_included: "weekly", overage: "extra usage" };
+
+/**
+ * A subscription's limits from Claude Code's `rate_limit_event` (stream-json): `utilization` is the
+ * used fraction (0–1) and `resetsAt` epoch seconds, for the window that applies now and, where it
+ * says, for each window (`unifiedWindows`). Nothing for API keys, which have no such limits. Exported for tests.
+ */
+export function claudePlan(info: any): PlanUsage | undefined {
+  if (!info || typeof info !== "object") return undefined;
+  const when = (s: unknown) => (typeof s === "number" && s > 0 ? new Date(s * 1000).toISOString() : null);
+  const windows: PlanWindow[] = [];
+  for (const [id, w] of Object.entries<any>(info.unifiedWindows ?? {})) {
+    if (typeof w?.utilization === "number") windows.push({ window: CLAUDE_WINDOWS[id] ?? id, usedFraction: Math.max(0, w.utilization), resetsAt: when(w.resetsAt) });
+  }
+  if (!windows.length && typeof info.utilization === "number") windows.push({ window: CLAUDE_WINDOWS[info.rateLimitType] ?? info.rateLimitType ?? "limit", usedFraction: Math.max(0, info.utilization), resetsAt: when(info.resetsAt) });
+  return planFromWindows(windows);
 }
 
 /** Translate one stream-json line into Wisp events. Exported for tests. */

@@ -9,6 +9,8 @@ import type { CommandOption } from "./types.ts";
 export const WISP_COMMANDS: { name: string; description: string }[] = [
   { name: "context", description: "See how full this conversation is" },
   { name: "model", description: "See or change the model, like /model gpt-6.1-sol (or /model default)" },
+  { name: "effort", description: "See or change how hard it thinks, like /effort high (or /effort default)" },
+  { name: "harness", description: "See or change the harness it runs in, like /harness codex" },
 ];
 
 /** One entry in the "/" menu: where it comes from decides how it runs. */

@@ -61,6 +61,8 @@ final class Store {
   /** bumped per channel when one of its requests moves through the team's steps */
   var flowVersions: [String: Int] = [:]
   var memoryVersion = 0
+  /** bumps when a model connection is added, renamed, removed, renewed or reports plan usage */
+  var modelsVersion = 0
   var agents: [Agent] = [] {
     didSet { recordCompletions(previous: oldValue) }
   }
@@ -802,6 +804,8 @@ final class Store {
       handleJoinEvent(env.type, data)
     case "changes_changed":
       Task { try? await refreshChanges() }
+    case "model_connections_changed":
+      modelsVersion += 1
     case "memory_changed":
       memoryVersion += 1
       Task { do { try await refreshNotes() } catch { recordSyncError(error) } }

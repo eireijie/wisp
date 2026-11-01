@@ -246,6 +246,18 @@ export async function imageExists(engine: Engine, image: string): Promise<boolea
  * home folder lives in a volume, so sign-ins and browser profiles survive restarts, and
  * `files/` is shared with the device (the agents' working folder).
  */
+/**
+ * Writes stdin to a file in the VM, swapped in whole. A private file (and the folders made for it)
+ * is never readable by others, not even until the chmod; a failed write leaves nothing. Exported for tests.
+ */
+export function writeFileScript(vmPath: string, mode: string): string {
+  const priv = (parseInt(mode, 8) & 0o077) === 0;
+  return `${priv ? "umask 077; " : ""}mkdir -p "$(dirname '${vmPath}')" && tmp='${vmPath}'.$$.tmp; if cat > "$tmp" && chmod ${mode} "$tmp" && mv -f "$tmp" '${vmPath}'; then :; else rm -f "$tmp"; exit 1; fi`;
+}
+
+/** $1 is the connections folder; the rest are the connection ids to keep. Exported for tests. */
+export const PRUNE_CONNECTIONS_SCRIPT = `dir="$1"; shift; cd "$dir" 2>/dev/null || exit 0; for d in *; do [ -e "$d" ] || continue; keep=; for k in "$@"; do [ "$d" = "$k" ] && keep=1; done; [ -n "$keep" ] || rm -rf -- "$d"; done`;
+
 export class DockerVm implements Driver {
   readonly label = "Linux VM";
   private desktop: X11Driver;
@@ -474,10 +486,55 @@ export class DockerVm implements Driver {
     await exec(this.bin, ["exec", this.name, "sh", "-c", `p=$(cat ${pidFile} 2>/dev/null) && { kill -TERM -$p 2>/dev/null || kill -TERM $p; }; rm -f ${pidFile}`], { timeoutMs: 15_000 }).catch(() => undefined);
   }
 
+  /** A run is over: the files it had put in the VM (its tools' config has tokens in it) and its pid file go. */
+  async cleanupRun(runId: string) {
+    const safe = runId.replace(/[^\w-]/g, "");
+    await exec(this.bin, ["exec", "-u", this.user, this.name, "rm", "-rf", `/tmp/wisp-run-${safe}`, `/tmp/wisp-run-${safe}.pid`], { timeoutMs: 15_000 });
+  }
+
   /** Put a file in the VM (as wisp), e.g. Wisp's tools for harnesses that run in here. */
   async writeFile(vmPath: string, content: string | Buffer, mode = "644") {
     await this.ready();
-    await must(this.bin, ["exec", "-i", "-u", this.user, this.name, "sh", "-c", `mkdir -p "$(dirname '${vmPath}')" && cat > '${vmPath}' && chmod ${mode} '${vmPath}'`], { input: content, timeoutMs: 60_000 });
+    await must(this.bin, ["exec", "-i", "-u", this.user, this.name, "sh", "-c", writeFileScript(vmPath, mode)], { input: content, timeoutMs: 60_000 });
+  }
+
+  /** Remove the folders of model connections not in `keep` (a removed connection's sign-ins and keys). */
+  async pruneConnections(keep: string[]) {
+    await this.ready();
+    await exec(this.bin, ["exec", "-u", this.user, this.name, "sh", "-c", PRUNE_CONNECTIONS_SCRIPT, "sh", `${this.home}/.wisp/connections`, ...keep], { timeoutMs: 30_000 });
+  }
+
+  /** A file in the VM (as wisp), or null when it isn't there. */
+  async readFile(vmPath: string): Promise<string | null> {
+    await this.ready();
+    const r = await exec(this.bin, ["exec", "-u", this.user, this.name, "cat", vmPath], { timeoutMs: 30_000 });
+    return r.code === 0 ? r.stdout.toString() : null;
+  }
+
+  /** The names in a folder in the VM (none when it isn't there). */
+  async readDir(vmPath: string): Promise<string[]> {
+    await this.ready();
+    const r = await exec(this.bin, ["exec", "-u", this.user, this.name, "ls", "-1A", vmPath], { timeoutMs: 30_000 });
+    return r.code === 0 ? r.stdout.toString().split("\n").filter(Boolean) : [];
+  }
+
+  /** Run a command in the VM (as wisp, in its home) and get what it printed; throws when it fails. */
+  async runCommand(command: string, args: string[], timeoutMs = 30_000): Promise<string> {
+    await this.ready();
+    const r = await exec(this.bin, ["exec", "-i", "-u", this.user, "-w", this.home, "-e", `HOME=${this.home}`, this.name, command, ...args], { timeoutMs });
+    if (r.code !== 0) throw new ActionError(r.stderr.toString().trim().split("\n").pop() || `${command} failed in the VM`);
+    return r.stdout.toString();
+  }
+
+  /** Point `link` at `target` in the VM, when `target` exists and nothing is at `link` yet. */
+  async symlink(target: string, link: string) {
+    await this.ready();
+    await exec(this.bin, ["exec", "-u", this.user, this.name, "sh", "-c", 'if [ -e "$1" ] && [ ! -e "$2" ] && [ ! -L "$2" ]; then mkdir -p "$(dirname "$2")" && ln -s "$1" "$2"; fi', "sh", target, link], { timeoutMs: 15_000 });
+  }
+
+  /** Is it up right now? (Without starting it.) */
+  async isRunning(): Promise<boolean> {
+    return (await this.running()) === true;
   }
 
   /** Is this harness signed in inside the VM? null when it isn't one that comes with the VM. */

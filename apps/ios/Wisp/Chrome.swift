@@ -84,13 +84,15 @@ struct ProfileCircle: View {
 
 /** The top of a page that has no navigation bar: a 44pt circle on each side, an optional centered pill or title between. */
 struct TopBar<Leading: View, Center: View, Trailing: View>: View {
+  /** room kept clear of the center on each side (wider when the trailing side has two things) */
+  var inset: CGFloat = 64
   @ViewBuilder var leading: Leading
   @ViewBuilder var center: Center
   @ViewBuilder var trailing: Trailing
 
   var body: some View {
     ZStack {
-      center.padding(.horizontal, 64)
+      center.padding(.horizontal, inset)
       HStack { leading; Spacer(minLength: 0); trailing }
     }
     .padding(.horizontal, 18)

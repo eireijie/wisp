@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AccessLevel, AgentEvent, HarnessCatalog, ModelOption } from "@wisp/core";
-import type { AdapterEvent, HarnessAdapter, RunInput, RunResult } from "./types.ts";
+import { planFromWindows, type AccessLevel, type AgentEvent, type HarnessCatalog, type ModelOption, type PlanUsage, type PlanWindow } from "@wisp/core";
+import type { AdapterEvent, CatalogPlace, HarnessAdapter, RunInput, RunResult } from "./types.ts";
 import { codexCommands } from "./commands.ts";
 import { commandVersion, execCommand, launched, runJsonl } from "./process.ts";
 
@@ -73,8 +73,25 @@ export function codexArgs(input: RunInput): string[] {
   if (input.effort) common.push("-c", `model_reasoning_effort=${tomlString(input.effort)}`);
   // Codex's fast mode is the "priority" service tier (models advertise it in their catalog)
   if (input.fast) common.push("-c", `service_tier="priority"`);
+  common.push(...codexConnectionArgs(input.connection));
   common.push(...codexMcpConfig(input).overrides);
   return input.sessionId ? ["exec", "resume", input.sessionId, ...common, "-"] : ["exec", ...common, "-"];
+}
+
+/**
+ * Flags a model connection needs (models.ts). An OpenRouter key goes through a provider entry that
+ * reads it from OPENROUTER_API_KEY (Codex speaks OpenRouter's Responses API); a ChatGPT sign-in is
+ * read from auth.json in the run's own CODEX_HOME, never the system keychain. An OpenAI key needs
+ * nothing: `codex exec` reads CODEX_API_KEY. Exported for tests.
+ */
+export function codexConnectionArgs(connection: RunInput["connection"]): string[] {
+  if (!connection) return [];
+  if (connection.provider === "openrouter") {
+    const p = "model_providers.openrouter";
+    return ["-c", `model_provider="openrouter"`, "-c", `${p}.name="OpenRouter"`, "-c", `${p}.base_url="https://openrouter.ai/api/v1"`, "-c", `${p}.env_key="OPENROUTER_API_KEY"`, "-c", `${p}.wire_api="responses"`];
+  }
+  if (connection.provider === "openai" && connection.kind === "oauth") return ["-c", `cli_auth_credentials_store="file"`];
+  return [];
 }
 
 /** Environment for one run: the run's own (connector secrets) plus what the MCP servers read theirs from. Exported for tests. */
@@ -125,6 +142,7 @@ export function codexUsageFromRollout(text: string): Extract<AgentEvent, { type:
   let model: string | undefined;
   let effort: string | null | undefined;
   let info: any = null;
+  let limits: any = null;
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     let o: any;
@@ -138,16 +156,36 @@ export function codexUsageFromRollout(text: string): Extract<AgentEvent, { type:
       effort = o.payload.effort ?? effort;
     }
     if (o.payload?.type === "token_count" && o.payload.info) info = o.payload.info;
+    if (o.payload?.type === "token_count" && o.payload.rate_limits) limits = o.payload.rate_limits;
   }
   if (!model && !info) return null;
   const last = info?.last_token_usage;
+  const plan = codexPlan(limits);
   return {
     type: "usage",
     model,
     effort: effort ?? null,
     contextUsed: last ? (last.input_tokens ?? 0) + (last.output_tokens ?? 0) : undefined,
     contextWindow: info?.model_context_window ?? undefined,
+    ...(plan ? { plan } : {}),
   };
+}
+
+/**
+ * A ChatGPT plan's limits from a session file's `rate_limits` (`primary` / `secondary`, each with
+ * `used_percent`, `window_minutes` and `resets_at` in epoch seconds). API keys report none. Exported for tests.
+ */
+export function codexPlan(limits: any): PlanUsage | undefined {
+  if (!limits || typeof limits !== "object") return undefined;
+  const windows: PlanWindow[] = [];
+  for (const w of [limits.primary, limits.secondary]) {
+    if (typeof w?.used_percent !== "number") continue;
+    const mins = Number(w.window_minutes) || 0;
+    const name = mins === 300 ? "5-hour" : mins === 10080 ? "weekly" : mins >= 1440 ? `${Math.round(mins / 1440)}-day` : mins ? `${Math.round(mins / 60)}-hour` : "limit";
+    const resets = typeof w.resets_at === "number" ? new Date(w.resets_at * 1000).toISOString() : typeof w.resets_in_seconds === "number" ? new Date(Date.now() + w.resets_in_seconds * 1000).toISOString() : null;
+    windows.push({ window: name, usedFraction: Math.max(0, w.used_percent / 100), resetsAt: resets });
+  }
+  return planFromWindows(windows, typeof limits.plan_type === "string" ? limits.plan_type : undefined);
 }
 
 /**
@@ -160,19 +198,29 @@ export function codexTokens(m: any): { inputTokens: number; outputTokens: number
   return { inputTokens: u.input_tokens ?? 0, outputTokens: (u.output_tokens ?? 0) + (u.reasoning_output_tokens ?? 0), cachedInputTokens: u.cached_input_tokens ?? 0 };
 }
 
-/** Find a session's file: sessions/YYYY/MM/DD/rollout-<time>-<id>.jsonl, newest days first. */
-async function findRollout(sessionId: string): Promise<string | null> {
-  const root = path.join(codexHome(), "sessions");
-  const days: string[] = [];
+/**
+ * The CODEX_HOME a run actually used: its account's or connection's folder (from its environment),
+ * inside its VM when it ran there, else this device's. Exported for tests.
+ */
+export function runCodexHome(input: Pick<RunInput, "env" | "place">): string {
+  return input.env?.CODEX_HOME ?? (input.place ? `${input.place.home}/.codex` : codexHome());
+}
+
+/**
+ * Read a session's file: sessions/YYYY/MM/DD/rollout-<time>-<id>.jsonl in the run's own CODEX_HOME,
+ * newest days first (in the VM when it ran there).
+ */
+async function readRollout(sessionId: string, input: Pick<RunInput, "env" | "place">): Promise<string | null> {
+  const join = input.place ? path.posix.join : path.join;
+  const root = join(runCodexHome(input), "sessions");
+  const readDir = input.place ? (d: string) => input.place!.readDir(d) : (d: string) => fs.readdir(d).catch(() => [] as string[]);
+  const read = input.place ? (f: string) => input.place!.readFile(f) : (f: string) => fs.readFile(f, "utf8").catch(() => null);
   for (let i = 0; i < 3; i++) {
+    // the VM's clock and this device's agree on the day closely enough; both sides of midnight are tried
     const d = new Date(Date.now() - i * 86_400_000);
-    days.push(path.join(root, String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")));
-  }
-  for (const dir of days) {
-    try {
-      const hit = (await fs.readdir(dir)).find((f) => f.endsWith(`-${sessionId}.jsonl`));
-      if (hit) return path.join(dir, hit);
-    } catch {}
+    const dir = join(root, String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0"));
+    const hit = (await readDir(dir)).find((f) => f.endsWith(`-${sessionId}.jsonl`));
+    if (hit) return read(join(dir, hit));
   }
   return null;
 }
@@ -186,18 +234,21 @@ export const codex: HarnessAdapter = {
   label: "Codex",
   binary: "codex",
 
-  async catalog(): Promise<HarnessCatalog> {
+  async catalog(place?: CatalogPlace): Promise<HarnessCatalog> {
     let models: ModelOption[] = [];
+    const run = (args: string[]) => (place ? place.exec(this.binary, args, { timeout: 30_000 }) : execCommand(this.binary, args, { timeout: 15_000, maxBuffer: 32 * 1024 * 1024 }));
     // the live catalog can refresh over the network; fall back to the one bundled with the binary
     for (const args of [["debug", "models"], ["debug", "models", "--bundled"]]) {
       try {
-        const stdout = await execCommand(this.binary, args, { timeout: 15_000, maxBuffer: 32 * 1024 * 1024 });
-        models = parseCodexCatalog(stdout);
+        models = parseCodexCatalog(await run(args));
         if (models.length) break;
       } catch {}
     }
-    const defaults = await fs.readFile(path.join(codexHome(), "config.toml"), "utf8").then(codexDefaults, () => ({}));
-    return { harness: this.id, version: await commandVersion(this.binary), efforts: ["low", "medium", "high"], models, ...defaults, commands: await codexCommands(codexHome()) };
+    const configText = place ? await place.readFile(`${place.home}/.codex/config.toml`) : await fs.readFile(path.join(codexHome(), "config.toml"), "utf8").catch(() => null);
+    const defaults = configText ? codexDefaults(configText) : {};
+    const version = place ? await run(["--version"]).then((o) => o.trim().split("\n")[0] || null, () => null) : await commandVersion(this.binary);
+    // in a VM: no skills listed (its folders there aren't read from here)
+    return { harness: this.id, version, efforts: ["low", "medium", "high"], models, ...defaults, commands: place ? [] : await codexCommands(codexHome()) };
   },
 
   async run(input: RunInput, onEvent: (e: AdapterEvent) => void): Promise<RunResult> {
@@ -223,8 +274,8 @@ export const codex: HarnessAdapter = {
 
     if (input.signal?.aborted) throw new Error("cancelled");
     if (sessionId) {
-      const file = await findRollout(sessionId);
-      const usage = file ? codexUsageFromRollout(await fs.readFile(file, "utf8").catch(() => "")) : null;
+      const text = await readRollout(sessionId, input).catch(() => null);
+      const usage = text ? codexUsageFromRollout(text) : null;
       if (usage) onEvent({ ...usage, ...tokens });
       else if (tokens) onEvent({ type: "usage", ...tokens });
     } else if (tokens) onEvent({ type: "usage", ...tokens });
