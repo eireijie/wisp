@@ -391,7 +391,7 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     "next_check",
     {
       description:
-        "When you're working in the background: say when to look again (10 minutes to 24 hours) and why. Soon while something is moving (waiting on a reply, a deadline today); a few hours when it's calm. Call it at the end of every background check.",
+        "When you're working in the background: say when to look again (10 minutes to 24 hours) and why. Use it while something is moving (waiting on a reply, a deadline today); that time is kept. When it's calm, don't call it: checks slow down by themselves.",
       inputSchema: { minutes: z.number().describe("minutes from now"), reason: z.string().describe("why then, in a few words") },
     },
     safe(async ({ minutes, reason }) => {

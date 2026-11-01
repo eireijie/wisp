@@ -164,7 +164,9 @@ export function BackgroundPanel({ agent, active, onDirty }: { agent: Agent; acti
               <div className="min-w-0 flex-1 text-sm">
                 <div className="font-medium">
                   {b.checking ? (offline ? "Waiting for its device" : "Checking now") : b.lastAt ? `Checked ${timeAgo(b.lastAt)}` : "Hasn't checked yet"}
-                  {on && !b.checking && b.nextAt && <span className="font-normal text-muted"> · next {at(b.nextAt)}</span>}
+                  {on && !b.checking && b.nextAt && (
+                    <span className="font-normal text-muted">{b.nextReason === "nothing to watch yet" ? " · nothing to watch yet" : ` · next ${at(b.nextAt)}${b.nextReason === "quiet lately" ? ", quiet lately" : ""}`}</span>
+                  )}
                 </div>
                 {!b.checking && b.lastNote && <div className={cx("mt-0.5 text-xs line-clamp-2", failed ? "text-warn" : "text-muted")}>{b.lastNote}</div>}
               </div>

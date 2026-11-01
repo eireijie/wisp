@@ -432,6 +432,8 @@ export interface BackgroundWork {
   effort: string | null;
   /** most regular checks a day on the person's clock; null = no limit */
   dailyCap: number | null;
+  /** checks in a row that found nothing to say: each one doubles the wait, up to a day */
+  quietStreak: number;
 }
 
 /** How much of a person's AI usage background checks may use each day, across all their agents. */

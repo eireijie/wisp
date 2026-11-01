@@ -1,4 +1,4 @@
-import { CONNECTOR_CATALOG, zonedParts, type Allowance, type BackgroundSource, type BackgroundUsage, type Followup } from "@wisp/core";
+import { CONNECTOR_CATALOG, zonedParts, type Allowance, type BackgroundSource, type BackgroundUsage, type BackgroundWork, type Followup } from "@wisp/core";
 import { featureOn } from "./features.ts";
 import type { Hub } from "./hub.ts";
 
@@ -29,6 +29,16 @@ export const ESTIMATED_CHECK_TOKENS = 25_000;
 export const SLOW_DOWN_AT = 0.8;
 const MIN_MINUTES = 10;
 const MAX_MINUTES = 24 * 60;
+/**
+ * Quiet checks stretch the usual wait up to this (a usual wait that's longer stays as it is). It's the
+ * longest something urgent inside a connected app can go unseen because of quiet checks: the hub
+ * can't see into apps, only a check can.
+ */
+export const BACKOFF_CEILING_MINUTES = 4 * 60;
+/** An agent with nothing to watch is looked at again this often, or at its usual pace if that's sooner (no tokens: the hub only checks its sources). */
+const IDLE_RECHECK_MINUTES = 60;
+/** Quiet checks in a row that keep doubling the wait (2^6 × 10 minutes is already past the ceiling). */
+const MAX_QUIET_STREAK = 6;
 
 const minutes = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -68,6 +78,9 @@ export function startOfDay(at: Date, timeZone: string, plusDays = 0): Date {
  * and messages the person only when something needs them. Follow-ups are the one-off version:
  * "8am tomorrow, remind Sam the essay is due".
  */
+export const NOTHING_TO_WATCH = "nothing to watch yet";
+export const QUIET_LATELY = "quiet lately";
+
 export class Background {
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -112,7 +125,15 @@ export class Background {
       if (ws) this.hub.broadcast(ws, { type: "channels_changed" }, (u) => u === userId);
     }
     for (const b of store.activeBackground()) {
-      if (b.checking || (b.nextAt && new Date(b.nextAt) > at)) continue;
+      if (b.checking) continue;
+      // something urgent the hub can see ends a stretched or skipped wait
+      if ((b.nextReason === QUIET_LATELY || b.nextReason === NOTHING_TO_WATCH) && b.nextAt && new Date(b.nextAt) > at && this.waitIsOver(b)) {
+        const usual = (b.lastAt ? new Date(b.lastAt).getTime() : at.getTime()) + b.everyMinutes * 60_000;
+        b.nextAt = store.setBackground(b.agentId, b.userId, { quietStreak: 0, nextAt: new Date(usual).toISOString(), nextReason: "" }).nextAt;
+        const inWs = store.agent(b.agentId)?.workspaceId;
+        if (inWs) this.hub.broadcast(inWs, { type: "background_changed", agentId: b.agentId });
+      }
+      if (b.nextAt && new Date(b.nextAt) > at) continue;
       // no checks while the organization has Background agents switched off (Settings → General → Mods)
       const ws = store.agent(b.agentId)?.workspaceId;
       if (!ws || !featureOn(store, ws, "background")) continue;
@@ -128,6 +149,12 @@ export class Background {
       }
       if (this.capReached(b.agentId, b.userId, b.dailyCap, at)) {
         store.setBackground(b.agentId, b.userId, { nextAt: startOfDay(at, tz, 1).toISOString(), nextReason: "daily limit reached" });
+        continue;
+      }
+      // no apps, no computer, no shared notes, no tasks: a check would only spend tokens finding that out
+      if (!this.hasSomethingToWatch(b.agentId, b.lastAt)) {
+        if (b.nextReason !== NOTHING_TO_WATCH) this.hub.broadcast(ws, { type: "background_changed", agentId: b.agentId });
+        store.setBackground(b.agentId, b.userId, { nextAt: new Date(at.getTime() + Math.min(IDLE_RECHECK_MINUTES, b.everyMinutes) * 60_000).toISOString(), nextReason: NOTHING_TO_WATCH });
         continue;
       }
       this.wake(b.agentId, b.userId, [], at);
@@ -319,13 +346,94 @@ export class Background {
     return { nextAt, minutes: m, on: !!b?.enabled };
   }
 
-  /** A check ended: keep the agent's note to itself; nothing is posted. */
-  finished(run: { id: string; agentId: string; requestedBy: string | null }, note: string) {
+  /**
+   * A check ended: keep the agent's note to itself; nothing is posted. Checks that keep saying nothing
+   * (no message to anyone, no follow-up due, and the person hasn't written since the check before)
+   * double the usual wait from the second in a row, up to BACKOFF_CEILING_MINUTES; anything else starts
+   * the pace over. Only the usual wait stretches: a time the agent picked (next_check) stands.
+   */
+  finished(run: { id: string; agentId: string; requestedBy: string | null; channelId?: string }, note: string, at = new Date()) {
+    const followups = this.pendingFollowups.get(run.id)?.length ?? 0;
     this.pendingFollowups.delete(run.id);
-    const agent = this.hub.store.agent(run.agentId);
+    const { store } = this.hub;
+    const agent = store.agent(run.agentId);
     if (!agent || !run.requestedBy) return;
-    if (this.hub.store.background(run.agentId, run.requestedBy)) this.hub.store.setBackground(run.agentId, run.requestedBy, { lastNote: note.trim().slice(0, 2000) });
+    const b = store.background(run.agentId, run.requestedBy);
+    if (b) {
+      const quiet = !followups && this.wasQuiet(run.id, run.agentId, run.requestedBy);
+      const streak = quiet ? Math.min(MAX_QUIET_STREAK, b.quietStreak + 1) : 0;
+      const patch: Parameters<typeof store.setBackground>[2] = { lastNote: note.trim().slice(0, 2000), quietStreak: streak };
+      // one quiet check is normal; from the second in a row the wait doubles each time
+      if (streak > 1 && this.onUsualPace(b)) {
+        const from = new Date(b.lastAt!).getTime();
+        const later = new Date(from + Math.min(Math.max(b.everyMinutes, BACKOFF_CEILING_MINUTES), b.everyMinutes * 2 ** (streak - 1)) * 60_000);
+        if (!b.nextAt || later > new Date(b.nextAt)) Object.assign(patch, { nextAt: later.toISOString(), nextReason: QUIET_LATELY });
+      }
+      store.setBackground(run.agentId, run.requestedBy, patch);
+    }
     this.hub.broadcast(agent.workspaceId, { type: "background_changed", agentId: agent.id });
+  }
+
+  /** Is the next check still the one `started` set? If it's anything else, the agent or the person chose it. */
+  private onUsualPace(b: BackgroundWork) {
+    if (!b.lastAt || !b.nextAt) return false;
+    const wait = new Date(b.nextAt).getTime() - new Date(b.lastAt).getTime();
+    return wait === b.everyMinutes * 60_000 || wait === b.everyMinutes * 2 * 60_000;
+  }
+
+  /** Something urgent the hub can see: a task waiting on the agent, an answer to its approval, or (when it had nothing to watch) something to watch now. */
+  private waitIsOver(b: BackgroundWork) {
+    const { store } = this.hub;
+    if (store.db.prepare("SELECT 1 FROM tasks WHERE to_agent_id = ? AND status IN ('open','in_progress') LIMIT 1").get(b.agentId)) return true;
+    if (b.lastAt && store.db.prepare("SELECT 1 FROM approvals WHERE agent_id = ? AND status != 'pending' AND decided_at > ? LIMIT 1").get(b.agentId, b.lastAt)) return true;
+    return b.nextReason === NOTHING_TO_WATCH && (!!store.agent(b.agentId)?.computerId || this.hub.connectors.forAgent(b.agentId).length > 0);
+  }
+
+  /** The check posted nothing anywhere, a task isn't waiting on the agent, and the person hasn't written to the agent since the check before it. */
+  private wasQuiet(runId: string, agentId: string, userId: string) {
+    const { db } = this.hub.store;
+    const started = (db.prepare("SELECT created_at AS at FROM runs WHERE id = ?").get(runId) as { at: string } | undefined)?.at;
+    if (!started) return false;
+    const spoke = db.prepare("SELECT 1 FROM messages WHERE author_kind = 'agent' AND author_id = ? AND created_at >= ? AND (thread_id IS NULL OR thread_id != ?) LIMIT 1").get(agentId, started, BACKGROUND_THREAD);
+    if (spoke) return false;
+    if (db.prepare("SELECT 1 FROM tasks WHERE to_agent_id = ? AND status IN ('open','in_progress') LIMIT 1").get(agentId)) return false;
+    const before = (db.prepare("SELECT created_at AS at FROM runs WHERE agent_id = ? AND kind = 'background' AND requested_by = ? AND created_at < ? AND status != 'queued' ORDER BY created_at DESC LIMIT 1").get(agentId, userId, started) as { at: string } | undefined)?.at;
+    // the first check has nothing to compare with
+    if (!before) return false;
+    const agent = this.hub.store.agent(agentId);
+    const dm = agent && this.hub.store.dmChannel(agent.workspaceId, userId, agentId);
+    const wrote = dm && db.prepare("SELECT 1 FROM messages WHERE channel_id = ? AND author_kind = 'user' AND author_id = ? AND created_at >= ? LIMIT 1").get(dm.id, userId, before);
+    return !wrote;
+  }
+
+  /** The person wrote to the agent: checks go back to the usual pace. */
+  heardFrom(agentId: string, userId: string, at = new Date()) {
+    const { store } = this.hub;
+    const b = store.background(agentId, userId);
+    if (!b?.enabled || (!b.quietStreak && b.nextReason !== NOTHING_TO_WATCH)) return;
+    const soon = new Date(at.getTime() + b.everyMinutes * 60_000);
+    // only a stretched or skipped wait is pulled in: a time the agent picked stands
+    const stretched = b.nextReason === QUIET_LATELY || b.nextReason === NOTHING_TO_WATCH;
+    const sooner = stretched && (!b.nextAt || soon < new Date(b.nextAt));
+    store.setBackground(agentId, userId, { quietStreak: 0, ...(sooner ? { nextAt: soon.toISOString(), nextReason: "" } : {}) });
+    const agent = store.agent(agentId);
+    if (agent) this.hub.broadcast(agent.workspaceId, { type: "background_changed", agentId });
+  }
+
+  /**
+   * Anything a check could find: apps, a computer, tasks waiting on it, or notes it can read (beyond its
+   * own) that changed since its last check. Notes alone don't count otherwise: they only change inside Wisp.
+   */
+  hasSomethingToWatch(agentId: string, since: string | null = null) {
+    const { store, access } = this.hub;
+    const agent = store.agent(agentId);
+    if (!agent) return false;
+    if (agent.computerId || this.hub.connectors.forAgent(agentId).length) return true;
+    if (store.db.prepare("SELECT 1 FROM tasks WHERE to_agent_id = ? AND status IN ('open','in_progress') LIMIT 1").get(agentId)) return true;
+    if (!since) return false;
+    const after = new Date(since).getTime();
+    const can = access.checker(agent.workspaceId, access.agentViewer(agent));
+    return this.hub.vault(agent.workspaceId).list().some((n) => n.updatedAt > after && !n.path.startsWith(`agents/${agentId}/`) && can(n.path).level !== "none");
   }
 
   /**
@@ -404,7 +512,7 @@ export class Background {
       `- If nothing does, don't message. Saying nothing is usually right. Never message just to say you checked, and don't repeat what you already told them unless it's become urgent.`,
       user && this.allowanceShare(agent.workspaceId, user.id) >= SLOW_DOWN_AT ? `- Most of ${name}'s daily allowance for background work is used. Keep this check short: look only at what matters most.` : "",
       quiet ? `- It's quiet hours for ${name} (${b!.quietStart}–${b!.quietEnd}). Only message for something that can't wait until morning.` : "",
-      `- Before you finish, call next_check with when to look again and why: soon (10–30 minutes) while something is moving, like waiting on a reply; a few hours when it's calm. For a set time ("8am tomorrow, before the assignment is due"), use followup_set.`,
+      `- If you need to look again at a particular time, call next_check with when and why: soon (10–30 minutes) while something is moving, like waiting on a reply. If it's calm, don't call it: checks slow down by themselves while nothing's happening. For a set time ("8am tomorrow, before the assignment is due"), use followup_set.`,
       `Your final reply isn't posted anywhere. Make it a one-line note to yourself about what you looked at and decided; you'll see it next time.`,
       tasks.length ? `\nYour open tasks:\n${tasks.map((t) => `- ${t.title} (${t.status.replace("_", " ")})`).join("\n")}` : "",
       approvals.length ? `\nStill waiting for an OK on:\n${approvals.map((a) => `- ${a.summary} (asked ${fmt(a.createdAt)})`).join("\n")}` : "",
