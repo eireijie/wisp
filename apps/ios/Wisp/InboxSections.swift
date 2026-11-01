@@ -386,8 +386,6 @@ struct ReadinessSection: View {
   @Environment(Store.self) private var store
   var open: (InboxTarget) -> Void
 
-  static let examples = ["Plan dinners for this week and make a shopping list", "Help me write a polite note to my landlord about a repair", "Summarize a document I'll paste in"]
-
   var body: some View {
     let devices = store.readyDevices
     let checks = Readiness.checks(agents: store.agents, devices: devices)
@@ -405,24 +403,6 @@ struct ReadinessSection: View {
           if case .chooseModel = bad.to {} else { Button("Change its AI") { open(.agent(agent)) }.buttonStyle(CardPill(tone: .soft)) }
         }
       }
-    } else if let agent {
-      VStack(alignment: .leading, spacing: 12) {
-        HStack(spacing: 12) {
-          AgentAvatar(agent: agent, size: 40, showStatus: false)
-          Text("Try asking \(agent.name)…").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
-        }
-        ForEach(Self.examples, id: \.self) { text in
-          Button { open(.dm(agent, draft: text)) } label: {
-            Text(text).font(.system(size: 13)).foregroundStyle(Palette.text).multilineTextAlignment(.leading)
-              .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 10)
-              .background(Palette.sheet, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-          }.buttonStyle(.plain)
-        }
-        Button("Open chat") { open(.dm(agent)) }.buttonStyle(CardPill(tone: .soft))
-      }
-      .padding(18).frame(maxWidth: .infinity, alignment: .leading)
-      .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
-    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     }
   }
 

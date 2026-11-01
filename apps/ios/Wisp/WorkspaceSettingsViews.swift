@@ -270,7 +270,6 @@ struct DataExportView: View {
           ValueRow(title: "Where the folder is", value: store.nodes.first(where: { $0.online })?.name ?? "The computer Wisp runs on")
           ValueRow(title: "What is inside", value: "\(info.notes ?? 0) notes · \(info.messages ?? 0) messages")
         }
-        if let dir = info.dataDir { Text(dir).font(.system(size: 13, design: .monospaced)).foregroundStyle(Palette.faint).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6) }
         CardHint("\(info.files ?? 0) files and \(info.agents ?? 0) agents too. Copy the whole Wisp folder to a USB drive or cloud folder and you have a full backup. Memory notes live in a different folder if you moved it.")
       } else if !store.isOwner {
         CardHint("Ask a workspace owner for the backup folder.")

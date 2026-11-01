@@ -88,7 +88,6 @@ struct MemoryHome: View {
         Button("Obsidian and storage", systemImage: "arrow.triangle.2.circlepath") { route = .storage }
       }
     }) {
-      Text("What your agents remember").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 4)
       if let agent = viewingAgent { ViewingBanner(agent: agent) { browse.viewAs = nil } }
       InlineError(error: action.error).padding(.horizontal, 4)
       MemorySearchField(prompt: "Search every note…", text: $query, id: "memory-search")

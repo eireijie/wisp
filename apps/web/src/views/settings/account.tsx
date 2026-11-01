@@ -301,7 +301,7 @@ function AndroidNotificationsPage() {
             )}
           </Row>
           {push.hubReady && push.allowed && push.registered && (
-            <Row label="Send a test notification" hint="Check that it reaches this phone.">
+            <Row label="Test" hint="Check that it reaches this phone.">
               <Button disabled={busy} onClick={() => void sendTest()}>
                 Send a test notification
               </Button>
@@ -373,7 +373,7 @@ function BrowserNotificationsPage() {
             {perm === "granted" && <Toggle label="Notifications on this device" on={prefs.enabled} onChange={toggle("enabled")} />}
           </Row>
           {perm === "granted" && (
-            <Row label="Send a test notification" hint="Check that it shows up on this device.">
+            <Row label="Test" hint="Check that it shows up on this device.">
               <Button onClick={sendTest}>Send a test notification</Button>
             </Row>
           )}
@@ -402,15 +402,7 @@ function BrowserNotificationsPage() {
           )}
         </Card>
       </Section>
-      {window.wispDesktop ? (
-        <Section title="When Wisp is closed">
-          <Card>
-            <Row label="Desktop app" />
-          </Card>
-        </Section>
-      ) : (
-        <PushSection push={push} />
-      )}
+      {!window.wispDesktop && <PushSection push={push} />}
       <Section title="Tell me about">
         <p className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted">
           <Pill tone={on ? "ok" : "warn"}>{on ? "Active" : "Paused"}</Pill>
