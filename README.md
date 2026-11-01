@@ -66,6 +66,8 @@ Wisp opens on **Set up Wisp**, and **Get started** walks you through the rest:
 
 ### Start over or remove Wisp
 
+In the desktop app: **Settings → Data → Remove Wisp…**. It lists what's on this computer and lets you keep anything. Without the app:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/eireijie/wisp/main/uninstall.sh | bash
 ```

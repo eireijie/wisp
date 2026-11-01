@@ -22,6 +22,11 @@ declare global {
       info(): Promise<{ version: string; platform: string; device: boolean }>;
       /** with a claim, this computer becomes that waiting device; without one, a new device */
       connectDevice(claim?: { token: string; name: string }): Promise<void>;
+      /** the app decides who may; removing happens in its own window, never from a page */
+      removal?: {
+        available(): Promise<boolean>;
+        open(): Promise<void>;
+      };
       updates: {
         status(): Promise<DesktopUpdate | null>;
         /** look for a newer Wisp now; downloads it when there is one */

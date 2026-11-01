@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+<title>Remove Wisp</title>
+<style>
+  :root {
+    --panel: #ffffff; --card: #f2f2f5; --control: #ffffff; --line: rgb(0 0 0 / 0.08); --control-line: rgb(0 0 0 / 0.14);
+    --ink: #17171a; --muted: #5f5f68; --accent: #17171a; --accent-ink: #fafafa; --bad: #c9372c; --bad-line: rgb(201 55 44 / 0.5); --ok: #1a9a4a; --link: #0a6fe0;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --panel: #18181b; --card: #202023; --control: #2a2a2e; --line: rgb(255 255 255 / 0.07); --control-line: rgb(255 255 255 / 0.14);
+      --ink: #f2f2f4; --muted: #a1a1aa; --accent: #f2f2f4; --accent-ink: #111113; --bad: #ff6b6b; --bad-line: rgb(255 107 107 / 0.5); --ok: #5bd68a; --link: #9ec5ff;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--panel); color: var(--ink); font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  main { height: 100%; padding: 22px 24px; display: flex; flex-direction: column; }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+  .sub { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+  .warn { margin-top: 12px; padding: 10px 14px; border: 1px solid var(--control-line); border-radius: 10px; font-size: 13px; }
+  .warn.bad { border-color: var(--bad-line); }
+  h2 { margin: 16px 0 6px 2px; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .card { background: var(--card); border-radius: 10px; overflow: hidden; }
+  .row { display: flex; gap: 12px; align-items: flex-start; padding: 11px 14px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; }
+  .row > span:first-of-type { flex: 1; min-width: 0; }
+  input[type="checkbox"] { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+  .s { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; overflow-wrap: anywhere; white-space: pre-line; }
+  .note { margin: 12px 2px 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  code { font: 12px ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+  button { height: 34px; padding: 0 16px; border-radius: 17px; border: 1px solid var(--control-line); background: var(--control); color: var(--ink); font: inherit; cursor: default; }
+  button:disabled { opacity: 0.5; }
+  button.small { height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; flex: none; }
+  button.go { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 500; }
+  button.danger { background: #c9372c; color: #fff; border-color: transparent; font-weight: 500; }
+  button.link { height: auto; padding: 0; border: 0; border-radius: 0; background: none; color: var(--link); font-size: 13px; }
+  footer { flex: none; display: flex; justify-content: flex-end; gap: 8px; padding-top: 14px; }
+  .list div { font-size: 13px; padding: 5px 0; }
+  .card.list { padding: 5px 14px; }
+  .red { color: var(--bad); }
+  .i { width: 16px; flex: none; text-align: center; }
+  .ok { color: var(--ok); }
+  label.type { display: block; margin-top: 22px; font-size: 13px; }
+  label.type input { display: block; width: 100%; margin-top: 6px; height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--control-line); background: var(--control); color: var(--ink); font-size: 14px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main id="app"><div class="sub">Looking at this computer…</div></main>
+<script>
+  const api = window.wispRemoval;
+  const app = document.getElementById("app");
+  let scan, backedUp = false, backupError = "", backingUp = false, picked = new Set(), word = "";
+
+  function el(tag, props = {}, ...kids) {
+    const node = Object.assign(document.createElement(tag), props);
+    node.append(...kids.filter((k) => k !== null && k !== undefined && k !== false));
+    return node;
+  }
+  const footer = (...buttons) => el("footer", {}, ...buttons);
+  const button = (text, onclick, className = "") => el("button", { textContent: text, onclick, className, type: "button" });
+
+  function warnings() {
+    return scan.warnings.map((w) => el("div", { className: `warn${w.bad ? " bad" : ""}`, textContent: w.text }));
+  }
+
+  function toggle(item, on) {
+    if (on) {
+      picked.add(item.id);
+      for (const need of item.needs ?? []) if (scan.items.some((i) => i.id === need)) picked.add(need);
+    } else {
+      picked.delete(item.id);
+      for (const other of scan.items) if (other.needs?.includes(item.id)) picked.delete(other.id);
+    }
+    showList();
+  }
+
+  function row(item) {
+    const box = el("input", { type: "checkbox", checked: picked.has(item.id), onchange: (e) => toggle(item, e.target.checked) });
+    box.setAttribute("aria-label", item.label);
+    const label = el("label", { className: "row" }, box, el("span", {}, item.label, el("span", { className: "s", textContent: item.detail })));
+    if (item.id === "data") label.append(button(backingUp ? "Saving…" : backedUp ? "Saved" : "Save a backup…", saveBackup, "small"));
+    return label;
+  }
+
+  async function saveBackup(e) {
+    e.preventDefault();
+    backingUp = true;
+    backupError = "";
+    render();
+    const r = await api.backup();
+    backingUp = false;
+    if (r?.path) backedUp = r.path;
+    else if (r?.error) backupError = r.error;
+    render();
+  }
+
+  let render = showList;
+
+  function showList() {
+    render = showList;
+    const lost = scan.items.filter((i) => i.group === "lost");
+    const rest = scan.items.filter((i) => i.group === "rest");
+    const kept = `${scan.tailscale ? "Wisp's Tailscale address turns off with the hub. " : ""}${scan.kept.join(", ").replace(/^./, (c) => c.toUpperCase())} stay.`;
+    app.replaceChildren(
+      el("div", { className: "scroll" },
+        el("h1", { textContent: "Remove Wisp from this computer" }),
+        el("p", { className: "sub", textContent: "Untick anything you want to keep." }),
+        ...warnings(),
+        lost.length ? el("h2", { textContent: "Can't be recovered" }) : null,
+        lost.length ? el("div", { className: "card" }, ...lost.map(row)) : null,
+        backupError ? el("p", { className: "note red", textContent: backupError }) : null,
+        backedUp ? el("p", { className: "note", textContent: `Backup saved in ${backedUp}. It doesn't include agent computers.` }) : null,
+        rest.length ? el("h2", { textContent: "Everything else" }) : null,
+        rest.length ? el("div", { className: "card" }, ...rest.map(row)) : null,
+        !scan.items.length ? el("p", { className: "sub", textContent: "Wisp left nothing here that it can remove." }) : null,
+        el("p", { className: "note", textContent: kept }),
+        ...(scan.manual.length
+          ? [el("h2", { textContent: "Needs an admin password, so remove these yourself" }), el("div", { className: "card" }, ...scan.manual.map((m) => el("div", { className: "row" }, el("span", {}, m.label, el("span", { className: "s" }, el("code", { textContent: m.command }))))))]
+          : []),
+      ),
+      footer(button("Cancel", () => api.close()), Object.assign(button("Continue", showConfirm, "go"), { disabled: !picked.size })),
+    );
+  }
+
+  function showConfirm() {
+    render = showConfirm;
+    word = "";
+    const chosen = scan.items.filter((i) => picked.has(i.id));
+    const go = Object.assign(button("Remove Wisp", startRemoving, "danger"), { disabled: true });
+    const input = el("input", { autocomplete: "off", spellcheck: false, oninput: (e) => { word = e.target.value; go.disabled = word !== scan.word; } });
+    const hasData = picked.has("data");
+    app.replaceChildren(
+      el("div", { className: "scroll" },
+        el("h1", { textContent: "Remove these for good?" }),
+        el("div", { className: "card list", style: "margin-top:14px" }, ...chosen.map((i) => el("div", { className: i.group === "lost" ? "red" : "", textContent: i.id === "data" ? `Chats, memory and files. ${i.detail}` : i.id === "vms" ? `${i.label.replace("Agent computers · ", "")} agent computers and everything on them` : i.detail ? `${i.label}: ${i.detail}` : i.label })), scan.tailscale && picked.has("services") ? el("div", { textContent: "Wisp's Tailscale address" }) : null),
+        hasData && !backedUp ? el("div", { className: "red", style: "margin-top:12px;font-size:13px" }, "You haven't saved a backup. ", button("Save one", showList, "link")) : null,
+        ...warnings().map((w) => { w.className = "sub"; return w; }),
+        el("label", { className: "type" }, `Type ${scan.word} to confirm`, input),
+      ),
+      footer(button("Back", showList), go),
+    );
+    input.focus();
+  }
+
+  function showSteps(steps, done) {
+    const failed = steps.filter((s) => s.state === "failed").length;
+    const later = steps.some((s) => s.state === "later");
+    const title = !done ? "Removing…" : later ? "One thing is left to do" : failed ? `Finished, ${failed === 1 ? "1 step" : `${failed} steps`} failed` : "Removed";
+    const sub = !done ? "" : later ? "Wisp has to close so it can remove the app. Steps that failed are listed here and again after it closes." : "";
+    const mark = { running: "…", done: "✓", failed: "✕", later: "·" };
+    app.replaceChildren(
+      el("div", { className: "scroll" },
+        el("h1", { textContent: title }),
+        el("p", { className: "sub", textContent: sub, hidden: !sub }),
+        el("div", { className: "card", style: "margin-top:14px" }, ...steps.map((s) =>
+          el("div", { className: "row" }, el("span", { className: `i ${s.state === "done" ? "ok" : s.state === "failed" ? "red" : ""}`, textContent: mark[s.state], ariaHidden: "true" }), el("span", {}, s.label, s.detail ? el("span", { className: "s", textContent: s.detail }) : null)))),
+      ),
+      done ? footer(button(later ? "Close Wisp and finish" : "Done", () => api.finish(), "go")) : footer(),
+    );
+  }
+
+  async function startRemoving() {
+    showSteps([], false);
+    const stop = api.onSteps((steps) => showSteps(steps, false));
+    const result = await api.start([...picked], word);
+    stop();
+    showSteps(result.steps ?? [{ state: "failed", label: "Nothing was removed", detail: result.error ?? "" }], true);
+  }
+
+  api.scan().then((result) => {
+    scan = result;
+    picked = new Set(scan.items.map((i) => i.id));
+    showList();
+  });
+</script>
+</body>
+</html>

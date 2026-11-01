@@ -464,4 +464,4 @@ class Child {
   }
 }
 
-module.exports = { Child, findNode, findWisp, isWisp, runtime, localSetupCode, hubUp, deviceConnected, deviceLogConnected, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };
+module.exports = { env, Child, findNode, findWisp, isWisp, runtime, localSetupCode, hubUp, deviceConnected, deviceLogConnected, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };
