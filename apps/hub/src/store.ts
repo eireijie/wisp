@@ -1140,6 +1140,12 @@ export class Store {
     return this.task(taskId);
   }
 
+  /** A failed task goes back to open; what went wrong last time no longer describes it. */
+  reopenTask(taskId: string) {
+    this.db.prepare("UPDATE tasks SET status = 'open', result = NULL, updated_at = ? WHERE id = ?").run(now(), taskId);
+    return this.task(taskId);
+  }
+
   // --- memory access rules -------------------------------------------------
 
   accessRules(workspaceId: string): AccessRule[] {

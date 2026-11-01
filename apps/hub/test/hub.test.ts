@@ -1208,6 +1208,7 @@ describe("runs that go wrong", () => {
     await waitFor(async () => (await api<any[]>("GET", "/api/tasks")).data.find((t) => t.id === task.id && t.status === "failed"));
     const again = await api<any>("POST", `/api/tasks/${task.id}/retry`);
     expect(again.data.status).toBe("open");
+    expect(again.data.result).toBeFalsy();
     await waitFor(async () => node.runs.slice(before).filter((r) => r.type === "run" && r.run.agentId === nova.id).length >= 2);
     expect((await api<any>("POST", "/api/tasks/nope/retry")).status).toBe(404);
   });

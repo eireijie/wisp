@@ -1751,7 +1751,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!agent || !task.channelId || !task.threadId) return reply.code(409).send({ error: "Nobody has this task any more. Start a new task instead." });
     const refused = hub.whyNotAllowed(agent, c.actor.id) ?? (hub.answers(agent, c.actor.id) ? null : `${agent.name} only answers the people it was set up for.`);
     if (refused) return reply.code(403).send({ error: refused });
-    const updated = store.updateTask(task.id, "open")!;
+    const updated = store.reopenTask(task.id)!;
     hub.broadcast(c.workspaceId, { type: "tasks_changed" });
     hub.dispatchRun(store.createRun({ agentId: agent.id, channelId: task.channelId, threadId: task.threadId, triggerMessageId: task.threadId, hop: 0, requestedBy: c.actor.id }));
     return updated;

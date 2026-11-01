@@ -1,3 +1,4 @@
+import { closedLanes } from "./task-lanes.ts";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Check, ChevronRight, Circle, CircleCheck, CircleX, Crown, Loader2, MoreHorizontal, Paperclip, Plus, Sparkles, Users, WifiOff, X } from "lucide-react";
 import { harnessInfo, type Actor, type Agent } from "@wisp/core";
@@ -218,7 +219,7 @@ function Board({ leadId }: { leadId: string | null }) {
   const needsYou = shown.flatMap(all).filter((t) => !isClosed(t) && stateOf(t) === "needsYou");
   const inProgress = open.filter((t) => ["working", "blocked"].includes(stateOf(t)) && !needsYou.includes(t));
   const toDo = open.filter((t) => !inProgress.includes(t) && !needsYou.includes(t));
-  const closed = shown.filter(isClosed).slice(0, 20);
+  const { failed, done: closed } = closedLanes(shown.filter(isClosed));
 
   const fromName = (a: Actor) => (a.kind === "agent" ? `@${agents.find((x) => x.id === a.id)?.handle ?? "agent"}` : a.id === me.user.id ? "you" : (members.find((m) => m.id === a.id)?.name ?? "someone"));
   const ctx: Ctx = { agents, leadId, children, byId, stateOf, stateLabel, deviceName, waitingOn, fromName, canCancel: me.role !== "guest", refetch };
@@ -230,6 +231,8 @@ function Board({ leadId }: { leadId: string | null }) {
     { title: "Waiting on you", list: needsYou, empty: "Nothing is waiting on you." },
     { title: "In progress", list: inProgress, empty: "No agent is on a task right now." },
     { title: "To do", list: toDo, empty: "Nothing queued." },
+    // only there while something has failed
+    ...(failed.length ? [{ title: "Failed", list: failed, empty: "" }] : []),
     { title: "Done", list: closed, empty: "Nothing finished yet." },
   ];
 
@@ -307,7 +310,7 @@ function Board({ leadId }: { leadId: string | null }) {
               {columns.map((c) => (
                 <section key={c.title} className="flex-1 min-w-0 flex flex-col gap-2.5" aria-label={c.title}>
                   <div className="flex justify-between px-1 text-[13px] font-medium text-muted">
-                    <h2>{c.title}</h2>
+                    <h2 className={c.title === "Failed" ? "text-bad" : undefined}>{c.title}</h2>
                     <span className="font-medium text-faint">{c.list.length}</span>
                   </div>
                   {c.list.map((t) => (
@@ -350,17 +353,47 @@ function TaskRowItem({ task: t, ctx, onOpen }: { task: TaskRow; ctx: Ctx; onOpen
   const agent = ctx.agents.find((a) => a.id === t.toAgentId);
   const state = ctx.stateOf(t);
   return (
-    <button onClick={onOpen} className="w-full flex items-center gap-3 min-h-14 px-4 py-3 text-left hover:bg-hover min-w-0">
-      <AgentAvatar agent={agent} size={32} interactive={false} />
-      <span className="min-w-0 flex-1 flex flex-col gap-[5px]">
-        <span className="truncate text-base font-medium">{t.title}</span>
-        <span className="flex items-center gap-2 min-w-0">
-          <StateChip tone={STATE[state].tone}>{ctx.stateLabel(t)}</StateChip>
-          <span className="text-[13px] text-faint truncate">{agent?.name ?? "an agent"}</span>
+    <div>
+      <button onClick={onOpen} className="w-full flex items-center gap-3 min-h-14 px-4 py-3 text-left hover:bg-hover min-w-0">
+        <AgentAvatar agent={agent} size={32} interactive={false} />
+        <span className="min-w-0 flex-1 flex flex-col gap-[5px]">
+          <span className="truncate text-base font-medium">{t.title}</span>
+          <span className="flex items-center gap-2 min-w-0">
+            <StateChip tone={STATE[state].tone}>{ctx.stateLabel(t)}</StateChip>
+            <span className="text-[13px] text-faint truncate">{agent?.name ?? "an agent"}</span>
+          </span>
         </span>
-      </span>
-      <ChevronRight size={16} strokeWidth={2} className="text-faint shrink-0" />
-    </button>
+        <ChevronRight size={16} strokeWidth={2} className="text-faint shrink-0" />
+      </button>
+      <div className="empty:hidden px-4 pb-3"><RetryTask task={t} ctx={ctx} /></div>
+    </div>
+  );
+}
+
+/** Hand a failed task back to its agent. */
+function RetryTask({ task: t, ctx }: { task: TaskRow; ctx: Ctx }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (ctx.stateOf(t) !== "failed" || !ctx.canCancel) return null;
+  const retry = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api("POST", `/api/tasks/${t.id}/retry`);
+      ctx.refetch();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <CardButton disabled={busy} onClick={() => void retry()}>
+        Try again
+      </CardButton>
+      {error && <span className="text-sm text-bad">{error}</span>}
+    </span>
   );
 }
 
@@ -371,24 +404,27 @@ function TaskCardItem({ task: t, ctx, selected, onOpen }: { task: TaskRow; ctx: 
   const subs = ctx.children.get(t.id) ?? [];
   const done = subs.filter((s) => s.status === "done").length;
   return (
-    <button onClick={onOpen} aria-pressed={selected} className={cx("text-left rounded-xl bg-card border px-3.5 py-3 flex flex-col gap-2 w-full transition-colors hover:bg-hover", selected ? "border-badge/70" : "border-line")}>
-      <span className="text-sm font-medium leading-snug break-words">{t.title}</span>
-      <span className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-        <AgentAvatar agent={agent} size={22} interactive={false} />
-        <span className="text-xs text-faint flex-1 min-w-12 truncate">{agent?.name ?? "an agent"}</span>
-        <StateChip tone={STATE[state].tone}>{ctx.stateLabel(t)}</StateChip>
-      </span>
-      {subs.length > 0 && (
-        <span className="flex items-center gap-2 text-xs text-faint">
-          <span className="h-1 w-16 rounded-full bg-chip overflow-hidden" aria-hidden>
-            <span className="block h-full bg-ok" style={{ width: `${(done / subs.length) * 100}%` }} />
-          </span>
-          <span className="tabular-nums">
-            {done}/{subs.length} subtasks
-          </span>
+    <div className="flex flex-col gap-2">
+      <button onClick={onOpen} aria-pressed={selected} className={cx("text-left rounded-xl bg-card border px-3.5 py-3 flex flex-col gap-2 w-full transition-colors hover:bg-hover", selected ? "border-badge/70" : "border-line")}>
+        <span className="text-sm font-medium leading-snug break-words">{t.title}</span>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <AgentAvatar agent={agent} size={22} interactive={false} />
+          <span className="text-xs text-faint flex-1 min-w-12 truncate">{agent?.name ?? "an agent"}</span>
+          <StateChip tone={STATE[state].tone}>{ctx.stateLabel(t)}</StateChip>
         </span>
-      )}
-    </button>
+        {subs.length > 0 && (
+          <span className="flex items-center gap-2 text-xs text-faint">
+            <span className="h-1 w-16 rounded-full bg-chip overflow-hidden" aria-hidden>
+              <span className="block h-full bg-ok" style={{ width: `${(done / subs.length) * 100}%` }} />
+            </span>
+            <span className="tabular-nums">
+              {done}/{subs.length} subtasks
+            </span>
+          </span>
+        )}
+      </button>
+      <RetryTask task={t} ctx={ctx} />
+    </div>
   );
 }
 
@@ -401,7 +437,6 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
   const prefs = usePrefs();
   const agent = ctx.agents.find((a) => a.id === t.toAgentId);
   const state = ctx.stateOf(t);
-  const [retryError, setRetryError] = useState<string | null>(null);
   const note = ctx.waitingOn(t);
   const subs = ctx.children.get(t.id) ?? [];
   const name = agent?.name ?? "The agent";
@@ -555,14 +590,7 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
                 Open conversation
               </button>
             )}
-            {state === "failed" && ctx.canCancel && (
-              <div className="pt-1 flex flex-wrap items-center gap-2">
-                <CardButton tone="primary" onClick={() => void api("POST", `/api/tasks/${t.id}/retry`).then(ctx.refetch, (e) => setRetryError((e as Error).message))}>
-                  Try again
-                </CardButton>
-                {retryError && <span className="text-sm text-bad">{retryError}</span>}
-              </div>
-            )}
+            <RetryTask task={t} ctx={ctx} />
           </GroupCard>
         </>
       )}

@@ -783,7 +783,7 @@ export class Hub {
   retryRun(run: NonNullable<ReturnType<Store["run"]>>, requestedBy: string): string {
     const task = run.threadId ? this.store.taskByThread(run.threadId) : undefined;
     if (task?.toAgentId === run.agentId && task.status === "failed" && !task.result?.startsWith("Cancelled")) {
-      this.store.updateTask(task.id, "open");
+      this.store.reopenTask(task.id);
       this.broadcast(task.workspaceId, { type: "tasks_changed" });
     }
     const runId = this.store.createRun({ agentId: run.agentId, channelId: run.channelId, threadId: run.threadId, triggerMessageId: run.triggerMessageId, hop: run.hop, requestedBy });
