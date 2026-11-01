@@ -3,10 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { HARNESSES, VM_HARNESSES, harnessInfo, runsInVm } from "@wisp/core";
-import { SIGNED_IN, SIGN_IN_COMMAND, recipeTag, runArgs } from "../src/computers/docker.ts";
+import { DockerVm, PRUNE_CONNECTIONS_SCRIPT, SIGNED_IN, SIGN_IN_COMMAND, recipeTag, runArgs, writeFileScript } from "../src/computers/docker.ts";
 import { exec, jpegSize } from "../src/computers/driver.ts";
 import { localFiles, shellFiles } from "../src/computers/transfer.ts";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { xdo } from "../src/computers/x11.ts";
 import { textPieces } from "../src/computers/macos.ts";
 import { discoverAgents, frontmatter, hermesModel, readDiscovered } from "../src/discover.ts";
@@ -173,5 +173,58 @@ describe("files on a device's own screen", () => {
     await expect(files.read("~/../../etc/hosts")).rejects.toThrow(/home folder|no hosts/);
     fs.symlinkSync("/etc", path.join(home, "sneaky"));
     await expect(files.list("~/sneaky")).rejects.toThrow(/home folder/);
+  });
+});
+
+describe("secrets written inside a VM", () => {
+  it("are never readable by others, even while being written, and folders made for them are private", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-vmwrite-"));
+    const file = path.join(dir, "conn", "auth.json");
+    const child = spawn("sh", ["-c", writeFileScript(file, "600")], { stdio: ["pipe", "ignore", "ignore"] });
+    child.stdin.write("sec");
+    let tmp: string | undefined;
+    for (let i = 0; i < 200 && !tmp; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+      tmp = fs.existsSync(path.dirname(file)) ? fs.readdirSync(path.dirname(file)).find((f) => f.endsWith(".tmp")) : undefined;
+    }
+    expect(tmp).toBeTruthy();
+    // half written: private already, and not yet where a harness would read it
+    expect(fs.statSync(path.join(path.dirname(file), tmp!)).mode & 0o777).toBe(0o600);
+    expect(fs.existsSync(file)).toBe(false);
+    expect(fs.statSync(path.dirname(file)).mode & 0o777).toBe(0o700);
+    child.stdin.end("ret");
+    await new Promise((r) => child.on("close", r));
+    expect(fs.readFileSync(file, "utf8")).toBe("secret");
+    expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+    expect(fs.readdirSync(path.dirname(file))).toEqual(["auth.json"]);
+  });
+
+  it("go when their run ends", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-vmclean-"));
+    const log = path.join(dir, "args");
+    const engine = path.join(dir, "engine");
+    fs.writeFileSync(engine, `#!/bin/sh\necho "$@" > '${log}'\n`, { mode: 0o755 });
+    const vm = Object.assign(Object.create(DockerVm.prototype), { engine: { bin: engine, kind: "docker" }, user: "wisp", name: "wisp-cmp_x" }) as DockerVm;
+    await vm.cleanupRun("run_1/../x");
+    expect(fs.readFileSync(log, "utf8").trim()).toBe("exec -u wisp wisp-cmp_x rm -rf /tmp/wisp-run-run_1x /tmp/wisp-run-run_1x.pid");
+  });
+
+  it("leave public files public", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-vmwrite-"));
+    const file = path.join(dir, "tools.json");
+    expect(spawnSync("sh", ["-c", writeFileScript(file, "644")], { input: "{}" }).status).toBe(0);
+    expect(fs.statSync(file).mode & 0o777).toBe(0o644);
+  });
+
+  it("go when their connection does, and only then", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-vmprune-"));
+    for (const name of ["mc_keep", "mc_gone", "mc gone too"]) {
+      fs.mkdirSync(path.join(dir, name, "codex"), { recursive: true });
+      fs.writeFileSync(path.join(dir, name, "codex", "auth.json"), "{}");
+    }
+    expect(spawnSync("sh", ["-c", PRUNE_CONNECTIONS_SCRIPT, "sh", dir, "mc_keep"]).status).toBe(0);
+    expect(fs.readdirSync(dir)).toEqual(["mc_keep"]);
+    // no folder at all is fine
+    expect(spawnSync("sh", ["-c", PRUNE_CONNECTIONS_SCRIPT, "sh", path.join(dir, "missing")]).status).toBe(0);
   });
 });

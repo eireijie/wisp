@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { credentialSupport, harnessLabel, hermesProvider, providerLabel, withArticle, type ConnectionSecret, type RunCredential } from "@wisp/core";
@@ -13,7 +14,9 @@ import { yamlSetScalar } from "./harness-formats.ts";
  *
  * Harnesses renew some sign-ins as they go and the old refresh token stops working (OpenAI rotates
  * it). After a run, `refreshed()` says whether that happened, so the device can send the new one
- * back to the hub and the next run anywhere uses it.
+ * back to the hub and the next run anywhere uses it. A harness may be renewing in this folder while
+ * another run is being set up, so a sign-in file is only written when it has to change (the hub's
+ * copy is newer), and every file is swapped in whole, so nobody reads half of one.
  */
 
 /** The filesystem the harness runs on: this device's, or a VM's (through its engine). */
@@ -31,8 +34,15 @@ export const localCredentialFs: CredentialFs = {
   read: (f) => fs.readFile(f, "utf8").catch(() => null),
   async write(f, content, mode) {
     await fs.mkdir(path.dirname(f), { recursive: true, mode: 0o700 });
-    await fs.writeFile(f, content, mode ? { mode } : undefined);
-    if (mode) await fs.chmod(f, mode).catch(() => {});
+    const tmp = `${f}.${crypto.randomBytes(4).toString("hex")}.tmp`;
+    try {
+      await fs.writeFile(tmp, content, mode ? { mode } : undefined);
+      if (mode) await fs.chmod(tmp, mode).catch(() => {});
+      await fs.rename(tmp, f);
+    } catch (err) {
+      await fs.rm(tmp, { force: true }).catch(() => {});
+      throw err;
+    }
   },
   async link(target, link) {
     if (!(await fs.stat(target).catch(() => null)) || (await fs.lstat(link).catch(() => null))) return;
@@ -93,7 +103,8 @@ export async function prepareCredential(harness: string, cred: RunCredential, at
     const local = parseJson(await at.fs.read(authFile));
     // two runs on this device share the folder: a sign-in renewed here since is newer than the hub's copy, so it stays
     const auth = local && newer(local.last_refresh, given.last_refresh) ? local : given;
-    await at.fs.write(authFile, JSON.stringify(auth, null, 2), 0o600);
+    // what's there already stands: writing it back could undo a renewal another run just made
+    if (!local || (auth !== local && !sameTokens(tokensOf(local), tokensOf(auth)))) await at.fs.write(authFile, JSON.stringify(auth, null, 2), 0o600);
     await copyConfig(at, "config.toml");
     for (const name of ["skills", "AGENTS.md", "rules", "prompts"]) await at.fs.link(at.fs.join(at.baseHome, name), at.fs.join(home, name));
     const sent = tokensOf(auth);
@@ -102,7 +113,7 @@ export async function prepareCredential(harness: string, cred: RunCredential, at
       async refreshed() {
         const now = parseJson(await at.fs.read(authFile));
         const t = now ? tokensOf(now) : null;
-        if (!now || !t?.refresh_token || (t.refresh_token === sent.refresh_token && t.access_token === sent.access_token)) return local && auth === local ? { auth } : null;
+        if (!now || !t?.refresh_token || sameTokens(t, sent)) return local && auth === local ? { auth } : null;
         return { auth: now };
       },
     };
@@ -133,21 +144,28 @@ export async function prepareCredential(harness: string, cred: RunCredential, at
     await at.fs.write(at.fs.join(home, ".env"), `${dotenv ? dotenv + "\n" : ""}${keyVar && value ? `${keyVar}=${value}\n` : ""}`, 0o600);
     // a sign-in Hermes renews itself goes in its credential pool (auth.json)
     const authFile = at.fs.join(home, "auth.json");
-    let sent: Record<string, unknown> | null = null;
+    let sent: Record<string, any> | null = null;
+    let renewedHere = false;
     if (cred.kind === "oauth" && cred.provider !== "anthropic") {
       const entry = cred.provider === "openai" ? hermesEntryFromCodex(s.auth) : s.pool ? { id: "wisp", label: "Wisp", auth_type: "oauth", priority: 0, source: "manual:device_code", ...s.pool } : null;
       if (!entry?.refresh_token) throw new Error(`the ${providerLabel(cred.provider)} connection has no sign-in; connect it again in Settings → Models`);
-      const local = parseJson(await at.fs.read(authFile))?.credential_pool?.[provider]?.[0];
-      sent = local && newer(local.last_refresh, entry.last_refresh as string | undefined) ? local : entry;
-      await at.fs.write(authFile, JSON.stringify({ version: 1, providers: {}, active_provider: provider, credential_pool: { [provider]: [sent] } }, null, 2), 0o600);
+      const onDisk = parseJson(await at.fs.read(authFile));
+      const local = onDisk?.credential_pool?.[provider]?.[0];
+      renewedHere = !!local && newer(local.last_refresh, entry.last_refresh);
+      sent = renewedHere ? local : entry;
+      // as with Codex: what's there already stands, or a renewal another run just made could be undone
+      if (onDisk?.active_provider !== provider || !local || (!renewedHere && !sameTokens(local, entry))) await at.fs.write(authFile, JSON.stringify({ version: 1, providers: {}, active_provider: provider, credential_pool: { [provider]: [sent] } }, null, 2), 0o600);
     } else await at.fs.write(authFile, JSON.stringify({ version: 1, providers: {}, credential_pool: {} }, null, 2), 0o600);
     for (const name of ["skills", "memories", "SOUL.md"]) await at.fs.link(at.fs.join(at.baseHome, name), at.fs.join(home, name));
     return {
       env: { HERMES_HOME: home },
       async refreshed() {
         if (!sent) return null;
-        const now = parseJson(await at.fs.read(authFile))?.credential_pool?.[provider]?.[0];
-        if (!now?.refresh_token || (now.refresh_token === sent.refresh_token && now.access_token === sent.access_token)) return null;
+        const read = parseJson(await at.fs.read(authFile))?.credential_pool?.[provider]?.[0];
+        const changed = read?.refresh_token && !sameTokens(read, sent);
+        // renewed during this run, or before it without the hub hearing
+        const now = changed ? read : renewedHere ? sent : null;
+        if (!now) return null;
         return cred.provider === "openai" ? { auth: codexAuthFromHermes(s.auth ?? {}, now) } : { pool: { access_token: now.access_token, refresh_token: now.refresh_token, base_url: now.base_url, last_refresh: now.last_refresh } };
       },
     };
@@ -163,6 +181,10 @@ async function copyConfig(at: CredentialPlaces, name: string) {
 
 function tokensOf(auth: Record<string, unknown>): { access_token?: string; refresh_token?: string } {
   return (auth.tokens as { access_token?: string; refresh_token?: string }) ?? {};
+}
+
+function sameTokens(a: { access_token?: unknown; refresh_token?: unknown }, b: { access_token?: unknown; refresh_token?: unknown }): boolean {
+  return a.refresh_token === b.refresh_token && a.access_token === b.access_token;
 }
 
 function parseJson(text: string | null): any {

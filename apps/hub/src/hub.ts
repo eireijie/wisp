@@ -32,6 +32,8 @@ import { guestEvent } from "./guest-computers.ts";
 const CONTEXT_MESSAGES = 20;
 /** How long after a run ends its device may still send back the sign-in it renewed. */
 export const RENEW_GRACE_MS = 10 * 60_000;
+/** How long a cancelled run keeps its connection when its device doesn't say it stopped. */
+const CANCEL_HOLD_MS = 60_000;
 
 interface ClientConn {
   socket: WebSocket;
@@ -97,6 +99,8 @@ export class Hub {
    * for RENEW_GRACE_MS after (a device that was offline sends it when it reconnects).
    */
   private handedOut = new Map<string, { nodeId: string; connectionId: string; endedAt: number | null }>();
+  /** when this hub started: runs older than this may have been handed a connection it no longer remembers */
+  private handedOutSince = new Date().toISOString();
   readonly skills: SkillStore;
   /** iOS push notifications (optional; needs an APNs key) */
   readonly apns: Apns;
@@ -335,8 +339,9 @@ export class Hub {
   private releaseConnection(runId: string) {
     const at = Date.now();
     const handed = this.handedOut.get(runId);
-    if (handed && handed.endedAt === null) handed.endedAt = at;
-    for (const [id, h] of this.handedOut) if (h.endedAt !== null && at - h.endedAt > RENEW_GRACE_MS) this.handedOut.delete(id);
+    // a run that really ends after its dropped device freed it counts from now
+    if (handed) handed.endedAt = at;
+    for (const [id, h] of this.handedOut) if (h.endedAt !== null && at - h.endedAt > RENEW_GRACE_MS && this.store.run(id)?.status !== "running") this.handedOut.delete(id);
     const cid = this.connectionRuns.get(runId);
     if (!cid) return;
     this.connectionRuns.delete(runId);
@@ -379,6 +384,19 @@ export class Hub {
   }
 
   /** Tell the owner's apps their connections changed (a plan's usage, a renewed or failed sign-in). */
+  /** Tell a device which connections it may keep folders for, so it removes the sign-ins and keys of any others. */
+  private sendConnectionsKeep(conn: NodeConn) {
+    const ownerId = this.store.node(conn.nodeId)?.ownerId;
+    const connectionIds = ownerId ? this.models.mine(conn.workspaceId, ownerId).map((r) => r.id) : [];
+    const computers = this.store.computersOnNode(conn.nodeId).filter((c) => c.kind === "vm").map((c) => this.computers.spec(c));
+    this.send(conn, { type: "connections_keep", connectionIds, computers });
+  }
+
+  /** A connection was removed: devices that are online drop its folder now, the others when they reconnect. */
+  connectionRemoved(workspaceId: string) {
+    for (const conn of this.nodes.values()) if (conn.workspaceId === workspaceId) this.sendConnectionsKeep(conn);
+  }
+
   connectionsChanged(connectionId: string) {
     const r = this.models.row(connectionId);
     if (r) this.broadcast(r.workspace_id, { type: "model_connections_changed" }, (u) => u === r.user_id);
@@ -466,6 +484,7 @@ export class Hub {
         for (const a of store.agentsOnNode(conn.nodeId)) this.broadcast(conn.workspaceId, { type: "agent_status", agentId: a.id, status: this.agentStatus(a) });
         for (const r of store.queuedRunsForNode(conn.nodeId)) this.dispatchRun(r.id);
         this.computers.nodeBack(conn.nodeId);
+        this.sendConnectionsKeep(conn);
         return;
       }
       case "capabilities": {
@@ -525,9 +544,7 @@ export class Hub {
       case "credential_refreshed": {
         // only for a run of this device's on this connection, while it runs or shortly after, and
         // only for sign-ins that rotate (a key or a long-lived token is never "renewed")
-        const h = msg.runId ? this.handedOut.get(msg.runId) : undefined;
-        if (!h || h.nodeId !== conn.nodeId || h.connectionId !== msg.connectionId) return;
-        if (h.endedAt !== null && Date.now() - h.endedAt > RENEW_GRACE_MS) return;
+        if (!msg.runId || !this.mayRenew(conn, msg.runId, msg.connectionId)) return;
         if (!this.models.rotates(msg.connectionId)) return;
         if (this.models.saveRenewed(msg.connectionId, msg.secret)) {
           this.connectionsChanged(msg.connectionId);
@@ -580,8 +597,10 @@ export class Hub {
       case "run_done":
       case "run_failed": {
         const run = this.ownedRun(conn, msg.runId);
-        // a device reporting late (after a cancel, or twice) doesn't reopen a run that's over
-        if (!run || run.status !== "running") return;
+        // a device reporting late (after a cancel, or twice) doesn't reopen a run that's over,
+        // but a cancelled run's harness has stopped now, so its connection is free
+        if (!run) return;
+        if (run.status !== "running") return this.releaseConnection(run.id);
         this.finishRun(conn.workspaceId, run, msg.type === "run_done" ? { finalText: msg.finalText } : { error: msg.error });
         return;
       }
@@ -688,6 +707,21 @@ export class Hub {
     if (conn && credentialSupport(agent.harness, conn.provider, conn.kind)) return `The ${providerLabel(conn.provider)} ${conn.kind === "oauth" ? "sign-in" : "key"} "${conn.label}" stopped working (${error.slice(0, 200)}). Connect it again in Settings → Models.`;
     const device = agent.nodeId ? this.store.node(agent.nodeId)?.name : undefined;
     return problem.explain(device ?? "its device");
+  }
+
+  /**
+   * May this device send back a renewal for this run? The hub's list of runs handed a connection is
+   * gone after a restart, while the old token is dead all the same, so a run from before one is
+   * judged by what's stored: its agent is on this device and connection, and it's the connection
+   * owner's device.
+   */
+  private mayRenew(conn: NodeConn, runId: string, connectionId: string): boolean {
+    const h = this.handedOut.get(runId);
+    if (h) return h.nodeId === conn.nodeId && h.connectionId === connectionId && (h.endedAt === null || this.store.run(runId)?.status === "running" || Date.now() - h.endedAt <= RENEW_GRACE_MS);
+    const run = this.ownedRun(conn, runId);
+    if (!run || run.createdAt >= this.handedOutSince || this.store.agent(run.agentId)?.settings.connectionId !== connectionId) return false;
+    if (this.models.row(connectionId)?.user_id !== this.store.node(conn.nodeId)?.ownerId) return false;
+    return !run.finishedAt || Date.now() - Date.parse(run.finishedAt) <= RENEW_GRACE_MS;
   }
 
   private ownedRun(conn: NodeConn, runId: string) {
@@ -1139,7 +1173,9 @@ export class Hub {
     if (conn) this.send(conn, { type: "cancel", runId });
     this.store.setRunStatus(runId, "cancelled");
     this.live.delete(runId);
-    this.releaseConnection(runId);
+    // its harness may be renewing the sign-in until the device says it stopped, so the connection is held till then
+    if (conn && this.connectionRuns.has(runId)) setTimeout(() => !this.closed && this.releaseConnection(runId), CANCEL_HOLD_MS).unref?.();
+    else this.releaseConnection(runId);
     this.taskReplies.delete(runId);
     this.loops.forget(runId);
     // the device's late report is ignored, so clients hear from here that the agent is free again

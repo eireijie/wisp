@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { RunCredential } from "@wisp/core";
 import { claudePlan, codexArgs, codexConnectionArgs, codexPlan, codexUsageFromRollout, localCredentialFs, prepareCredential, runCodexHome, setupTokenFrom } from "../src/index.ts";
-import { codexAuthFromHermes, hermesEntryFromCodex } from "../src/credentials.ts";
+import { codexAuthFromHermes, hermesEntryFromCodex, type CredentialFs } from "../src/credentials.ts";
 
 let dir: string;
 beforeAll(async () => {
@@ -74,6 +74,42 @@ describe("handing a connection to Codex", () => {
     expect((await p.refreshed())?.auth).toMatchObject({ tokens: { refresh_token: "renewed-here" } });
   });
 
+  it("doesn't undo a renewal another run makes while this run is being set up", async () => {
+    const baseHome = await base("codex-base-race", {});
+    const connectionHome = path.join(dir, "conns", "mc_race", "codex");
+    const authFile = path.join(connectionHome, "auth.json");
+    await fs.mkdir(connectionHome, { recursive: true });
+    await fs.writeFile(authFile, JSON.stringify(chatgpt("r1")));
+    // the other run's Codex renews right after this run read the file
+    const racing: CredentialFs = {
+      ...localCredentialFs,
+      async read(f) {
+        const text = await localCredentialFs.read(f);
+        if (f === authFile) await fs.writeFile(authFile, JSON.stringify(chatgpt("r2", "2026-10-29T00:00:00.000Z")));
+        return text;
+      },
+    };
+    await prepareCredential("codex", cred("openai", "oauth", { auth: chatgpt("r1") }), { fs: racing, baseHome, connectionHome });
+    expect(JSON.parse(await read(authFile)).tokens.refresh_token).toBe("r2");
+  });
+
+  it("replaces files whole, leaving no temporary copy of a secret", async () => {
+    const baseHome = await base("codex-base-whole", {});
+    const connectionHome = path.join(dir, "conns", "mc_whole", "codex");
+    await prepareCredential("codex", cred("openai", "oauth", { auth: chatgpt("r1") }), { fs: localCredentialFs, baseHome, connectionHome });
+    const before = (await fs.stat(path.join(connectionHome, "auth.json"))).ino;
+    await prepareCredential("codex", cred("openai", "oauth", { auth: chatgpt("r3", "2026-10-30T00:00:00.000Z") }), { fs: localCredentialFs, baseHome, connectionHome });
+    // a new file swapped in, so a harness reading at that moment never sees half of one
+    expect((await fs.stat(path.join(connectionHome, "auth.json"))).ino).not.toBe(before);
+    expect(JSON.parse(await read(path.join(connectionHome, "auth.json"))).tokens.refresh_token).toBe("r3");
+    expect((await fs.stat(path.join(connectionHome, "auth.json"))).mode & 0o777).toBe(0o600);
+    expect((await fs.readdir(connectionHome)).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+    const failing = path.join(dir, "conns", "mc_whole", "a-folder");
+    await fs.mkdir(failing, { recursive: true });
+    await expect(localCredentialFs.write(failing, "secret", 0o600)).rejects.toThrow();
+    expect((await fs.readdir(path.dirname(failing))).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+
   it("adds the flags a connection needs, and reads the session from the run's own CODEX_HOME", () => {
     expect(codexConnectionArgs({ provider: "openrouter", kind: "key" }).join(" ")).toContain('model_providers.openrouter.env_key="OPENROUTER_API_KEY"');
     expect(codexConnectionArgs({ provider: "openai", kind: "oauth" })).toEqual(["-c", 'cli_auth_credentials_store="file"']);
@@ -123,6 +159,36 @@ describe("handing a connection to Hermes", () => {
     await fs.writeFile(path.join(connectionHome, "auth.json"), JSON.stringify(auth));
     // what Hermes doesn't track (the id token, the account) is kept
     expect((await p.refreshed())?.auth).toMatchObject({ tokens: { refresh_token: "r2", access_token: "a2", id_token: "id", account_id: "acct" }, last_refresh: "2026-10-30T00:00:00.000Z" });
+  });
+
+  const pooled = (refresh: string, at: string) => ({ version: 1, providers: {}, active_provider: "openai-codex", credential_pool: { "openai-codex": [{ id: "wisp", access_token: `a-${refresh}`, refresh_token: refresh, last_refresh: at }] } });
+
+  it("reports a sign-in renewed here before this run, which the hub never heard of", async () => {
+    const baseHome = await base("hermes-base-3", {});
+    const connectionHome = path.join(dir, "conns", "mc_h_newer", "hermes");
+    await fs.mkdir(connectionHome, { recursive: true });
+    await fs.writeFile(path.join(connectionHome, "auth.json"), JSON.stringify(pooled("here", "2026-10-29T00:00:00.000Z")));
+    const p = await prepareCredential("hermes", cred("openai", "oauth", { auth: chatgpt("hub-old", "2026-10-20T00:00:00.000Z") }), { fs: localCredentialFs, baseHome, connectionHome });
+    expect((await p.refreshed())?.auth).toMatchObject({ tokens: { refresh_token: "here" } });
+  });
+
+  it("doesn't undo a renewal another run makes while this run is being set up", async () => {
+    const baseHome = await base("hermes-base-race", {});
+    const connectionHome = path.join(dir, "conns", "mc_h_race", "hermes");
+    const authFile = path.join(connectionHome, "auth.json");
+    await fs.mkdir(connectionHome, { recursive: true });
+    const at = "2026-10-28T00:00:00.000Z";
+    await fs.writeFile(authFile, JSON.stringify(pooled("r1", at)));
+    const racing: CredentialFs = {
+      ...localCredentialFs,
+      async read(f) {
+        const text = await localCredentialFs.read(f);
+        if (f === authFile) await fs.writeFile(authFile, JSON.stringify(pooled("r2", "2026-10-29T00:00:00.000Z")));
+        return text;
+      },
+    };
+    await prepareCredential("hermes", cred("openai", "oauth", { auth: chatgpt("r1", at) }), { fs: racing, baseHome, connectionHome });
+    expect(JSON.parse(await read(authFile)).credential_pool["openai-codex"][0].refresh_token).toBe("r2");
   });
 
   it("converts between Codex's and Hermes's shapes", () => {
