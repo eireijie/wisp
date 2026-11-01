@@ -213,6 +213,8 @@ enum MessagePart: Codable, Hashable {
   case wrapup(WrapUp)
   /** the agent dropped what the chat was about after no answer */
   case closed
+  /** the agent saved a skill during this reply ("learned") or followed one ("used"): a quiet line under it */
+  case skill(action: String, skillId: String, slug: String)
   case other(String)
 
   /** what an agent saved about someone during a reply (the "Remembered" chip): the kind of note, its words, and the note it went to */
@@ -222,7 +224,7 @@ enum MessagePart: Codable, Hashable {
     var path: String?
   }
 
-  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage, input, output, replies, did, saved, next }
+  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage, input, output, replies, did, saved, next, action, skillId, slug }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: K.self)
@@ -252,6 +254,10 @@ enum MessagePart: Codable, Hashable {
       let line = { (k: K) in ((try? c.decode(String.self, forKey: k)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
       self = .wrapup(WrapUp(did: line(.did), saved: line(.saved), next: line(.next)))
     case "closed": self = .closed
+    case "skill":
+      let slug = (try? c.decode(String.self, forKey: .slug)) ?? ""
+      guard !slug.isEmpty else { self = .other(type); return }
+      self = .skill(action: (try? c.decode(String.self, forKey: .action)) ?? "used", skillId: (try? c.decode(String.self, forKey: .skillId)) ?? "", slug: slug)
     default: self = .other(type)
     }
   }

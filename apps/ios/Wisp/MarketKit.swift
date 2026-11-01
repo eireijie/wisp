@@ -153,6 +153,45 @@ struct MarketToggleRow<Leading: View>: View {
   }
 }
 
+/**
+ * Who gets an app or skill: an "All agents" switch first (every agent, and ones made later); when it's off,
+ * a switch for each agent.
+ */
+struct AgentAccessPicker: View {
+  @Environment(Store.self) private var store
+  @ReduceMotion private var reduceMotion
+  @Binding var allAgents: Bool
+  var isOn: (Agent) -> Binding<Bool>
+  var subtitle: (Agent) -> String = { "@\($0.handle)" }
+  var agentDisabled: (Agent) -> Bool = { _ in false }
+  var disabled = false
+  var empty = "Add one from the Agents tab first."
+
+  var body: some View {
+    VStack(spacing: 14) {
+      CardGroup {
+        MarketToggleRow(title: "All agents", subtitle: "Including ones you add later", isOn: Binding(get: { allAgents }, set: { on in
+          withAnimation(Motion.pick(Motion.settle, reduceMotion)) { allAgents = on }
+        }), disabled: disabled) {
+          Image(systemName: "person.2").font(.system(size: 15)).foregroundStyle(Palette.muted).frame(width: 30, height: 30)
+        }
+        .accessibilityIdentifier("all-agents")
+      }
+      if !allAgents {
+        CardGroup {
+          ForEach(store.agents) { agent in
+            MarketToggleRow(title: agent.name, subtitle: subtitle(agent), isOn: isOn(agent), disabled: disabled || agentDisabled(agent)) {
+              AgentAvatar(agent: agent, size: 30, showStatus: false)
+            }
+          }
+          if store.agents.isEmpty { MarketRow(title: "No agents yet", subtitle: empty) }
+        }
+        .transition(.opacity)
+      }
+    }
+  }
+}
+
 /** A small grey label over a card or field. */
 struct MarketLabel: View {
   var text: String

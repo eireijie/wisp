@@ -87,17 +87,18 @@ export function OverviewRows({ agent, nodes }: { agent: Agent; nodes: DeviceInfo
   const channels = useStore((s) => s.channels);
   const [routines, setRoutines] = useState<Routine[] | null>(null);
   const [skills, setSkills] = useState<Skill[] | null>(null);
+  const skillsVersion = useStore((s) => s.skillsVersion);
   useEffect(() => {
     api<Routine[]>("GET", `/api/routines?agent=${agent.id}`).then(setRoutines, () => setRoutines([]));
     api<Skill[]>("GET", "/api/skills").then(setSkills, () => setSkills([]));
-  }, [agent.id]);
+  }, [agent.id, skillsVersion]);
   const to = (tab: AgentTab) => href({ view: "agents", agentId: agent.id, tab });
   const computer = computers.find((c) => c.id === agent.computerId);
   const device = nodes.find((n) => n.id === agent.nodeId);
   const model = [agent.model ? prettyModel(agent.model) : "Automatic", agent.settings.effort ? effortName(agent.settings.effort) : null].filter(Boolean).join(" · ");
   const computerValue = computer ? `${computer.name} · ${computerKindLabel(computer, nodes)}` : agent.settings.headless ? "Headless" : device ? device.name : "None yet";
   const on = routines?.filter((r) => r.enabled).length ?? 0;
-  const mine = skills?.filter((s) => s.agentIds.includes(agent.id)).length ?? 0;
+  const mine = skills?.filter((s) => s.allAgents || s.agentIds.includes(agent.id)).length ?? 0;
   const dm = channels.find((c) => c.kind === "dm" && c.name.endsWith(`:${agent.id}`));
   const respond = agent.settings.respondTo ?? "anyone";
   return (
@@ -237,7 +238,7 @@ export function MemoryPanel({ agent }: { agent: Agent }) {
 
 // --- Skills and apps ------------------------------------------------------------------
 
-function SwitchList<T extends { id: string; name: string; agentIds: string[] }>({ items, agent, kind, body, empty, browse, browseTo }: { items: T[] | null; agent: Agent; kind: "skills" | "connectors"; body: (i: T) => string; empty: string; browse: string; browseTo: string }) {
+function SwitchList<T extends { id: string; name: string; agentIds: string[]; allAgents?: boolean }>({ items, agent, kind, body, empty, browse, browseTo }: { items: T[] | null; agent: Agent; kind: "skills" | "connectors"; body: (i: T) => string; empty: string; browse: string; browseTo: string }) {
   const [local, setLocal] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   if (!items) return <p className="text-sm text-muted">Loading…</p>;
@@ -265,7 +266,15 @@ function SwitchList<T extends { id: string; name: string; agentIds: string[] }>(
                 <span className="block text-body truncate">{i.name}</span>
                 <span className="block text-sm text-muted truncate">{body(i)}</span>
               </span>
-              <Toggle label={`${i.name} for ${agent.name}`} on={isOn(i)} onChange={(v) => void flip(i, v)} />
+              {/* on for all agents: set where the item is, not per agent */}
+              {i.allAgents ? (
+                <span className="flex shrink-0 items-center gap-2.5">
+                  <span className="text-[13px] text-faint">All agents</span>
+                  <Toggle label={`${i.name} for ${agent.name} (on for all agents)`} on disabled onChange={() => {}} />
+                </span>
+              ) : (
+                <Toggle label={`${i.name} for ${agent.name}`} on={isOn(i)} onChange={(v) => void flip(i, v)} />
+              )}
             </div>
           ))}
         </RowCard>
@@ -280,17 +289,19 @@ function SwitchList<T extends { id: string; name: string; agentIds: string[] }>(
 
 export function SkillsPanel({ agent }: { agent: Agent }) {
   const [items, setItems] = useState<Skill[] | null>(null);
+  const skillsVersion = useStore((s) => s.skillsVersion);
   useEffect(() => {
     api<Skill[]>("GET", "/api/skills").then(setItems, () => setItems([]));
-  }, [agent.id]);
+  }, [agent.id, skillsVersion]);
   return <SwitchList items={items} agent={agent} kind="skills" body={(s) => s.description || "Added"} empty="No skills yet. Browse skills to add some." browse="Browse skills" browseTo={href({ view: "skills" })} />;
 }
 
 export function AppsPanel({ agent }: { agent: Agent }) {
   const [items, setItems] = useState<Connector[] | null>(null);
+  const skillsVersion = useStore((s) => s.skillsVersion);
   useEffect(() => {
     api<Connector[]>("GET", "/api/connectors").then(setItems, () => setItems([]));
-  }, [agent.id]);
+  }, [agent.id, skillsVersion]);
   return (
     <div className="space-y-4">
       <SwitchList items={items} agent={agent} kind="connectors" body={(c) => c.name} empty="No apps connected yet." browse="Connect an app" browseTo={href({ view: "connectors" })} />

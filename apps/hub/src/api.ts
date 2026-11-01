@@ -1974,6 +1974,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const p = noteFor(c, (req.query as { path?: string }).path ?? "", "read", reply);
     if (!p) return;
     const [note, [last]] = await Promise.all([vaultOf(c).read(p), vaultOf(c).history(p, 1).catch(() => [])]);
+    // an agent reading one of its skills during a run is using it
+    if (c.actor.kind === "agent") hub.skillRead(c.actor.id, note.path, req.headers["x-wisp-run"]);
     return { ...note, access: memory(c)(p).level, backlinks: vaultOf(c).backlinks(note.path, readable(c)), editedBy: last?.author ?? null, editedAt: last?.date ?? null };
   });
 

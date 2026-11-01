@@ -5,7 +5,7 @@ import { codex } from "./codex.ts";
 import type { HarnessAdapter } from "./types.ts";
 
 export * from "./types.ts";
-export { claudeCommands, codexCommands, commandsIn, skillsIn } from "./commands.ts";
+export { claudeCommands, claudeInitCommands, codexCommands, commandsIn, skillsIn } from "./commands.ts";
 export { scanShelf, serverItem } from "./shelf.ts";
 export { HarnessAccounts, loginCommand, modelLoginCommand, setupTokenFrom } from "./harness-accounts.ts";
 export { changeHarnessSettings, editClaude, editCodex, editHermes, HARNESS_SPECS, harnessConfigPath, harnessConfigured, harnessDir, parseToml, readHarnessSettings, readHarnessSkill, type HarnessHomes } from "./harness-config.ts";

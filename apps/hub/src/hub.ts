@@ -65,6 +65,8 @@ export class Hub {
   private nodes = new Map<string, NodeConn>();
   private live = new Map<string, LiveRun>();
   private taskReplies = new Map<string, { messageId: string; result: string }>();
+  /** skills each run learned or read, shown under its reply */
+  private runSkills = new Map<string, { learned: Set<string>; used: Set<string> }>();
   /** devices whose owner ran `wisp node pause` there */
   private pausedNodes = new Set<string>();
   readonly guard = new LoopGuard();
@@ -175,6 +177,60 @@ export class Hub {
         await vault.write(p, file, { name: "Wisp", email: "wisp@localhost" }, `Built-in skill "${s.name}"`).catch(() => undefined);
       }
     }
+  }
+
+  /**
+   * Skills on for every agent are in each agent's folder too: written when missing or out of date
+   * (an agent made after the skill was switched on gets it on its first run).
+   */
+  async ensureSharedSkills(agentId: string) {
+    const agent = this.store.agent(agentId);
+    if (!agent) return;
+    const vault = this.vault(agent.workspaceId);
+    for (const s of this.skills.allAgentsIn(agent.workspaceId)) {
+      const p = agentSkillPath(agentId, s.slug);
+      const file = skillFile(s);
+      if ((await vault.read(p).then((n) => n.content, () => null)) === file) continue;
+      await vault.write(p, file, { name: "Wisp", email: "wisp@localhost" }, `Skill "${s.name}" for @${agent.handle}`).catch(() => undefined);
+    }
+  }
+
+  /** A run learned a skill (skill_save) or read one: say so under its reply, once per skill. */
+  skillUsed(runId: string, skillId: string, action: "learned" | "used") {
+    const notes = this.runSkills.get(runId) ?? { learned: new Set<string>(), used: new Set<string>() };
+    notes[action].add(skillId);
+    this.runSkills.set(runId, notes);
+  }
+
+  /**
+   * An agent read a note: when it's one of its skills' SKILL.md (not a built-in) during a run,
+   * that run used the skill. Counted once per run.
+   */
+  skillRead(agentId: string, path: string, runHeader: unknown) {
+    const m = /^agents\/([^/]+)\/skills\/([^/]+)\/SKILL\.md$/.exec(path);
+    if (!m || m[1] !== agentId) return;
+    const agent = this.store.agent(agentId);
+    const skill = agent && this.skills.bySlug(agent.workspaceId, m[2]);
+    if (!agent || !skill || !(skill.allAgents || skill.agentIds.includes(agentId))) return;
+    const run = this.runFor(agentId, runHeader);
+    if (!run) return;
+    const notes = this.runSkills.get(run.id);
+    if (notes?.used.has(skill.id) || notes?.learned.has(skill.id)) return;
+    this.skillUsed(run.id, skill.id, "used");
+    // counted quietly: apps see the new count next time they load skills
+    this.skills.used(skill.id);
+  }
+
+  /** The `skill` parts for a run's reply, learned ones first; forgets them. */
+  private skillParts(runId: string): MessagePart[] {
+    const notes = this.runSkills.get(runId);
+    this.runSkills.delete(runId);
+    if (!notes) return [];
+    const part = (skillId: string, action: "learned" | "used"): MessagePart[] => {
+      const s = this.skills.get(skillId);
+      return s ? [{ type: "skill", action, skillId, slug: s.slug }] : [];
+    };
+    return [...[...notes.learned].flatMap((id) => part(id, "learned")), ...[...notes.used].filter((id) => !notes.learned.has(id)).flatMap((id) => part(id, "used"))];
   }
 
   /** Stop handling events and drop every connection (before the database closes). */
@@ -633,6 +689,8 @@ export class Hub {
     }
     const live = this.live.get(run.id) ?? { parts: [], text: "" };
     this.live.delete(run.id);
+    // skills it learned or followed show under its reply (nothing when there's no reply)
+    const skillParts = this.skillParts(run.id);
     const taskReply = this.taskReplies.get(run.id);
     this.taskReplies.delete(run.id);
     const author: Actor = { kind: "agent", id: run.agentId };
@@ -658,14 +716,14 @@ export class Hub {
       // the answer task_update already posted, repeated as the final reply (as-is, or wrapped in a line or two)
       const same = (a: string, b: string) => !!a.trim() && !!b.trim() && a.includes(b.trim());
       const repeated = taskReply && posted && !posted.deletedAt && (same(taskReply.result, body) || (same(body, taskReply.result) && body.length <= taskReply.result.length + 300));
-      if (repeated && posted && live.parts.length) {
-        const message = { ...posted, parts: [...posted.parts, ...live.parts] };
+      if (repeated && posted && (live.parts.length || skillParts.length)) {
+        const message = { ...posted, parts: [...posted.parts, ...live.parts, ...skillParts] };
         store.db.prepare("UPDATE messages SET parts_json = ? WHERE id = ?").run(JSON.stringify(message.parts), message.id);
         this.broadcast(workspaceId, { type: "message_updated", message: store.withReactions([message])[0] }, this.audience(message.channelId));
       }
       // it worked on its screen: the reply keeps the screen, so it doesn't vanish when the run ends
       const screen = agent?.computerId && !gone ? this.screenAfterRun(agent.computerId, live.parts, body, run) : null;
-      const parts = screen ? [...live.parts, screen] : live.parts;
+      const parts = [...live.parts, ...(screen ? [screen] : []), ...skillParts];
       const reply = body && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy }) : null;
       // follow-ups it set and how it left the chat show under its answer
       this.loops.runEnded(run, reply?.id ?? (repeated && posted ? posted.id : null));
@@ -891,7 +949,9 @@ export class Hub {
   /** What follows "/" for this agent: its harness's commands on its device, its Wisp skills, and Wisp's own. */
   commands(agent: Agent): AgentCommand[] {
     const catalog = this.catalogFor(agent);
-    return agentCommands(catalog?.commands, this.skills.forAgent(agent.id));
+    const name = (id: string | null) => (id && this.store.agent(id)?.name) || "an agent";
+    const skills = this.skills.forAgent(agent.id).map((s) => ({ slug: s.slug, description: s.description, createdAt: s.createdAt, ...(s.source === "learned" ? { learnedBy: name(s.learnedBy) } : {}) }));
+    return agentCommands(catalog?.commands, skills);
   }
 
   /** The command a message runs for this agent ("/name args", or "@handle /name args" in a channel), if it names one it has. */
@@ -1173,6 +1233,7 @@ export class Hub {
     if (conn) this.send(conn, { type: "cancel", runId });
     this.store.setRunStatus(runId, "cancelled");
     this.live.delete(runId);
+    this.runSkills.delete(runId);
     // its harness may be renewing the sign-in until the device says it stopped, so the connection is held till then
     if (conn && this.connectionRuns.has(runId)) setTimeout(() => !this.closed && this.releaseConnection(runId), CANCEL_HOLD_MS).unref?.();
     else this.releaseConnection(runId);
@@ -1433,7 +1494,8 @@ export class Hub {
     const leading = leadSection(store, agent);
     const making = background ? "" : spawnSection(this, agent);
     await this.ensureBuiltinSkills([agent.id]);
-    const skills = this.skills.promptSection(agent.id);
+    await this.ensureSharedSkills(agent.id);
+    const skills = this.skills.promptSection(agent.id, { learn: agentPolicy(this, agent.workspaceId).learnSkills });
     const connectors = this.connectors.promptSection(agent.id);
     const soulNote = agent.settings.soulLocked
       ? "Your soul is locked by your owner; don't try to edit it."

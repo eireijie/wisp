@@ -20,6 +20,7 @@ type ConnectorRow = {
   headers_json: string;
   env_json: string;
   enabled: number;
+  all_agents: number;
   created_by: string | null;
   created_at: string;
 };
@@ -34,6 +35,7 @@ export interface ConnectorInput {
   headers?: Record<string, string>;
   env?: Record<string, string>;
   enabled?: boolean;
+  allAgents?: boolean;
 }
 
 /** A header value is a secret unless it only fills in `{{KEY}}`s (then the secret lives in env). */
@@ -63,7 +65,9 @@ export class ConnectorStore {
 
   /** Before a run: refresh sign-ins to the agent's remote connectors that are about to expire. */
   async prepare(agentId: string) {
-    const ids = (this.db.prepare("SELECT c.id FROM connectors c JOIN agent_connectors ac ON ac.connector_id = c.id JOIN connector_auth ca ON ca.connector_id = c.id WHERE ac.agent_id = ? AND c.enabled = 1 AND c.kind = 'mcp-http' AND ca.tokens_json IS NOT NULL").all(agentId) as { id: string }[]).map((r) => r.id);
+    const ids = this.forAgentRows(agentId)
+      .filter((r) => r.enabled && r.kind === "mcp-http" && this.db.prepare("SELECT 1 FROM connector_auth WHERE connector_id = ? AND tokens_json IS NOT NULL").get(r.id))
+      .map((r) => r.id);
     await Promise.all(ids.map((cid) => this.auth.fresh(cid, this.serverUrl(cid)!).catch(() => {})));
   }
 
@@ -95,6 +99,7 @@ export class ConnectorStore {
       enabled: !!r.enabled,
       auth: r.kind === "mcp-http" ? this.auth.status(r.id) : null,
       agentIds: this.agentIds(r.id),
+      allAgents: !!r.all_agents,
       createdBy: r.created_by,
       createdAt: r.created_at,
     };
@@ -117,7 +122,7 @@ export class ConnectorStore {
     const cid = id("conn");
     this.db
       .prepare(
-        "INSERT INTO connectors (id, workspace_id, name, kind, catalog_id, command, args_json, url, headers_json, env_json, enabled, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO connectors (id, workspace_id, name, kind, catalog_id, command, args_json, url, headers_json, env_json, enabled, all_agents, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         cid,
@@ -131,6 +136,7 @@ export class ConnectorStore {
         JSON.stringify(c.kind === "mcp-http" ? dropBlank(c.headers ?? {}) : {}),
         JSON.stringify(dropBlank(c.env ?? {})),
         c.enabled === false ? 0 : 1,
+        c.allAgents ? 1 : 0,
         by,
         now(),
       );
@@ -149,7 +155,7 @@ export class ConnectorStore {
     const env = keep(patch.env, JSON.parse(r.env_json));
     const headers = keep(patch.headers, JSON.parse(r.headers_json));
     this.db
-      .prepare("UPDATE connectors SET name = ?, command = ?, args_json = ?, url = ?, headers_json = ?, env_json = ?, enabled = ? WHERE id = ?")
+      .prepare("UPDATE connectors SET name = ?, command = ?, args_json = ?, url = ?, headers_json = ?, env_json = ?, enabled = ?, all_agents = ? WHERE id = ?")
       .run(
         patch.name ?? r.name,
         r.kind === "mcp-stdio" ? (patch.command ?? r.command) : null,
@@ -158,6 +164,7 @@ export class ConnectorStore {
         JSON.stringify(r.kind === "mcp-http" ? headers : {}),
         JSON.stringify(env),
         patch.enabled === undefined ? r.enabled : patch.enabled ? 1 : 0,
+        patch.allAgents === undefined ? r.all_agents : patch.allAgents ? 1 : 0,
         connectorId,
       );
     return this.get(connectorId);
@@ -181,11 +188,38 @@ export class ConnectorStore {
     else this.db.prepare("DELETE FROM agent_connectors WHERE agent_id = ? AND connector_id = ?").run(agentId, connectorId);
   }
 
+  /**
+   * Connectors the agent has: given to it, or on for every agent in its workspace. One on for every
+   * agent that holds secrets (values, a literal header, a sign-in) only reaches agents on its
+   * creator's own devices (a VM counts as its device), like a model connection.
+   */
+  private forAgentRows(agentId: string): ConnectorRow[] {
+    const rows = this.db
+      .prepare(
+        "SELECT c.*, c.id IN (SELECT connector_id FROM agent_connectors WHERE agent_id = ?) AS given FROM connectors c WHERE c.id IN (SELECT connector_id FROM agent_connectors WHERE agent_id = ?) OR (c.all_agents = 1 AND c.workspace_id = (SELECT workspace_id FROM agents WHERE id = ?)) ORDER BY c.created_at",
+      )
+      .all(agentId, agentId, agentId) as (ConnectorRow & { given: number })[];
+    const deviceOwner = (this.db.prepare("SELECT n.owner_id FROM agents a JOIN nodes n ON n.id = a.node_id WHERE a.id = ?").get(agentId) as { owner_id: string | null } | undefined)?.owner_id ?? null;
+    return rows.filter((r) => r.given || !this.holdsSecrets(r) || (!!r.created_by && r.created_by === deviceOwner)).map(({ given: _given, ...r }) => r);
+  }
+
+  /** Whether a connector carries anything secret: a value, a header that isn't only `{{KEY}}`s, or a sign-in. */
+  private holdsSecrets(r: ConnectorRow): boolean {
+    if (Object.keys(JSON.parse(r.env_json)).length) return true;
+    if (Object.values(JSON.parse(r.headers_json) as Record<string, string>).some(literalHeader)) return true;
+    return !!this.db.prepare("SELECT 1 FROM connector_auth WHERE connector_id = ? AND tokens_json IS NOT NULL").get(r.id);
+  }
+
+  /** The agent's enabled connectors, as people see them. */
+  forAgent(agentId: string): Connector[] {
+    return this.forAgentRows(agentId)
+      .filter((r) => r.enabled)
+      .map((r) => this.view(r));
+  }
+
   /** The agent's enabled connectors, resolved for its device: `{{KEY}}`s filled, secrets in the clear. */
   specsFor(agentId: string): ConnectorSpec[] {
-    const rows = this.db
-      .prepare("SELECT c.* FROM connectors c JOIN agent_connectors ac ON ac.connector_id = c.id WHERE ac.agent_id = ? AND c.enabled = 1 ORDER BY c.created_at")
-      .all(agentId) as ConnectorRow[];
+    const rows = this.forAgentRows(agentId).filter((r) => r.enabled);
     const used = new Set<string>();
     return rows.map((r) => {
       const env = JSON.parse(r.env_json) as Record<string, string>;
@@ -228,6 +262,10 @@ type SkillRow = {
   catalog_id: string | null;
   tags_json: string;
   content: string;
+  all_agents: number;
+  learned_by: string | null;
+  uses: number;
+  last_used_at: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -248,6 +286,10 @@ export class SkillStore {
       tags: JSON.parse(r.tags_json),
       content: r.content,
       agentIds: (this.db.prepare("SELECT agent_id FROM agent_skills WHERE skill_id = ? ORDER BY agent_id").all(r.id) as { agent_id: string }[]).map((x) => x.agent_id),
+      allAgents: !!r.all_agents,
+      learnedBy: r.learned_by,
+      uses: r.uses,
+      lastUsedAt: r.last_used_at,
       createdBy: r.created_by,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
@@ -268,30 +310,54 @@ export class SkillStore {
     return r && this.view(r);
   }
 
-  /** A slug not yet used in the workspace. */
-  freeSlug(workspaceId: string, base: string): string {
-    const taken = new Set([...BUILTIN_SKILL_SLUGS, ...(this.db.prepare("SELECT slug FROM skills WHERE workspace_id = ?").all(workspaceId) as { slug: string }[]).map((r) => r.slug)]);
+  /** A slug not yet used in the workspace (nor in `reserved`, names "/" already means something else by). */
+  freeSlug(workspaceId: string, base: string, reserved: Iterable<string> = []): string {
+    const taken = new Set([...BUILTIN_SKILL_SLUGS, ...reserved, ...(this.db.prepare("SELECT slug FROM skills WHERE workspace_id = ?").all(workspaceId) as { slug: string }[]).map((r) => r.slug)]);
     let s = base;
     for (let i = 2; taken.has(s); i++) s = `${base}-${i}`;
     return s;
   }
 
-  create(workspaceId: string, by: string | null, s: { name: string; slug: string; description: string; source: SkillSource; catalogId?: string | null; tags?: string[]; content: string }): Skill {
+  create(
+    workspaceId: string,
+    by: string | null,
+    s: { name: string; slug: string; description: string; source: SkillSource; catalogId?: string | null; tags?: string[]; content: string; allAgents?: boolean; learnedBy?: string | null },
+  ): Skill {
     const sid = id("skill");
     const ts = now();
     this.db
-      .prepare("INSERT INTO skills (id, workspace_id, name, slug, description, source, catalog_id, tags_json, content, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(sid, workspaceId, s.name, s.slug, s.description, s.source, s.catalogId ?? null, JSON.stringify(s.tags ?? []), s.content, by, ts, ts);
+      .prepare("INSERT INTO skills (id, workspace_id, name, slug, description, source, catalog_id, tags_json, content, all_agents, learned_by, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(sid, workspaceId, s.name, s.slug, s.description, s.source, s.catalogId ?? null, JSON.stringify(s.tags ?? []), s.content, s.allAgents ? 1 : 0, s.learnedBy ?? null, by, ts, ts);
     return this.get(sid)!;
   }
 
-  update(skillId: string, patch: Partial<{ name: string; description: string; tags: string[]; content: string }>): Skill | undefined {
+  update(skillId: string, patch: Partial<{ name: string; description: string; tags: string[]; content: string; allAgents: boolean }>): Skill | undefined {
     const s = this.get(skillId);
     if (!s) return undefined;
     this.db
-      .prepare("UPDATE skills SET name = ?, description = ?, tags_json = ?, content = ?, updated_at = ? WHERE id = ?")
-      .run(patch.name ?? s.name, patch.description ?? s.description, JSON.stringify(patch.tags ?? s.tags), patch.content ?? s.content, now(), skillId);
+      .prepare("UPDATE skills SET name = ?, description = ?, tags_json = ?, content = ?, all_agents = ?, updated_at = ? WHERE id = ?")
+      .run(patch.name ?? s.name, patch.description ?? s.description, JSON.stringify(patch.tags ?? s.tags), patch.content ?? s.content, (patch.allAgents ?? s.allAgents) ? 1 : 0, now(), skillId);
     return this.get(skillId);
+  }
+
+  /** A run read the skill: count it. */
+  used(skillId: string) {
+    this.db.prepare("UPDATE skills SET uses = uses + 1, last_used_at = ? WHERE id = ?").run(now(), skillId);
+  }
+
+  bySlug(workspaceId: string, slug: string): Skill | undefined {
+    const r = this.db.prepare("SELECT * FROM skills WHERE workspace_id = ? AND slug = ?").get(workspaceId, slug) as SkillRow | undefined;
+    return r && this.view(r);
+  }
+
+  /** The skills an agent learned. */
+  learnedBy(workspaceId: string, agentId: string): Skill[] {
+    return (this.db.prepare("SELECT * FROM skills WHERE workspace_id = ? AND source = 'learned' AND learned_by = ? ORDER BY created_at").all(workspaceId, agentId) as SkillRow[]).map((r) => this.view(r));
+  }
+
+  /** Every-agent skills in the workspace. */
+  allAgentsIn(workspaceId: string): Skill[] {
+    return (this.db.prepare("SELECT * FROM skills WHERE workspace_id = ? AND all_agents = 1 ORDER BY name COLLATE NOCASE").all(workspaceId) as SkillRow[]).map((r) => this.view(r));
   }
 
   remove(skillId: string) {
@@ -303,19 +369,64 @@ export class SkillStore {
     else this.db.prepare("DELETE FROM agent_skills WHERE agent_id = ? AND skill_id = ?").run(agentId, skillId);
   }
 
+  /** The agent's skills: given to it, or on for every agent in its workspace. */
   forAgent(agentId: string): Skill[] {
-    return (this.db.prepare("SELECT s.* FROM skills s JOIN agent_skills a ON a.skill_id = s.id WHERE a.agent_id = ? ORDER BY s.name COLLATE NOCASE").all(agentId) as SkillRow[]).map((r) => this.view(r));
+    return (
+      this.db
+        .prepare(
+          "SELECT s.* FROM skills s WHERE s.id IN (SELECT skill_id FROM agent_skills WHERE agent_id = ?) OR (s.all_agents = 1 AND s.workspace_id = (SELECT workspace_id FROM agents WHERE id = ?)) ORDER BY s.name COLLATE NOCASE",
+        )
+        .all(agentId, agentId) as SkillRow[]
+    ).map((r) => this.view(r));
   }
 
-  /** The agent's skills, built-in ones first, for its prompt: what each is for and where to read it. */
-  promptSection(agentId: string): string {
+  /**
+   * The agent's skills, built-in ones first, for its prompt: what each is for and where to read it.
+   * With `learn`, it's also asked to save how it did things it'll likely be asked to do again.
+   */
+  promptSection(agentId: string, opts: { learn?: boolean } = {}): string {
     const skills = [...BUILTIN_SKILLS.map((s) => ({ name: s.name, slug: s.id, description: s.description })), ...this.forAgent(agentId)];
     return [
       `## Your skills`,
       `You have these skills: step-by-step instructions for kinds of work. When a request matches one, read its SKILL.md first (memory_read) and follow it.`,
-      ...skills.map((s) => `- ${s.name} (me/skills/${s.slug}/SKILL.md): ${s.description}`),
-    ].join("\n");
+      ...skills.map((s) => `- ${oneLine(s.name)} (me/skills/${s.slug}/SKILL.md): ${oneLine(s.description)}`),
+      opts.learn ? `\n${LEARN_NOTE}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
+}
+
+/** Text on one line, so a name or description can't add lines of its own to a prompt. */
+const oneLine = (s: string) => s.replace(/\s*[\r\n\u2028\u2029]+\s*/g, " ").trim();
+
+/** How agents learn skills on their own (when the workspace has that on). */
+export const LEARN_NOTE =
+  "After you finish a task you'd likely be asked to do again (several steps, a particular site or app, the person's preferences), save how with skill_save: short numbered steps with the specifics that mattered and where to stop and ask a person. Before a task, if one of your skills fits, read it and follow it; if the steps changed, save it again under the same name. Never save one-off answers or anything secret (passwords, keys, card numbers).";
+
+/**
+ * Whether text looks like it holds a secret: an API key or token (sk-…, ghp_…, Stripe, AWS, Slack,
+ * Google, a private key, a JWT), a card number (15–19 digits that pass the Luhn check), or a
+ * "password:" / "token:" / "api key:" line. Learned skills can't.
+ */
+export function holdsSecret(text: string): boolean {
+  if (/\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|(?:sk_live|sk_test|rk_live)_[A-Za-z0-9]|AKIA[0-9A-Z]{16}|xox[abprs]-|AIza[0-9A-Za-z_-]{35}|eyJ[\w-]+\.[\w-]+\.[\w-]+)/.test(text)) return true;
+  if (/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(text)) return true;
+  // a line naming a secret and giving it ("password: …", "- **API key** = …", "GitHub token: …")
+  if (/^[\s>*-]*(?:\d+[.)]\s*)?(?:\*\*)?(?:[A-Za-z]+\s+){0,3}(?:password|passwd|pwd|passcode|token|api[_ -]?key|secret|pin)(?:\*\*)?\s*[:=]\s*\S/im.test(text)) return true;
+  // 15–19 digits, maybe in groups split by one space or dash (shorter numbers are order numbers, timestamps)
+  for (const m of text.matchAll(/(?<![\d-])\d(?:[ -]?\d){14,18}(?![\d-])/g)) if (luhn(m[0].replace(/\D/g, ""))) return true;
+  return false;
+}
+
+function luhn(digits: string): boolean {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = Number(digits[digits.length - 1 - i]);
+    if (i % 2) d = d * 2 > 9 ? d * 2 - 9 : d * 2;
+    sum += d;
+  }
+  return sum % 10 === 0;
 }
 
 function dropBlank(o: Record<string, string>): Record<string, string> {

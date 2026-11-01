@@ -262,6 +262,7 @@ struct MarketplaceView: View {
     return c.url ?? c.command ?? "Set up"
   }
   private func helpers(_ s: HelperSkill) -> String {
+    if s.forAll { return "All agents" }
     let n = s.agentIds?.count ?? 0
     return n == 0 ? "no one yet" : "\(n) helper\(n == 1 ? "" : "s")"
   }

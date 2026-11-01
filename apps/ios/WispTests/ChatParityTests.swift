@@ -29,6 +29,43 @@ final class ChatParityTests: XCTestCase {
     XCTAssertTrue(SlashMenu.groups(here: [a], lists: lists, only: nil, query: "zzz").isEmpty)
   }
 
+  func testSlashSectionsFollowMenuOrderAndFallBackOnKind() throws {
+    let a = agent("a1", "ghosty")
+    let json = ##"""
+    {"commands":[
+      {"name":"order-pizza","description":"Order the usual","kind":"wisp-skill","via":"prompt","group":"learned","isNew":true,"learnedBy":"Ghosty"},
+      {"name":"weekly-report","kind":"wisp-skill","via":"prompt","group":"learned","learnedBy":"Nova"},
+      {"name":"review","kind":"command","via":"raw","group":"harness"},
+      {"name":"model","kind":"wisp","via":"wisp","group":"wisp"},
+      {"name":"docx","kind":"wisp-skill","via":"prompt","group":"skill"},
+      {"name":"imagegen","kind":"skill","via":"prompt","group":"harness"}
+    ]}
+    """##
+    struct R: Decodable { var commands: [AgentCommand] }
+    let list = try Wire.decoder.decode(R.self, from: Data(json.utf8)).commands
+    XCTAssertEqual(list[0].isNew, true)
+    XCTAssertEqual(list[0].learnedBy, "Ghosty")
+    XCTAssertNil(list[1].isNew)
+    // hub order is kept inside a section; sections come learned, harness, wisp, skill
+    let shuffled = [list[3], list[4], list[2], list[0], list[5], list[1]].map { SlashRow(agent: a, command: $0) }
+    let sections = SlashMenu.sections(shuffled)
+    XCTAssertEqual(sections.map(\.title), ["Learned by Ghosty", "Learned by Nova", "Claude Code", "Wisp", "Skills"])
+    XCTAssertEqual(sections[2].rows.map(\.command.name), ["review", "imagegen"])
+    // an older hub sends no group: it comes from the kind
+    XCTAssertEqual(command("compact", kind: "command", via: "raw").section, "harness")
+    XCTAssertEqual(command("context", kind: "wisp", via: "wisp").section, "wisp")
+    XCTAssertEqual(command("pdf", kind: "wisp-skill").section, "skill")
+    XCTAssertEqual(command("x", kind: "skill").section, "harness")
+    XCTAssertEqual(SlashMenu.sections([SlashRow(agent: a, command: command("compact", kind: "command", via: "raw")), SlashRow(agent: a, command: command("model", kind: "wisp", via: "wisp"))]).map(\.title), ["Claude Code", "Wisp"])
+  }
+
+  func testSkillPartDecodes() throws {
+    let message = try Wire.decoder.decode(Message.self, from: Data(##"{"id":"m1","channelId":"c1","author":{"kind":"agent","id":"a1"},"body":"Done.","parts":[{"type":"skill","action":"learned","skillId":"s1","slug":"order-pizza"},{"type":"skill","action":"used","skillId":"s2","slug":"weekly-report"},{"type":"skill","action":"used","skillId":"s3"}],"createdAt":"2026-10-29T10:00:00.000Z"}"##.utf8))
+    XCTAssertEqual(message.parts[0], .skill(action: "learned", skillId: "s1", slug: "order-pizza"))
+    XCTAssertEqual(message.parts[1], .skill(action: "used", skillId: "s2", slug: "weekly-report"))
+    XCTAssertEqual(message.parts[2], .other("skill"))
+  }
+
   func testAgentsHereAndInsertedText() {
     let a = agent("a1", "atlas"), b = agent("b1", "nova")
     XCTAssertEqual(SlashMenu.agentsHere(isDm: true, dmAgent: a, agents: [a, b], members: nil, handle: nil).map(\.id), ["a1"])

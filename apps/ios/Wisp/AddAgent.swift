@@ -274,11 +274,11 @@ struct AddAgent: View {
   /** Apps and skills are given to it afterwards; the agent exists either way. */
   @MainActor static func giveAppsAndSkills(to agent: Agent, apps: Set<String>, skills: Set<String>, store: Store) async {
     for id in apps {
-      guard let app = store.connectors.first(where: { $0.id == id }) else { continue }
+      guard let app = store.connectors.first(where: { $0.id == id }), !app.forAll else { continue }
       _ = try? await store.saveConnector(id, ["agentIds": AnyEncodable(Array(Set(app.agentIds ?? []).union([agent.id])).sorted())])
     }
     for id in skills {
-      guard let skill = store.skills.first(where: { $0.id == id }) else { continue }
+      guard let skill = store.skills.first(where: { $0.id == id }), !skill.forAll else { continue }
       _ = try? await store.saveSkill(id, ["agentIds": AnyEncodable(Array(Set(skill.agentIds ?? []).union([agent.id])).sorted())])
     }
   }
@@ -331,11 +331,11 @@ private struct NewAgentMore: View {
                 prompt: "@" + (ManagementText.handle(draft.name).isEmpty ? "handle" : ManagementText.handle(draft.name)), lowercase: true)
       CardCaption("Letters a to z. Teammates type this to mention it.")
       CardGroup {
-        NavigationLink { NewAgentPicks(title: "Connected apps", items: store.connectors.map { ($0.id, $0.name, $0.description ?? $0.category) }, picked: $draft.apps) } label: {
-          RowLabel(title: "Connected apps", value: summary(draft.apps), leading: { rowIcon("square.grid.2x2") })
+        NavigationLink { NewAgentPicks(title: "Connected apps", items: store.connectors.map { ($0.id, $0.name, $0.description ?? $0.category) }, locked: Set(store.connectors.filter(\.forAll).map(\.id)), picked: $draft.apps) } label: {
+          RowLabel(title: "Connected apps", value: summary(draft.apps, all: store.connectors.filter(\.forAll).count), leading: { rowIcon("square.grid.2x2") })
         }.buttonStyle(.plain)
-        NavigationLink { NewAgentPicks(title: "Skills", items: store.skills.map { ($0.id, $0.name, $0.plain?.does ?? $0.description) }, picked: $draft.skills) } label: {
-          RowLabel(title: "Skills", value: summary(draft.skills), leading: { rowIcon("bolt") })
+        NavigationLink { NewAgentPicks(title: "Skills", items: store.skills.map { ($0.id, $0.name, $0.plain?.does ?? $0.description) }, locked: Set(store.skills.filter(\.forAll).map(\.id)), picked: $draft.skills) } label: {
+          RowLabel(title: "Skills", value: summary(draft.skills, all: store.skills.filter(\.forAll).count), leading: { rowIcon("bolt") })
         }.buttonStyle(.plain)
         NavigationLink { NewAgentInstructions(draft: draft) } label: {
           RowLabel(title: "Instructions", subtitle: draft.instructions.trimmed.isEmpty ? "Write how it should work" : AgentEditText.firstLine(draft.instructions), leading: { rowIcon("text.alignleft") })
@@ -347,12 +347,15 @@ private struct NewAgentMore: View {
     }
   }
 
-  private func summary(_ ids: Set<String>) -> String { ids.isEmpty ? "None" : "\(ids.count)" }
+  /** what's picked plus what every agent gets anyway */
+  private func summary(_ ids: Set<String>, all: Int) -> String { ids.count + all == 0 ? "None" : "\(ids.count + all)" }
 }
 
 private struct NewAgentPicks: View {
   var title: String
   var items: [(String, String, String?)]
+  /** on for every agent already: shown on, and can't be turned off here */
+  var locked: Set<String> = []
   @Binding var picked: Set<String>
   var body: some View {
     AgentFrame(title: title, subtitle: "New agent") {
@@ -361,7 +364,11 @@ private struct NewAgentPicks: View {
       } else {
         CardGroup {
           ForEach(items, id: \.0) { item in
-            SwitchRow(title: item.1, subtitle: item.2, isOn: Binding(get: { picked.contains(item.0) }, set: { if $0 { picked.insert(item.0) } else { picked.remove(item.0) } }))
+            if locked.contains(item.0) {
+              SwitchRow(title: item.1, subtitle: "All agents", isOn: .constant(true)).disabled(true)
+            } else {
+              SwitchRow(title: item.1, subtitle: item.2, isOn: Binding(get: { picked.contains(item.0) }, set: { if $0 { picked.insert(item.0) } else { picked.remove(item.0) } }))
+            }
           }
         }
       }

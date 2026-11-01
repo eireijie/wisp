@@ -118,6 +118,8 @@ interface State {
   memoryVersion: number;
   /** bumps when the person's model connections change (added, renamed, removed, renewed, new plan usage) */
   modelsVersion: number;
+  /** bumped when skills or connectors change on the hub (an agent learned one, someone switched who has it) */
+  skillsVersion: number;
   /** model sign-ins this person started, as the hub reports them on the socket */
   modelLogins: Record<string, ModelLogin>;
   /** the New task dialog is open */
@@ -195,6 +197,7 @@ export const useStore = create<State>((set, get) => ({
   flowsVersion: 0,
   memoryVersion: 0,
   modelsVersion: 0,
+  skillsVersion: 0,
   modelLogins: {},
   newTaskOpen: false,
   newChatOpen: false,
@@ -336,7 +339,7 @@ export const useStore = create<State>((set, get) => ({
     // after a reconnect, catch up on anything missed
     if (connected && !wasConnected) {
       const { activeChannel, threadChannels } = get();
-      set((s) => ({ live: {}, routinesVersion: s.routinesVersion + 1, backgroundVersion: s.backgroundVersion + 1, changesVersion: s.changesVersion + 1, tasksVersion: s.tasksVersion + 1, flowsVersion: s.flowsVersion + 1, memoryVersion: s.memoryVersion + 1, modelsVersion: s.modelsVersion + 1 }));
+      set((s) => ({ live: {}, routinesVersion: s.routinesVersion + 1, backgroundVersion: s.backgroundVersion + 1, changesVersion: s.changesVersion + 1, tasksVersion: s.tasksVersion + 1, flowsVersion: s.flowsVersion + 1, memoryVersion: s.memoryVersion + 1, modelsVersion: s.modelsVersion + 1, skillsVersion: s.skillsVersion + 1 }));
       if (activeChannel) get().loadChannel(activeChannel).catch(() => {});
       for (const [rootId, channelId] of Object.entries(threadChannels)) get().loadThread(channelId, rootId).catch(() => {});
       get().refreshAgents().catch(() => {});
@@ -450,6 +453,8 @@ export const useStore = create<State>((set, get) => ({
       set((s) => ({ flowsVersion: s.flowsVersion + 1 }));
     } else if (e.type === "memory_changed") {
       set((s) => ({ memoryVersion: s.memoryVersion + 1 }));
+    } else if (e.type === "skills_changed") {
+      set((s) => ({ skillsVersion: s.skillsVersion + 1 }));
     } else if (e.type === "model_connections_changed") {
       set((s) => ({ modelsVersion: s.modelsVersion + 1 }));
     } else if (e.type === "model_login") {

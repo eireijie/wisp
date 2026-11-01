@@ -72,9 +72,21 @@ afterAll(async () => {
 const post = async (body: string) => (await api("POST", `/api/channels/${general.id}/messages`, { body })).data;
 
 describe("/ commands", () => {
-  it("lists Wisp's own first, then the harness's", async () => {
+  it("lists the harness's own, then Wisp's, keeping Wisp's names", async () => {
     const { data } = await api<{ commands: any[] }>("GET", `/api/agents/${atlas.id}/commands`);
-    expect(data.commands.map((c) => `${c.name}:${c.kind}`)).toEqual(["context:wisp", "model:wisp", "effort:wisp", "harness:wisp", "compress:command", "humanizer:skill"]);
+    expect(data.commands.map((c) => `${c.name}:${c.kind}:${c.group}`)).toEqual(["compress:command:harness", "humanizer:skill:harness", "context:wisp:wisp", "model:wisp:wisp", "effort:wisp:wisp", "harness:wisp:wisp"]);
+  });
+
+  it("puts skills agents learned first, with who learned them, and other Wisp skills last", async () => {
+    const ws = atlas.workspaceId;
+    const learned = hub.skills.create(ws, atlas.id, { name: "Humanizer", slug: "humanizer", description: "My own way", source: "learned", content: "1. Do it", learnedBy: atlas.id });
+    hub.skills.attach(learned.id, atlas.id, true);
+    const shared = hub.skills.create(ws, null, { name: "Notes", slug: "meeting-notes", description: "Take notes", source: "custom", content: "x", allAgents: true });
+    const { data } = await api<{ commands: any[] }>("GET", `/api/agents/${atlas.id}/commands`);
+    expect(data.commands.map((c) => `${c.name}:${c.group}`)).toEqual(["humanizer:learned", "compress:harness", "context:wisp", "model:wisp", "effort:wisp", "harness:wisp", "meeting-notes:skill"]);
+    expect(data.commands[0]).toMatchObject({ kind: "wisp-skill", via: "prompt", learnedBy: "Atlas", isNew: true });
+    hub.skills.remove(learned.id);
+    hub.skills.remove(shared.id);
   });
 
   it("passes a harness command through as typed, into the same conversation", async () => {

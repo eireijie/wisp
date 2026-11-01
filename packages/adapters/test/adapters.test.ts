@@ -231,6 +231,81 @@ describe("harness commands on the device", () => {
     await fsp.rm(home, { recursive: true, force: true });
   });
 
+  it("lists Codex's own system skills as built in, and still skips other dot-folders", async () => {
+    const { codexCommands } = await import("../src/commands.ts");
+    const home = await fsp.mkdtemp(path.join(os.tmpdir(), "wisp-codex-cmds-"));
+    const codexHome = path.join(home, ".codex");
+    const w = async (f: string, t: string) => (await fsp.mkdir(path.dirname(path.join(codexHome, f)), { recursive: true }), fsp.writeFile(path.join(codexHome, f), t));
+    await w("skills/pdf/SKILL.md", "---\nname: pdf\ndescription: Read PDFs\n---\n");
+    await w("skills/.system/skill-creator/SKILL.md", "---\nname: skill-creator\ndescription: Make a new skill\n---\n");
+    await w("skills/.cache/junk/SKILL.md", "---\nname: junk\n---\n");
+    expect(await codexCommands(codexHome, home)).toEqual([
+      { name: "pdf", description: "Read PDFs", kind: "skill", via: "prompt" },
+      { name: "skill-creator", description: "Make a new skill", kind: "skill", via: "prompt", builtIn: true },
+    ]);
+    await fsp.rm(home, { recursive: true, force: true });
+  });
+
+  it("builds Claude Code's list from the start of a run", async () => {
+    const { claudeInitCommands, CLAUDE_BUILTINS } = await import("../src/commands.ts");
+    const init = {
+      type: "system",
+      subtype: "init",
+      slash_commands: ["compact", "review", "clear", "model", "ship", "pdf", "agent-skills:review", "_secret", "cost", "terminal-only", "odd"],
+      skills: ["pdf", "agent-skills:review"],
+      terminal_slash_commands: ["terminal-only"],
+    };
+    const known = [...CLAUDE_BUILTINS, { name: "ship", description: "Ship it", hint: "version", kind: "command" as const, via: "raw" as const }, { name: "pdf", description: "Read PDFs", kind: "skill" as const, via: "raw" as const }];
+    expect(claudeInitCommands(init, known)).toEqual([
+      { name: "compact", description: "Shrink the conversation so it can keep going", hint: "what to keep", kind: "command", via: "raw", builtIn: true },
+      { name: "review", description: "Review a pull request", kind: "command", via: "raw", builtIn: true },
+      { name: "ship", description: "Ship it", hint: "version", kind: "command", via: "raw" },
+      { name: "pdf", description: "Read PDFs", kind: "skill", via: "raw" },
+      { name: "agent-skills:review", kind: "skill", via: "raw" },
+      { name: "cost", description: "See what this session has cost", kind: "command", via: "raw", builtIn: true },
+      { name: "odd", kind: "command", via: "raw", builtIn: true },
+    ]);
+    // an init line without the lists (an older Claude Code) changes nothing
+    expect(claudeInitCommands({ type: "system", subtype: "init" } as any)).toBeNull();
+  });
+
+  it("leaves one run's project and connector commands out of the device's Claude Code list", async () => {
+    const { claudeInitCommands } = await import("../src/commands.ts");
+    const init = {
+      slash_commands: ["compact", "ship", "tools:deploy", "github:open-pr", "mcp__wisp__note", "linear:triage", "agent-skills:review", "odd", "loop"],
+      skills: ["agent-skills:review", "loop", "house-style"],
+      mcp_servers: [{ name: "linear", status: "connected" }],
+    };
+    const names = (list: { name: string; builtIn?: boolean }[] | null) => list!.map((c) => `${c.name}${c.builtIn ? "*" : ""}`);
+    // here: the run's folder had ship, tools:deploy and house-style; github is a connector
+    expect(names(claudeInitCommands(init, [], { project: ["ship", "tools:deploy", "house-style"], mcpServers: ["wisp", "github"] }))).toEqual(["compact*", "agent-skills:review", "odd*", "loop"]);
+    // in a VM only Claude Code's known ones are built in
+    expect(names(claudeInitCommands(init, [], { project: ["ship", "tools:deploy", "house-style"], mcpServers: ["github"], vm: true }))).toEqual(["compact*", "agent-skills:review", "odd", "loop*"]);
+  });
+
+  it("reports the start-up list from a run as a commands event", async () => {
+    const { claudeCode } = await import("../src/claude-code.ts");
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "wisp-claude-init-"));
+    const bin = path.join(dir, "claude");
+    const lines = [
+      { type: "system", subtype: "init", session_id: "s1", slash_commands: ["compact", "loop", "deploy"], skills: ["loop"], terminal_slash_commands: [] },
+      { type: "result", result: "ok", usage: { input_tokens: 1, output_tokens: 1 } },
+    ];
+    await fsp.writeFile(bin, `#!/bin/sh\ncat > /dev/null\nprintf '%s\\n' ${lines.map((l) => `'${JSON.stringify(l)}'`).join(" ")}\n`, { mode: 0o755 });
+    const events: any[] = [];
+    // runs "on a VM" (place) so the device's own ~/.claude isn't read; the project there has a "deploy" command of its own
+    const place = { home: dir, readFile: async () => null, readDir: async (d: string) => (d === `${dir}/.claude/commands` ? ["deploy.md"] : []) };
+    await { ...claudeCode, binary: bin }.run({ prompt: "hi", cwd: dir, place }, (e) => events.push(e));
+    expect(events.find((e) => e.type === "commands")).toEqual({
+      type: "commands",
+      commands: [
+        { name: "compact", description: "Shrink the conversation so it can keep going", hint: "what to keep", kind: "command", via: "raw", builtIn: true },
+        { name: "loop", description: "Run a prompt again on an interval", kind: "skill", via: "raw", builtIn: true },
+      ],
+    });
+    await fsp.rm(dir, { recursive: true, force: true });
+  });
+
   it("reads an ACP agent's announced commands", async () => {
     const { acpCommands } = await import("../src/acp.ts");
     expect(acpCommands([{ name: "model", description: "Switch models", input: { hint: "name" } }, { name: "" }])).toEqual([{ name: "model", description: "Switch models", hint: "name", kind: "command", via: "raw" }]);

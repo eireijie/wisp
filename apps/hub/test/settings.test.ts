@@ -185,7 +185,7 @@ describe("workspace settings", () => {
   });
 
   it("sets what agents ask about first, how far they can ping each other, and new agents' access", async () => {
-    expect((await api("GET", "/api/settings/agents")).data).toEqual({ askBefore: ["send", "spend", "delete", "post", "signup", "share"], maxHops: 6, maxRunsPerMinute: 20, defaultAccess: "edit", leadsCreateAgents: false, subAgents: false, maxAgentMade: 10 });
+    expect((await api("GET", "/api/settings/agents")).data).toEqual({ askBefore: ["send", "spend", "delete", "post", "signup", "share"], maxHops: 6, maxRunsPerMinute: 20, defaultAccess: "edit", leadsCreateAgents: false, subAgents: false, maxAgentMade: 10, learnSkills: true });
     await api("PUT", "/api/settings/agents", { askBefore: ["spend", "signup"], maxHops: 2, defaultAccess: "read-only" });
     const agent = (await api("POST", "/api/agents", { handle: "nova", name: "Nova", harness: "custom" })).data;
     expect(agent.settings.access).toBe("read-only");
@@ -194,6 +194,13 @@ describe("workspace settings", () => {
     const prompt = await hub.buildPrompt(agent.id, general.id, null, msg.id);
     expect(prompt).toContain("buying or paying for anything; signing up for new accounts or services");
     expect(prompt).not.toContain("posting publicly");
+    // agents are asked to save skills unless an owner turns learning off
+    expect(prompt).toContain("skill_save");
+    expect((await api("PUT", "/api/settings/agents", { learnSkills: false })).data.learnSkills).toBe(false);
+    const off = await hub.buildPrompt(agent.id, general.id, null, msg.id);
+    expect(off).not.toContain("skill_save");
+    expect(off).toContain("## Your skills");
+    await api("PUT", "/api/settings/agents", { learnSkills: true });
     // a message two hops deep is turned away
     hub.postMessage({ channelId: general.id, author: { kind: "agent", id: agent.id }, body: "@atlas ping", hop: 2 });
     const notice = (await api<any>("GET", `/api/channels/${general.id}/messages`)).data.messages.find((m: any) => m.parts.some((p: any) => p.text?.includes("hop limit 2")));

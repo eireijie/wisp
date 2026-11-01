@@ -1,16 +1,16 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { BadgeCheck, Check, Download, ExternalLink, FileText, Laptop, Link2, Pencil, Plus, Send, Share2, Trash2, Users, Wand2, X } from "lucide-react";
-import { catalogSkill, skillFile, type Agent, type CatalogSkill, type Skill, type StoreSkill } from "@wisp/core";
+import { BadgeCheck, Check, ChevronRight, Download, ExternalLink, FileText, Laptop, Link2, Pencil, Plus, Send, Share2, Trash2, Users, Wand2, X } from "lucide-react";
+import { skillFile, type Agent, type CatalogSkill, type Skill, type StoreSkill } from "@wisp/core";
 import { api } from "../api.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { MoreOptions } from "../components/MoreOptions.tsx";
 import { openDm } from "../openDm.ts";
 import { readSkillFile, readSkillLink, skillLink, type SharedSkill } from "../skillShare.ts";
-import { AgentAvatar, Loader, timeAgo } from "../components/ui.tsx";
-import { AreaBox, Badge, Chip, Circle, Dlg, Item, Label, Labeled, Note, Panel, Prim, Sec, Seg, Switch, TextBox, Tile } from "../components/MarketParts.tsx";
+import { Loader, cx } from "../components/ui.tsx";
+import { AreaBox, Badge, Chip, Circle, Dlg, Item, Label, Labeled, Note, Panel, Prim, Sec, Seg, TextBox, Tile } from "../components/MarketParts.tsx";
 import { AgentPicker, CatalogIcon } from "../components/ShopParts.tsx";
 
-export const SOURCE: Record<Skill["source"], string> = { catalog: "From the library", custom: "Made here", taught: "Taught" };
+export const SOURCE: Record<Skill["source"], string> = { catalog: "From the library", custom: "Made here", taught: "Taught", learned: "Learned" };
 
 const NEW_SKILL = `# <What this skill does>
 
@@ -102,6 +102,201 @@ export function skillOrigin(s: Pick<Skill, "source" | "catalogId">): string {
   return SOURCE[s.source];
 }
 
+/** A harness's own skill or command, as GET /api/skills/built-in lists it. */
+export interface BuiltInSkill {
+  name: string;
+  description?: string;
+  harness: string;
+  harnessLabel: string;
+  agentIds: string[];
+}
+
+/** The id a built-in skill's page goes by (#/settings/skills/<id>). */
+export const builtInId = (b: Pick<BuiltInSkill, "harness" | "name">) => `built-in:${b.harness}:${b.name}`;
+
+/** "Oct 29". */
+export const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+const agentName = (agents: Pick<Agent, "id" | "name">[], id: string | null | undefined) => (id ? agents.find((a) => a.id === id)?.name : undefined);
+
+/** Who has a skill, in a word or two: "All agents", "Nova", "3 agents", "No agents". */
+export function skillHolders(s: Pick<Skill, "allAgents" | "agentIds">, agents: Pick<Agent, "id" | "name">[]): string {
+  if (s.allAgents) return "All agents";
+  const names = s.agentIds.map((id) => agentName(agents, id)).filter((n): n is string => !!n);
+  return names.length === 0 ? "No agents" : names.length === 1 ? names[0] : `${names.length} agents`;
+}
+
+/** Where a skill came from, for its row: "Ghosty · Oct 29", "Anthropic", "Imported from your Mac", "Made here". */
+export function skillByline(s: Pick<Skill, "source" | "catalogId" | "learnedBy" | "createdAt">, agents: Pick<Agent, "id" | "name">[], deviceName?: (nodeId: string) => string | undefined): string {
+  if (s.source === "learned") return `${agentName(agents, s.learnedBy) ?? "An agent"} · ${shortDate(s.createdAt)}`;
+  const id = s.catalogId ?? "";
+  if (id.startsWith("device:")) return `Imported from ${deviceName?.(id.split(":")[1]) ?? "a device"}`;
+  const store = /^([a-z]+):/.exec(id)?.[1];
+  if (s.source === "catalog") return (store && STORE_NAMES[store]) || "Wisp";
+  return SOURCE[s.source];
+}
+
+/** The line under a skill's name on its page: "Learned by Ghosty · Oct 29 · used 3 times". */
+export function skillMeta(s: Pick<Skill, "source" | "catalogId" | "learnedBy" | "createdAt" | "updatedAt" | "uses">, agents: Pick<Agent, "id" | "name">[]): string {
+  const uses = s.uses ?? 0;
+  const used = uses ? `used ${uses === 1 ? "once" : `${uses} times`}` : null;
+  const head = s.source === "learned" ? `Learned by ${agentName(agents, s.learnedBy) ?? "an agent"} · ${shortDate(s.createdAt)}` : `${skillOrigin(s)} · updated ${shortDate(s.updatedAt)}`;
+  return [head, used].filter(Boolean).join(" · ");
+}
+
+/** "Who can use it": just the agent that learned it, some agents, or all of them. */
+type Who = "just" | "some" | "all";
+
+/** The skill's access as the page's segmented control shows it. A learned skill whose agent is gone falls back to "some". */
+export function whoValue(s: Pick<Skill, "source" | "allAgents" | "learnedBy">, agents: Pick<Agent, "id">[]): Who {
+  if (s.allAgents) return "all";
+  return s.source === "learned" && s.learnedBy && agents.some((a) => a.id === s.learnedBy) ? "just" : "some";
+}
+
+/** What to send when "Who can use it" changes. "Just" the agent that learned it only while that agent is still around. */
+export function whoPatch(s: Pick<Skill, "learnedBy">, to: Who, agents: Pick<Agent, "id">[]): { allAgents: boolean; agentIds?: string[] } {
+  if (to === "all") return { allAgents: true };
+  if (to === "just" && s.learnedBy && agents.some((a) => a.id === s.learnedBy)) return { allAgents: false, agentIds: [s.learnedBy] };
+  return { allAgents: false };
+}
+
+/** A small segmented control, square-ish, like the rest of Settings. */
+function WhoSeg<T extends string>({ value, options, onChange, disabled }: { value: T; options: [T, string][]; onChange: (v: T) => void; disabled?: boolean }) {
+  return (
+    <div role="radiogroup" aria-label="Who can use it" className="flex gap-0.5 rounded-lg bg-control p-0.5">
+      {options.map(([v, text]) => (
+        <button key={v} type="button" role="radio" aria-checked={value === v} disabled={disabled} onClick={() => value !== v && onChange(v)} className={cx("h-[30px] min-w-0 flex-1 truncate rounded-md px-3 text-[13px] font-medium disabled:opacity-50", value === v ? "bg-ink/15 text-ink" : "text-muted hover:text-ink")}>
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A row in a list of actions on a skill's page (Edit, Forget this skill). */
+function ActionRow({ children, onClick, danger }: { children: ReactNode; onClick: () => void; danger?: boolean }) {
+  return (
+    <button type="button" onClick={onClick} className={cx("flex min-h-11 w-full items-center gap-2.5 px-4 text-left text-sm hover:bg-hover", danger && "text-bad")}>
+      {children}
+    </button>
+  );
+}
+
+/**
+ * An added or learned skill's page: its name, where it came from and how often it's used, what it's
+ * for, its steps, who can use it, and Edit / Forget.
+ */
+function SkillPage({ skill, agents, canEdit, onEdit, onChanged, onGone, onTry, onShare }: { skill: Skill; agents: Agent[]; canEdit: boolean; onEdit: (s: Skill) => void; onChanged: (id?: string) => void; onGone: () => void; onTry: (skill: { name: string; description: string; agentIds: string[] }) => void; onShare: (s: Skill) => void }) {
+  const html = useMemo(() => renderMarkdown(skill.content), [skill.content]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const who = whoValue(skill, agents);
+  const learner = skill.source === "learned" ? agents.find((a) => a.id === skill.learnedBy) : undefined;
+  const options: [Who, string][] = learner ? [["just", `Just ${learner.name}`], ["all", "All agents"]] : [["some", "Some agents"], ["all", "All agents"]];
+
+  async function run(p: () => Promise<unknown>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await p();
+      onChanged(skill.id);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  // the picker hands back the whole list; send only what changed
+  const pick = (ids: string[]) =>
+    run(async () => {
+      for (const id of ids) if (!skill.agentIds.includes(id)) await api("PUT", `/api/skills/${skill.id}/agents/${id}`);
+      for (const id of skill.agentIds) if (!ids.includes(id)) await api("DELETE", `/api/skills/${skill.id}/agents/${id}`);
+    });
+
+  async function forget() {
+    if (!confirm(`Forget "${skill.name}"? Agents that use it lose it.`)) return;
+    try {
+      await api("DELETE", `/api/skills/${skill.id}`);
+      onGone();
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="m-work space-y-5">
+      <header className="flex items-start gap-3">
+        <div className="min-w-0 flex-1 space-y-1">
+          <h2 className="truncate text-xl font-semibold tracking-[-0.02em]">{skill.name}</h2>
+          <p className="text-[13px] text-faint">{skillMeta(skill, agents)}</p>
+        </div>
+        {canEdit && (
+          <Circle label="Share" className="circle-sm" onClick={() => onShare(skill)}>
+            <Share2 size={16} />
+          </Circle>
+        )}
+      </header>
+
+      <div className="space-y-3 rounded-xl border border-line bg-card px-4 py-3.5">
+        {skill.description && <p className="text-sm font-medium">{skill.description}</p>}
+        <div className="prose-w text-sm text-ink/90" dangerouslySetInnerHTML={{ __html: html }} />
+      </div>
+
+      <section className="space-y-2">
+        <h3 className="px-1 text-xs font-medium uppercase tracking-[0.04em] text-faint">Who can use it</h3>
+        <WhoSeg value={who} options={options} disabled={!canEdit || busy} onChange={(v) => void run(() => api("PATCH", `/api/skills/${skill.id}`, whoPatch(skill, v, agents)))} />
+        {who === "some" && <AgentPicker agents={agents} value={skill.agentIds} onChange={(ids) => void pick(ids)} disabled={!canEdit || busy} />}
+      </section>
+
+      <div className="overflow-hidden rounded-xl border border-line bg-card divide-y divide-line">
+        {canEdit && (
+          <ActionRow onClick={() => onEdit(skill)}>
+            <Pencil size={15} className="text-muted" /> <span className="flex-1">Edit</span> <ChevronRight size={15} className="text-faint" />
+          </ActionRow>
+        )}
+        <ActionRow onClick={() => onTry({ name: skill.name, description: skill.description, agentIds: skill.allAgents ? agents.map((a) => a.id) : skill.agentIds })}>
+          <Send size={15} className="text-muted" /> <span className="flex-1">Try it</span> <ChevronRight size={15} className="text-faint" />
+        </ActionRow>
+        {canEdit && (
+          <ActionRow danger onClick={() => void forget()}>
+            <Trash2 size={15} /> Forget this skill
+          </ActionRow>
+        )}
+      </div>
+      {error && <p className="text-sm text-bad">{error}</p>}
+
+      <MoreOptions title="Details">
+        <p className="text-xs text-muted">
+          Instruction file: <span className="font-mono">me/skills/{skill.slug}/SKILL.md</span>
+        </p>
+      </MoreOptions>
+    </div>
+  );
+}
+
+/** A harness's own skill or command: read only, it comes with the harness. */
+export function BuiltInSkillPage({ skill, agents }: { skill: BuiltInSkill; agents: Agent[] }) {
+  const names = skill.agentIds.map((id) => agents.find((a) => a.id === id)?.name).filter((n): n is string => !!n);
+  return (
+    <div className="m-work space-y-5">
+      <header className="space-y-1">
+        <h2 className="truncate text-xl font-semibold tracking-[-0.02em]">{skill.name}</h2>
+        <p className="text-[13px] text-faint">Built into {skill.harnessLabel}</p>
+      </header>
+      {skill.description && <p className="rounded-xl border border-line bg-card px-4 py-3.5 text-sm">{skill.description}</p>}
+      <section className="space-y-2">
+        <h3 className="px-1 text-xs font-medium uppercase tracking-[0.04em] text-faint">Who can use it</h3>
+        <div className="rounded-xl border border-line bg-card px-4 py-3">
+          <p className="text-sm">{skill.harnessLabel} agents</p>
+          {names.length > 0 && <p className="mt-0.5 truncate text-[13px] text-faint">{names.join(", ")}</p>}
+        </div>
+        <p className="px-1 text-xs text-faint">Type /{skill.name} in a chat with one of them.</p>
+      </section>
+    </div>
+  );
+}
+
 
 /** The little plain-words card a skill detail shows (what it needs, an example). */
 function SkillFacts({ plain }: { plain: { does: string; needs: string | null; example: string | null } }) {
@@ -135,112 +330,44 @@ function SkillFacts({ plain }: { plain: { does: string; needs: string | null; ex
  * A skill's page: what it does and needs, an example, its full instructions, Try it and Install (or,
  * once it's added, who has it, Edit and Delete). `onTry` opens the request to copy or send.
  */
-export function SkillDetail({ open, agents, canEdit, onInstall, onEdit, onChanged, onGone, onTry, onShare }: { open: Open; agents: Agent[]; canEdit: boolean; onInstall: (e: CatalogSkill) => void; onEdit: (s: Skill) => void; onChanged: (id?: string) => void; onGone: () => void; onTry: (skill: { name: string; description: string; agentIds: string[] }) => void; onShare: (s: Skill) => void }) {
-  const skill = "skill" in open ? open.skill : null;
-  const entry = "entry" in open ? open.entry : catalogSkill(skill?.catalogId ?? "");
-  const name = skill?.name ?? entry!.name;
-  const description = skill?.description ?? entry!.description;
-  const content = skill?.content ?? entry!.content;
+export function SkillDetail(props: { open: Open; agents: Agent[]; canEdit: boolean; onInstall: (e: CatalogSkill) => void; onEdit: (s: Skill) => void; onChanged: (id?: string) => void; onGone: () => void; onTry: (skill: { name: string; description: string; agentIds: string[] }) => void; onShare: (s: Skill) => void }) {
+  if ("skill" in props.open) return <SkillPage {...props} skill={props.open.skill} />;
+  return <LibrarySkill {...props} entry={props.open.entry} />;
+}
+
+/** A library skill not added yet: what it does and needs, an example, its instructions, Try it and Install. */
+function LibrarySkill({ entry, canEdit, onInstall, onTry }: { entry: CatalogSkill; canEdit: boolean; onInstall: (e: CatalogSkill) => void; onTry: (skill: { name: string; description: string; agentIds: string[] }) => void }) {
+  const { name, description, content } = entry;
   const html = useMemo(() => renderMarkdown(content), [content]);
-  const plain = plainSkill(skill, entry);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function toggle(agentId: string, on: boolean) {
-    if (!skill) return;
-    setBusy(agentId);
-    setError(null);
-    try {
-      await api(on ? "PUT" : "DELETE", `/api/skills/${skill.id}/agents/${agentId}`);
-      onChanged(skill.id);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function remove() {
-    if (!skill || !confirm(`Delete "${skill.name}"? Anyone who has it loses it.`)) return;
-    try {
-      await api("DELETE", `/api/skills/${skill.id}`);
-      onGone();
-      onChanged();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
+  const plain = plainSkill(null, entry);
 
   return (
     <div className="space-y-6">
       <header className="flex items-start gap-4">
         <Tile size={56}>
-          <CatalogIcon name={entry?.icon} fallback={Wand2} size={26} />
+          <CatalogIcon name={entry.icon} fallback={Wand2} size={26} />
         </Tile>
         <div className="min-w-0 flex-1 space-y-1.5">
           <h2 className="t-title">{name}</h2>
           <div className="flex flex-wrap items-center gap-2">
-            {skill ? <Badge tone={skill.catalogId?.startsWith("device:") || skill.source === "custom" ? "grey" : "green"}>{skillOrigin(skill)}</Badge> : <Badge tone="green" icon={<BadgeCheck size={13} aria-hidden />}>Made by Wisp</Badge>}
-            {skill && <span className="text-sm text-faint">{helperLine(agents, skill.agentIds)}</span>}
-            {skill && <span className="text-sm text-faint">updated {timeAgo(skill.updatedAt)}</span>}
+            <Badge tone="green" icon={<BadgeCheck size={13} aria-hidden />}>Made by Wisp</Badge>
           </div>
         </div>
-        {skill && canEdit && (
-          <Circle label="Share" onClick={() => onShare(skill)}>
-            <Share2 size={18} />
-          </Circle>
-        )}
       </header>
 
       {!plain.does && <p className="px-1 text-body leading-relaxed">{description}</p>}
       <SkillFacts plain={plain} />
 
       <div className="flex flex-wrap gap-2">
-        <Sec onClick={() => onTry({ name, description, agentIds: skill?.agentIds ?? [] })}>
+        <Sec onClick={() => onTry({ name, description, agentIds: [] })}>
           <Send size={16} /> Try it
         </Sec>
-        {canEdit &&
-          (skill ? (
-            <>
-              <Sec onClick={() => onEdit(skill)}>
-                <Pencil size={15} /> Edit
-              </Sec>
-              <Sec onClick={remove} className="text-bad">
-                <Trash2 size={15} /> Delete
-              </Sec>
-            </>
-          ) : (
-            entry && <Prim onClick={() => onInstall(entry)}>Install</Prim>
-          ))}
+        {canEdit && <Prim onClick={() => onInstall(entry)}>Install</Prim>}
       </div>
-
-      {skill && (
-        <section className="space-y-2">
-          <Label>Helpers with this skill</Label>
-          {agents.length === 0 ? (
-            <p className="px-1 text-sm text-muted">No helpers yet.</p>
-          ) : (
-            <Panel>
-              {agents.map((a) => {
-                const on = skill.agentIds.includes(a.id);
-                return <Item key={a.id} icon={<AgentAvatar agent={a} size={30} />} title={a.name} sub={`@${a.handle}`} right={canEdit ? <Switch on={on} label={a.name} disabled={busy === a.id} onChange={(v) => toggle(a.id, v)} /> : on ? <Check size={16} className="text-ok" /> : undefined} />;
-              })}
-            </Panel>
-          )}
-        </section>
-      )}
-      {error && <p className="text-sm text-bad">{error}</p>}
 
       <MoreOptions title="Read the full instructions">
         <div className="prose-w rounded-2xl border border-line p-4 text-sm" dangerouslySetInnerHTML={{ __html: html }} />
       </MoreOptions>
-      {skill && (
-        <MoreOptions about="details">
-          <p className="text-xs text-muted">
-            Instruction file: <span className="font-mono">me/skills/{skill.slug}/SKILL.md</span>
-          </p>
-        </MoreOptions>
-      )}
     </div>
   );
 }
@@ -363,13 +490,14 @@ export function TryDialog({ skill, agents, onClose }: { skill: { name: string; d
 /** Give a skill to agents: one from the library (`catalogId`), the store (`storeId`) or a device (`nodeId`, `harness`, `skillId`). */
 export function InstallModal({ entry, body, agents, onClose, onDone }: { entry: { name: string; description: string }; body: Record<string, string>; agents: Agent[]; onClose: () => void; onDone: (s: Skill) => void }) {
   const [agentIds, setAgentIds] = useState<string[]>(agents.length === 1 ? [agents[0].id] : []);
+  const [allAgents, setAllAgents] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function install() {
     setBusy(true);
     setError(null);
     try {
-      onDone(await api<Skill>("POST", "/api/skills", { ...body, agentIds }));
+      onDone(await api<Skill>("POST", "/api/skills", { ...body, agentIds, allAgents }));
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -377,11 +505,11 @@ export function InstallModal({ entry, body, agents, onClose, onDone }: { entry: 
   }
   return (
     <Dlg title={`Add ${entry.name}`} sub="Which helpers should know it?" onClose={onClose}>
-      <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} />
+      <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} allAgents={{ on: allAgents, onChange: setAllAgents }} />
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="flex justify-end">
         <Prim disabled={busy} onClick={install} className="max-sm:w-full">
-          {agentIds.length ? `Add ${entry.name}` : "Add to the organization"}
+          {allAgents || agentIds.length ? `Add ${entry.name}` : "Add to the organization"}
         </Prim>
       </div>
     </Dlg>
@@ -457,6 +585,7 @@ export function SkillEditor({ skill, agents, onClose, onSaved, onShare }: { skil
   // after that their edited text is what gets saved (and "Use the answers again" undoes it).
   const [rawEdit, setRawEdit] = useState<string | null>(null);
   const [agentIds, setAgentIds] = useState<string[]>(skill?.agentIds ?? []);
+  const [allAgents, setAllAgents] = useState(skill?.allAgents ?? false);
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -469,7 +598,7 @@ export function SkillEditor({ skill, agents, onClose, onSaved, onShare }: { skil
   async function save() {
     setBusy(true);
     setError(null);
-    const body = { name: name.trim(), description: finalDescription, content: finalContent, tags: tags.slice(0, 10), agentIds };
+    const body = { name: name.trim(), description: finalDescription, content: finalContent, tags: tags.slice(0, 10), agentIds, allAgents };
     try {
       onSaved(skill ? await api<Skill>("PATCH", `/api/skills/${skill.id}`, body) : await api<Skill>("POST", "/api/skills", body));
     } catch (e) {
@@ -540,7 +669,7 @@ export function SkillEditor({ skill, agents, onClose, onSaved, onShare }: { skil
         {guided ? <MoreOptions title="Edit the instructions directly">{editor}</MoreOptions> : editor}
         <div className="space-y-2">
           <Label>Which helpers have it</Label>
-          <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} />
+          <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} allAgents={{ on: allAgents, onChange: setAllAgents }} />
         </div>
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex flex-wrap justify-end gap-2">

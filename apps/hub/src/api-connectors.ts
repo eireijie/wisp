@@ -1,11 +1,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { SETTINGS_HARNESSES, agentSkillPath, catalogSkill, skillBody, skillFile, skillSlug, skillTitle, type HarnessSkillFile, type Skill } from "@wisp/core";
+import { SETTINGS_HARNESSES, WISP_COMMANDS, agentSkillPath, catalogSkill, harnessLabel, skillBody, skillFile, skillSlug, skillTitle, type HarnessSkillFile, type Skill } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import type { Hub } from "./hub.ts";
 import { CALLBACK_PATH } from "./connector-auth.ts";
 import { registerShopApi } from "./api-shop.ts";
 import { ComputerError } from "./computers.ts";
+import { holdsSecret } from "./connectors.ts";
+import { agentPolicy } from "./policy.ts";
 
 interface Helpers {
   need(req: FastifyRequest, reply: FastifyReply, opts?: { owner?: boolean; user?: boolean; member?: boolean }): Caller | null;
@@ -20,17 +22,23 @@ const AGENT_IDS = z.array(z.string().min(1)).max(500);
 const NAME = z.string().trim().min(1).max(60);
 
 const CONNECTOR = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("mcp-stdio"), name: NAME, catalogId: z.string().max(300).nullish(), command: z.string().trim().min(1).max(1000), args: z.array(z.string().max(4000)).max(100).default([]), env: ENV.default({}), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional() }),
-  z.object({ kind: z.literal("mcp-http"), name: NAME, catalogId: z.string().max(300).nullish(), url: URL_, headers: HEADERS.default({}), env: ENV.default({}), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional() }),
-  z.object({ kind: z.literal("secret"), name: NAME, catalogId: z.string().max(300).nullish(), env: ENV.refine((o) => Object.values(o).some(Boolean), "add at least one value"), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional() }),
+  z.object({ kind: z.literal("mcp-stdio"), name: NAME, catalogId: z.string().max(300).nullish(), command: z.string().trim().min(1).max(1000), args: z.array(z.string().max(4000)).max(100).default([]), env: ENV.default({}), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional(), allAgents: z.boolean().optional() }),
+  z.object({ kind: z.literal("mcp-http"), name: NAME, catalogId: z.string().max(300).nullish(), url: URL_, headers: HEADERS.default({}), env: ENV.default({}), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional(), allAgents: z.boolean().optional() }),
+  z.object({ kind: z.literal("secret"), name: NAME, catalogId: z.string().max(300).nullish(), env: ENV.refine((o) => Object.values(o).some(Boolean), "add at least one value"), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional(), allAgents: z.boolean().optional() }),
 ]);
 
 const CONNECTOR_PATCH = z
-  .object({ name: NAME, command: z.string().trim().min(1).max(1000), args: z.array(z.string().max(4000)).max(100), url: URL_, headers: HEADERS, env: ENV, enabled: z.boolean(), agentIds: AGENT_IDS })
+  .object({ name: NAME, command: z.string().trim().min(1).max(1000), args: z.array(z.string().max(4000)).max(100), url: URL_, headers: HEADERS, env: ENV, enabled: z.boolean(), agentIds: AGENT_IDS, allAgents: z.boolean() })
   .partial()
   .strict();
 
 const SKILL_BODY = z.object({ name: NAME, description: z.string().trim().max(500).default(""), content: z.string().min(1).max(100_000), tags: z.array(z.string().trim().min(1).max(30)).max(10).default([]) });
+
+/** How many skills one agent can learn. */
+const MAX_LEARNED = 200;
+
+/** What an agent sends to save how it did something (skill_save). */
+const LEARNED = z.object({ name: NAME, description: z.string().trim().max(200).default(""), content: z.string().trim().min(1).max(20_000), slug: z.string().trim().min(1).max(60).optional() }).strict();
 
 /**
  * Connectors (MCP servers and secrets agents use) and the skill shop (SKILL.md instructions agents
@@ -60,7 +68,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     const conn = connectors.get(connectorId);
     if (!conn || conn.kind !== "mcp-stdio" || !conn.command) return [];
     const out: string[] = [];
-    for (const agentId of conn.agentIds) {
+    for (const agentId of conn.allAgents ? store.agents(conn.workspaceId).map((a) => a.id) : conn.agentIds) {
       const agent = store.agent(agentId);
       const node = agent?.nodeId ? store.node(agent.nodeId) : undefined;
       const commands = node ? store.nodeCapabilities(node.id)?.commands : undefined;
@@ -69,6 +77,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     return out;
   }
   const withWarnings = (connectorId: string) => ({ ...connectors.get(connectorId)!, warnings: warnings(connectorId) });
+  const changed = (c: Caller) => hub.broadcast(c.workspaceId, { type: "skills_changed" });
 
   // --- connectors -------------------------------------------------------------------------------
 
@@ -88,6 +97,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!agentIds) return;
     const conn = connectors.create(c.workspaceId, c.actor.id, body);
     if (agentIds.length) connectors.setAgents(conn.id, agentIds);
+    changed(c);
     // a remote server that wants people to sign in says so now, so the page can offer it
     if (conn.kind === "mcp-http") await connectors.auth.probe(conn.id, connectors.serverUrl(conn.id)!, connectors.serverHeaders(conn.id));
     return withWarnings(conn.id);
@@ -168,6 +178,8 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!conn) return;
     const body = parse(CONNECTOR_PATCH, req.body, reply);
     if (!body) return;
+    if (body.allAgents !== undefined && body.allAgents !== conn.allAgents && conn.createdBy !== c.actor.id && store.role(c.workspaceId, c.actor.id) !== "owner")
+      return reply.code(403).send({ error: "Only the person who added this connector, or the workspace owner, can turn All agents on or off" });
     if (body.name) {
       const other = connectors.byName(c.workspaceId, body.name);
       if (other && other.id !== conn.id) return reply.code(409).send({ error: `there's already a connector named "${body.name}"` });
@@ -178,6 +190,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
       connectors.setAgents(conn.id, ids);
     }
     connectors.update(conn.id, body);
+    changed(c);
     return withWarnings(conn.id);
   });
 
@@ -187,6 +200,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     const conn = ownConnector(c, req, reply);
     if (!conn) return;
     connectors.remove(conn.id);
+    changed(c);
     return { ok: true };
   });
 
@@ -202,6 +216,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
         const ids = agentsIn(c, [(req.params as { agentId: string }).agentId], reply);
         if (!ids) return;
         connectors.attach(conn.id, ids[0], method === "PUT");
+        changed(c);
         return withWarnings(conn.id);
       },
     });
@@ -220,10 +235,90 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     }
   }
 
+  /** Agents that have the skill: every agent in the workspace when it's on for all, else the ones given it. */
+  const holders = (s: Skill) => (s.allAgents ? store.agents(s.workspaceId).map((a) => a.id) : s.agentIds);
+
   app.get("/api/skills", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
     return skills.list(c.workspaceId);
+  });
+
+  /**
+   * The harnesses' own skills and commands (Codex's system skills, Claude Code's built-ins), as
+   * the devices last listed them for where this workspace's agents run. One entry per harness and name.
+   */
+  app.get("/api/skills/built-in", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const out = new Map<string, { name: string; description?: string; harness: string; harnessLabel: string; agentIds: string[] }>();
+    for (const agent of store.agents(c.workspaceId)) {
+      const catalog = hub.catalogFor(agent);
+      for (const cmd of catalog?.commands ?? []) {
+        if (!cmd.builtIn && cmd.kind !== "skill") continue;
+        const key = `${agent.harness}\n${cmd.name}`;
+        const entry = out.get(key) ?? { name: cmd.name, ...(cmd.description ? { description: cmd.description } : {}), harness: agent.harness, harnessLabel: harnessLabel(agent.harness), agentIds: [] };
+        if (!entry.agentIds.includes(agent.id)) entry.agentIds.push(agent.id);
+        out.set(key, entry);
+      }
+    }
+    return { skills: [...out.values()].sort((a, b) => a.harnessLabel.localeCompare(b.harnessLabel) || a.name.localeCompare(b.name)) };
+  });
+
+  /**
+   * The skill an agent learned before that a save means: one at the slug asked for or its name's
+   * slug (or the "-2", "-3"… freeSlug gave it when that was taken), else one with the same name.
+   */
+  function learnedMatch(workspaceId: string, agentId: string, body: { name: string; slug?: string }): Skill | undefined {
+    const bases = [...new Set([body.slug && skillSlug(body.slug), skillSlug(body.name)].filter((b): b is string => !!b))];
+    const mine = skills.learnedBy(workspaceId, agentId);
+    const numbered = (slug: string, base: string) => slug.startsWith(`${base}-`) && /^\d+$/.test(slug.slice(base.length + 1));
+    return (
+      mine.find((s) => bases.includes(s.slug)) ??
+      mine.find((s) => bases.some((b) => numbered(s.slug, b))) ??
+      mine.find((s) => s.name.toLowerCase() === body.name.toLowerCase())
+    );
+  }
+
+  /**
+   * An agent saves how it did something, to do it the same way next time (skill_save). Saving
+   * under the name (or slug) of a skill it learned before updates that one.
+   */
+  app.post("/api/skills/learn", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only; people add skills with POST /api/skills" });
+    if (!agentPolicy(hub, c.workspaceId).learnSkills) return reply.code(403).send({ error: "Learning skills is off in Settings → Skills" });
+    const body = parse(LEARNED, req.body, reply);
+    if (!body) return;
+    if (holdsSecret(`${body.name}\n${body.description}\n${body.content}`)) return reply.code(400).send({ error: "Skills can't hold passwords, keys or card numbers" });
+    const agent = store.agent(c.actor.id)!;
+    const slug = skillSlug(body.slug ?? body.name);
+    const mine = learnedMatch(c.workspaceId, agent.id, body);
+    let skill: Skill;
+    if (mine) {
+      const shared = mine.allAgents ? holders(mine).filter((a) => a !== agent.id) : [];
+      skill = skills.update(mine.id, { name: body.name, description: body.description, content: body.content, allAgents: false })!;
+      if (mine.allAgents) {
+        // a shared skill its agent changed goes back to just that agent, until a person shares it again
+        for (const a of skill.agentIds.filter((a) => a !== agent.id)) skills.attach(skill.id, a, false);
+        skills.attach(skill.id, agent.id, true);
+        skill = skills.get(skill.id)!;
+        await syncFiles(c, skill, shared, false);
+      }
+    } else {
+      if (skills.learnedBy(c.workspaceId, agent.id).length >= MAX_LEARNED) return reply.code(400).send({ error: "Too many learned skills. Forget some in Settings → Skills." });
+      // not a name "/" already uses for this agent: Wisp's commands, or its harness's own
+      const reserved = [...WISP_COMMANDS.map((w) => w.name), ...(hub.catalogFor(agent)?.commands ?? []).map((x) => x.name)];
+      skill = skills.create(c.workspaceId, agent.id, { name: body.name, slug: skills.freeSlug(c.workspaceId, slug, reserved), description: body.description, source: "learned", content: body.content, learnedBy: agent.id });
+      skills.attach(skill.id, agent.id, true);
+      skill = skills.get(skill.id)!;
+    }
+    await syncFiles(c, skill, holders(skill), true);
+    const run = hub.runFor(agent.id, req.headers["x-wisp-run"]);
+    if (run) hub.skillUsed(run.id, skill.id, "learned");
+    changed(c);
+    return { skill };
   });
 
   /**
@@ -236,10 +331,10 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!c) return;
     const body = parse(
       z.union([
-        z.object({ catalogId: z.string().min(1).max(60), agentIds: AGENT_IDS.default([]) }).strict(),
-        z.object({ storeId: z.string().min(1).max(200), agentIds: AGENT_IDS.default([]) }).strict(),
-        z.object({ nodeId: z.string().min(1).max(100), harness: z.enum(SETTINGS_HARNESSES), skillId: z.string().min(1).max(300), agentIds: AGENT_IDS.default([]) }).strict(),
-        SKILL_BODY.extend({ agentIds: AGENT_IDS.default([]) }).strict(),
+        z.object({ catalogId: z.string().min(1).max(60), agentIds: AGENT_IDS.default([]), allAgents: z.boolean().optional() }).strict(),
+        z.object({ storeId: z.string().min(1).max(200), agentIds: AGENT_IDS.default([]), allAgents: z.boolean().optional() }).strict(),
+        z.object({ nodeId: z.string().min(1).max(100), harness: z.enum(SETTINGS_HARNESSES), skillId: z.string().min(1).max(300), agentIds: AGENT_IDS.default([]), allAgents: z.boolean().optional() }).strict(),
+        SKILL_BODY.extend({ agentIds: AGENT_IDS.default([]), allAgents: z.boolean().optional() }).strict(),
       ]),
       req.body,
       reply,
@@ -282,11 +377,15 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
         skills.byCatalog(c.workspaceId, entry.id) ??
         skills.create(c.workspaceId, c.actor.id, { name: entry.name, slug: skills.freeSlug(c.workspaceId, entry.id), description: entry.description, source: "catalog", catalogId: entry.id, tags: entry.tags, content: entry.content });
     } else {
-      skill = skills.create(c.workspaceId, c.actor.id, { ...body, slug: skills.freeSlug(c.workspaceId, skillSlug(body.name)), source: "custom" });
+      const { agentIds: _ids, allAgents: _all, ...fields } = body;
+      skill = skills.create(c.workspaceId, c.actor.id, { ...fields, slug: skills.freeSlug(c.workspaceId, skillSlug(body.name)), source: "custom" });
     }
     for (const a of agentIds) skills.attach(skill.id, a, true);
-    await syncFiles(c, skill, agentIds, true);
-    return skills.get(skill.id);
+    if (body.allAgents !== undefined) skills.update(skill.id, { allAgents: body.allAgents });
+    skill = skills.get(skill.id)!;
+    await syncFiles(c, skill, skill.allAgents ? holders(skill) : agentIds, true);
+    changed(c);
+    return skill;
   });
 
   const ownSkill = (c: Caller, req: FastifyRequest, reply: FastifyReply) => {
@@ -309,21 +408,24 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!c) return;
     const s = ownSkill(c, req, reply);
     if (!s) return;
-    const body = parse(SKILL_BODY.partial().extend({ agentIds: AGENT_IDS.optional() }).strict(), req.body, reply);
+    const body = parse(SKILL_BODY.partial().extend({ agentIds: AGENT_IDS.optional(), allAgents: z.boolean().optional() }).strict(), req.body, reply);
     if (!body) return;
     const { agentIds, ...patch } = body;
     const ids = agentIds && agentsIn(c, agentIds, reply);
     if (agentIds && !ids) return;
-    const updated = skills.update(s.id, patch)!;
+    const before = holders(s);
+    skills.update(s.id, patch);
     if (ids) {
-      const removed = s.agentIds.filter((a) => !ids.includes(a));
-      for (const a of removed) skills.attach(s.id, a, false);
+      for (const a of s.agentIds.filter((a) => !ids.includes(a))) skills.attach(s.id, a, false);
       for (const a of ids) skills.attach(s.id, a, true);
-      await syncFiles(c, updated, removed, false);
     }
     const after = skills.get(s.id)!;
+    const now = holders(after);
+    // agents that no longer have it lose the file (switching "All agents" off keeps it for the ones given it)
+    await syncFiles(c, after, before.filter((a) => !now.includes(a)), false);
     // everyone who has it gets the new version
-    await syncFiles(c, after, after.agentIds, true);
+    await syncFiles(c, after, now, true);
+    changed(c);
     return after;
   });
 
@@ -332,8 +434,9 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!c) return;
     const s = ownSkill(c, req, reply);
     if (!s) return;
-    await syncFiles(c, s, s.agentIds, false);
+    await syncFiles(c, s, holders(s), false);
     skills.remove(s.id);
+    changed(c);
     return { ok: true };
   });
 
@@ -349,7 +452,9 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
         const ids = agentsIn(c, [(req.params as { agentId: string }).agentId], reply);
         if (!ids) return;
         skills.attach(s.id, ids[0], method === "PUT");
-        await syncFiles(c, s, ids, method === "PUT");
+        // with "All agents" on, the agent keeps it (and its file) either way
+        await syncFiles(c, s, ids, method === "PUT" || s.allAgents);
+        changed(c);
         return skills.get(s.id);
       },
     });

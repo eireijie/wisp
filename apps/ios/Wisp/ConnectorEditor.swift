@@ -29,6 +29,7 @@ struct ConnectorEditor: View {
   @State private var headers = ""
   @State private var rows: [ConnectorValue] = []
   @State private var agents: Set<String> = []
+  @State private var allAgents = false
   @State private var showStart = false
   @State private var action = FormAction()
 
@@ -68,15 +69,11 @@ struct ConnectorEditor: View {
         if kind != "secret" { Text("Secrets are masked once saved. Use {{NAME}} in the command, arguments, URL or headers to fill one in.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4) }
       }
 
-      MarketLabel("Which helpers get it")
-      CardGroup {
-        ForEach(store.agents) { agent in
-          MarketToggleRow(title: agent.name, subtitle: supported(agent) ? "@\(agent.handle)" : "@\(agent.handle) · not wired yet for this kind", isOn: Binding(get: { agents.contains(agent.id) }, set: { on in if on { agents.insert(agent.id) } else { agents.remove(agent.id) } }), disabled: !supported(agent) && !agents.contains(agent.id)) {
-            AgentAvatar(agent: agent, size: 30, showStatus: false)
-          }
-        }
-        if store.agents.isEmpty { MarketRow(title: "No helpers yet", subtitle: "Add one from the Agents tab first.") }
-      }
+      MarketLabel("Who can use it")
+      AgentAccessPicker(allAgents: $allAgents,
+                        isOn: { agent in Binding(get: { agents.contains(agent.id) }, set: { on in if on { agents.insert(agent.id) } else { agents.remove(agent.id) } }) },
+                        subtitle: { supported($0) ? "@\($0.handle)" : "@\($0.handle) · not wired yet for this kind" },
+                        agentDisabled: { !supported($0) && !agents.contains($0.id) })
       Text(kind == "mcp-http" ? "Works with Claude Code and Codex. Not wired yet for ACP agents (Gemini, OpenCode, Hermes…)." : "Runs on the agent's device or inside its VM.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
 
       if let summary {
@@ -102,7 +99,7 @@ struct ConnectorEditor: View {
       for (key, value) in existing?.env ?? [:] where !rows.contains(where: { $0.key == key }) { rows.append(ConnectorValue(key: key, value: "", saved: value)) }
       for (key, value) in presetEnv where !rows.contains(where: { $0.key == key }) { rows.append(ConnectorValue(key: key, value: value)) }
       if rows.isEmpty && custom { rows = [ConnectorValue(key: "", value: "")] }
-      agents = Set(existing?.agentIds ?? [])
+      agents = Set(existing?.agentIds ?? []); allAgents = existing?.forAll ?? false
       if existing == nil, store.agents.count == 1, let agent = store.agents.first, supported(agent) { agents = [agent.id] }
     }
     .onChange(of: kind) { if existing == nil { agents = Set(store.agents.filter { agents.contains($0.id) && supported($0) }.map(\.id)) } }
@@ -144,7 +141,7 @@ struct ConnectorEditor: View {
         let value = row.value.isEmpty ? row.saved ?? "" : row.value
         if !value.isEmpty { env[row.key.trimmed] = value }
       }
-      var body: Fields = ["name": AnyEncodable(name.trimmed), "env": AnyEncodable(env), "agentIds": AnyEncodable(Array(agents).sorted())]
+      var body: Fields = ["name": AnyEncodable(name.trimmed), "env": AnyEncodable(env), "agentIds": AnyEncodable(Array(agents).sorted()), "allAgents": AnyEncodable(allAgents)]
       if existing == nil { body["kind"] = AnyEncodable(kind); body["catalogId"] = entry.map { AnyEncodable($0.id) } ?? .null }
       if kind == "mcp-stdio" { body["command"] = AnyEncodable(command.trimmed); body["args"] = AnyEncodable(args.split(separator: "\n").map { String($0).trimmed }.filter { !$0.isEmpty }) }
       if kind == "mcp-http" {

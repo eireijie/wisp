@@ -50,9 +50,14 @@ describe("connectBlocked", () => {
     expect(connectBlocked([cod], ["c"], "mcp-http")).toBe(false);
     expect(connectBlocked([gem], ["g"], "mcp-stdio")).toBe(false);
   });
-  it("with nothing checked, depends on whether any agent can use it", () => {
+  it("with nothing checked, nobody gets it yet, so nothing is blocked", () => {
     expect(connectBlocked([gem, cod], [], "mcp-http")).toBe(false);
-    expect(connectBlocked([gem], [], "mcp-http")).toBe(true);
+    expect(connectBlocked([gem], [], "mcp-http")).toBe(false);
     expect(connectBlocked([], [], "mcp-http")).toBe(false);
+  });
+  it("with All agents on, depends on whether any agent can use it", () => {
+    expect(connectBlocked([gem, cod], [], "mcp-http", true)).toBe(false);
+    expect(connectBlocked([gem], [], "mcp-http", true)).toBe(true);
+    expect(connectBlocked([], [], "mcp-http", true)).toBe(false);
   });
 });

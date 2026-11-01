@@ -68,6 +68,7 @@ export const HarnessCatalogSchema = z.object({
         hint: z.string().max(120).optional(),
         kind: z.enum(["command", "skill"]),
         via: z.enum(["raw", "prompt"]),
+        builtIn: z.boolean().optional(),
       }),
     )
     .max(500)
@@ -298,6 +299,8 @@ export type ClientEvent =
   | { type: "computer_removed"; computerId: string }
   | { type: "approval"; approval: import("./types.ts").Approval }
   | { type: "routines_changed" }
+  /** skills or connectors were added, changed, removed, given to agents, learned or used; refetch GET /api/skills (and /api/connectors) */
+  | { type: "skills_changed" }
   | { type: "background_changed"; agentId: string }
   /** an agent changed a setting or mod for someone, or someone undid one */
   | { type: "changes_changed" }
