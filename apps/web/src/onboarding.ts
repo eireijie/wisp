@@ -5,7 +5,7 @@ import { harnessInfo, harnessLabel, runsInVm } from "@wisp/core/src/harnesses.ts
 import { api } from "./api.ts";
 import { accessSkipped, onPublicAddress } from "./access.ts";
 import { useStore } from "./store.ts";
-import { agentReadiness, type DeviceInfo } from "./devices.ts";
+import { agentReadiness, agentSignedIn, type DeviceInfo } from "./devices.ts";
 import type { Route } from "./router.ts";
 
 export interface OnboardingState {
@@ -154,7 +154,7 @@ export function homeReadiness<A extends AgentLike>(done: Record<StepId, boolean>
 }
 
 export interface HelperCheck {
-  id: "helper" | "device" | "online" | "harness";
+  id: "helper" | "device" | "online" | "harness" | "signin";
   /** ok: fine; bad: needs fixing; unknown: the hub can't tell yet (never reported as broken) */
   status: "ok" | "bad" | "unknown";
   label: string;
@@ -213,6 +213,13 @@ export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | nul
   else if (!reported.length) out.push(unknown("harness", `${label} is installed on ${device.name}`));
   else if (reported.some((h) => h.id === agent.harness)) out.push({ id: "harness", status: "ok", label: `${label} is installed on ${device.name}`, fix: null, to: null });
   else out.push({ id: "harness", status: "bad", label: `${label} is installed on ${device.name}`, fix: `Install ${label} on ${device.name}, or pick an AI that's already there.`, to: agentRoute("model") });
+  if (out[out.length - 1].status === "ok" || agent.settings?.connectionId) {
+    const signedIn = agentSignedIn(agent, device);
+    const inVm = agent.settings?.runIn === "computer" && !!agent.computerId;
+    if (signedIn === true) out.push({ id: "signin", status: "ok", label: `${label} is signed in`, fix: null, to: null });
+    else if (signedIn === null) out.push(unknown("signin", `${label} is signed in`));
+    else out.push({ id: "signin", status: "bad", label: `${label} is signed in`, fix: `Sign in to ${label} so ${agent.name} can answer.`, to: inVm ? { view: "agents", agentId: agent.id, tab: "computer" } : { view: "settings", page: "harnesses" } });
+  }
   return out;
 }
 

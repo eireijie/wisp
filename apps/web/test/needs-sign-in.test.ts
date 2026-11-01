@@ -12,4 +12,7 @@ describe("which AI tool needs signing in", () => {
     expect(signInFor([tool("kimi", true)], "kimi")).toBeNull();
     expect(signInFor(fresh, "codex")).toBeNull();
   });
+  it("treats unknown as needing the sign-in step, so Claude Code on a Mac can't skip it", () => {
+    expect(signInFor([tool("claude-code", null)], "claude-code")?.harness).toBe("claude-code");
+  });
 });

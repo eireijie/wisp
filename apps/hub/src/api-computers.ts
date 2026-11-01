@@ -396,7 +396,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
 
   // --- where an agent's harness runs ----------------------------------------------------------------
 
-  /** Whether the agent runs inside its computer, and if so whether its harness is signed in there. */
+  /** Whether the agent runs inside its computer, and whether its harness is signed in where it runs. */
   app.get("/api/agents/:id/harness", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
@@ -412,6 +412,10 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       try {
         signedIn = ((await computers.act(comp, { action: "harness_status", harness: agent.harness }, { kind: "user", id: "system" }, { timeoutMs: 120_000 })) as { signedIn: boolean | null }).signedIn;
       } catch {}
+    } else if (!inComputer) {
+      // on the device: a connection brings its own sign-in; otherwise what the device last reported
+      const here = agent.nodeId ? store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness) : undefined;
+      signedIn = agent.settings.connectionId ? true : (here?.accounts?.[here.agentAccounts?.[agent.id] ?? "default"] ?? null);
     }
     return { possible, inComputer, signedIn, computerId: comp?.id ?? null };
   });

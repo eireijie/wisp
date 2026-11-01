@@ -10,7 +10,7 @@ import { useFeature } from "../features.ts";
 import { go, href, type AgentTab } from "../router.ts";
 import { MoreOptions } from "./MoreOptions.tsx";
 import { openDm } from "../openDm.ts";
-import { agentReadiness, useDevices, type DeviceInfo } from "../devices.ts";
+import { agentReadiness, agentSignedIn, useDevices, type DeviceInfo } from "../devices.ts";
 import { useComputerState } from "../views/ComputersView.tsx";
 import { LiveScreen, WorkingBadge } from "./Screen.tsx";
 import { Ghost } from "./Ghost.tsx";
@@ -276,6 +276,10 @@ export function setupNextStep(agent: Pick<Agent, "id" | "nodeId" | "harness" | "
   if (!device) return null;
   if (!device.online) return { text: `Open Wisp on ${device.name} so it reconnects. Messages wait until then.`, href: href({ view: "computers", computerId: null }), action: "See computers" };
   if (device.paused) return { text: `${device.name} is paused. Resume it on that computer.`, href: href({ view: "computers", computerId: null }), action: "See computers" };
+  if (agentSignedIn(agent, device) === false) {
+    const inVm = agent.settings?.runIn === "computer" && !!agent.computerId;
+    return { text: `Sign in to ${harnessLabel(agent.harness)} ${inVm ? `on ${agent.name}'s computer` : `on ${device.name}`} so ${agent.name} can answer.`, href: href(inVm ? { view: "agents", agentId: agent.id, tab: "computer" } : { view: "settings", page: "harnesses" }), action: "Sign in" };
+  }
   return { text: `Install ${harnessLabel(agent.harness)} on ${device.name}.`, href: href({ view: "settings", page: "runtimes" }), action: "Install it" };
 }
 

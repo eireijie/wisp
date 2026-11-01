@@ -605,7 +605,7 @@
   function renderPlans() {
     const loc = $("cloud-location").value;
     const here = offer.plans.filter((p) => p.location === loc);
-    const best = here.find((p) => p.memory >= 4) || here[0];
+    const best = here.find((p) => p.memory >= 8) || here[here.length - 1];
     $("cloud-plans").replaceChildren(...here.map((p) => {
       const row = document.createElement("label");
       row.className = "plan";
@@ -633,7 +633,7 @@
     if (resumeId != null) { $("cloud-go").textContent = "Keep waiting"; return; }
     if (!p) return;
     $("cloud-go").textContent = `Start Wisp for ${money(p.monthly)}/month`;
-    $("cloud-billing").textContent = `Hetzner bills up to ${money(p.monthly)} a month, including the IPv4 address (${money(p.ipv4)}), until you delete this computer.`;
+    $("cloud-billing").textContent = `Hetzner bills up to ${money(p.monthly)} a month, including the IPv4 address (${money(p.ipv4)}), until you delete this computer. Your agents run on this server. Wisp takes about 1 GB, and each agent with its own computer can use up to 4 GB more.`;
   }
 
   $("cloud-form").onsubmit = (e) => {
@@ -652,7 +652,7 @@
     document.querySelectorAll("[data-back]").forEach((b) => (b.hidden = true));
     progress(resume == null ? "create" : "boot");
     const account = { name: $("cloud-name").value.trim(), email: $("cloud-email").value.trim(), password: $("cloud-password").value };
-    const r = await setup.cloudCreate(cloudToken, { type: p?.type, location: p?.location, account, device: true, resume });
+    const r = await setup.cloudCreate(cloudToken, { type: p?.type, location: p?.location, account, device: false, resume });
     if (r.ok) {
       cloudToken = "";
       $("starting-title").textContent = `Opening ${new URL(r.url).host}…`;

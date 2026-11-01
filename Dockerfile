@@ -18,8 +18,10 @@ RUN npm run build && npm prune --omit=dev
 
 FROM node:22-bookworm-slim
 WORKDIR /app
-# git powers the vault's version history and serves it to Obsidian (git http-backend)
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+# git powers the vault's version history and serves it to Obsidian (git http-backend). The rest is for
+# a Cloud server's device, the same image: python3 and curl for harness sign-ins and installers, and
+# the docker client for agents' computers (docker/cloud-init.yaml gives it the server's Docker).
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates python3 curl docker.io && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app /app
 # A separate default lets old compose files still override WARREN_DATA_DIR.
 ENV NODE_ENV=production \

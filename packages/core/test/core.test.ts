@@ -187,7 +187,7 @@ describe("default ghost", () => {
 describe("signInProblem", () => {
   it("turns a harness's sign-in error into what to do on the device", () => {
     const claude = signInProblem("claude-code", "Failed to authenticate. API Error: 401 OAuth access token has expired. Re-authenticate to continue.");
-    expect(claude?.explain("my-mac")).toBe("Claude Code on my-mac needs to be signed in again. In a terminal there, run `claude (then /login)`; then ask again.");
+    expect(claude?.explain("my-mac")).toBe("Claude Code on my-mac isn't signed in. Open Settings → Harnesses, sign in to Claude Code on my-mac, then ask again.");
     expect(signInProblem("codex", "Error: Not logged in. Run `codex login`.")?.login).toBe("codex login");
     expect(signInProblem("gemini", "not authenticated")?.label).toBe("Gemini CLI");
   });

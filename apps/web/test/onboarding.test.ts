@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Agent } from "@wisp/core";
-import { completeSetupStep, isLocalOnlyHost, nextStep, savedSetup, setupProgress, stepsDone, type OnboardingState } from "../src/onboarding.ts";
+import { completeSetupStep, helperChecklist, homeReadiness, isLocalOnlyHost, nextStep, savedSetup, setupProgress, stepsDone, type OnboardingState } from "../src/onboarding.ts";
 
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
 afterEach(() => vi.unstubAllGlobals());
@@ -40,5 +40,15 @@ describe("isLocalOnlyHost", () => {
   it("flags addresses that only work on this computer", () => {
     for (const h of ["localhost", "127.0.0.1", "127.0.0.2", "127.255.255.255", "::1", "[::1]", " LOCALHOST "]) expect(isLocalOnlyHost(h)).toBe(true);
     for (const h of ["wisp.example.com", "192.168.1.20", "", "localhost.example.com", "127.0.0.1.example.com", "127.0.0.999", "127.", "::1.example.com", "[::1", "::1]"]) expect(isLocalOnlyHost(h)).toBe(false);
+  });
+});
+
+describe("a helper whose AI isn't signed in (W-16)", () => {
+  const device = { id: "n1", name: "my-mac", online: true, agents: [], harnesses: [{ id: "codex", version: "1", accounts: { default: false } }] };
+  const helper = { id: "a", name: "Atlas", nodeId: "n1", harness: "codex", settings: {}, computerId: null } as never;
+  it("doesn't offer Try asking, and Help says what to fix", () => {
+    expect(homeReadiness({} as never, [helper], [device])).toMatchObject({ kind: "waiting", problem: "Codex isn't signed in" });
+    const row = helperChecklist([helper], [device]).find((c) => c.id === "signin");
+    expect(row).toMatchObject({ status: "bad", to: { view: "settings", page: "harnesses" } });
   });
 });

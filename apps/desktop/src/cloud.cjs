@@ -60,7 +60,8 @@ const money = (p) => Number(p?.price_monthly?.gross ?? NaN);
 /**
  * What can be created with this token: locations, and each size in each location with its monthly
  * price including the IPv4 address (Hetzner bills that separately), cheapest first. Shared-CPU
- * sizes with 2–16 GB only: enough for a hub and a few agent computers, without a menu of 40.
+ * sizes with 2–16 GB only, without a menu of 40. The hub and its device take about 1 GB, and a
+ * first agent's computer is given up to 4 GB; setup.html recommends a size from that.
  * Prices come from Hetzner every time, so they're whatever Hetzner charges today.
  */
 async function plans(token, opts = {}) {

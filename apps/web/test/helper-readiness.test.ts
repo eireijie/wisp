@@ -46,7 +46,7 @@ describe("helperChecklist", () => {
   it("checks the host install unless the helper is placed in a computer", () => {
     const devices = [dev({ harnesses: [{ id: "gemini", version: "1" }] })];
     expect(helperChecklist([helper({ harness: "claude-code", settings: { runIn: "device" }, computerId: null })], devices).at(-1)?.status).toBe("bad");
-    expect(helperChecklist([helper({ harness: "claude-code", settings: { runIn: "computer" }, computerId: "vm" })], devices).at(-1)?.status).toBe("ok");
+    expect(helperChecklist([helper({ harness: "claude-code", settings: { runIn: "computer" }, computerId: "vm" })], devices).find((c) => c.id === "harness")?.status).toBe("ok");
   });
 
   const status = (c: ReturnType<typeof helperChecklist>) => c.map((x) => `${x.id}:${x.status}`);

@@ -1,7 +1,8 @@
 #cloud-config
 # Wisp on a new Linux server (Ubuntu 24.04 or Debian 12/13), as its first-boot "user data".
 #
-# It installs Docker, runs the hub (the configured Wisp image) behind Caddy, and gets HTTPS without a
+# It installs Docker, runs the hub (the configured Wisp image) behind Caddy and a device beside it, so
+# agents live on this server and keep working when your computers are off, and gets HTTPS without a
 # domain: a Let's Encrypt certificate for the server's own IP address (https://203.0.113.7), and one
 # for <ip-with-dashes>.sslip.io as a second address in case the first can't be issued. The address is
 # written to /opt/wisp/url and to the login message.
@@ -12,7 +13,9 @@
 # (for example into Hetzner's or DigitalOcean's "Cloud config" box) with the placeholder left as it
 # is, there's no key: the hub makes its own setup code, in /opt/wisp/data/setup-code and its log.
 #
-# Data lives in /opt/wisp/data (back it up). The hub image is pulled again every night.
+# Data lives in /opt/wisp/data, and what agents use (their AI tools, sign-ins and files) in
+# /opt/wisp/device; back both up. The device sees only the second one, and the hub token it gets
+# through /opt/wisp/link. The image is pulled again every night.
 
 package_update: true
 packages:
@@ -21,10 +24,6 @@ packages:
   - curl
 
 write_files:
-  - path: /opt/wisp/.env
-    content: |
-      WISP_REPO=eireijie/wisp
-
   - path: /opt/wisp/setup-key
     permissions: "0600"
     content: "__WISP_SETUP_KEY__"
@@ -33,13 +32,43 @@ write_files:
     content: |
       services:
         wisp:
-          image: ghcr.io/${WISP_REPO}:latest
+          image: ghcr.io/${WISP_REPO:-eireijie/wisp}:latest
           restart: unless-stopped
           environment:
             # the hub checks the setup key too, not only Caddy
             WISP_SETUP_CODE: ${WISP_SETUP_CODE:-}
+            WISP_LOCAL_DEVICE_DIR: /link
+          ports:
+            # for the device below, on this server only
+            - "127.0.0.1:4747:4747"
           volumes:
             - ./data:/data
+            - ./link:/link
+        # This server as a device: once the first account exists the hub hands it a token through ./link.
+        # On the host's network and with the same folder path as the host, because the VMs it starts
+        # are the host's Docker containers, and they mount folders and reach the hub by the host's view.
+        # Not root: Claude Code refuses to run agents as root.
+        device:
+          image: ghcr.io/${WISP_REPO:-eireijie/wisp}:latest
+          restart: unless-stopped
+          command: ["node", "bin/wisp.mjs", "node", "start", "--local"]
+          network_mode: host
+          user: "1000:1000"
+          group_add:
+            - "${DOCKER_GID:-999}"
+          working_dir: /app
+          healthcheck:
+            disable: true
+          environment:
+            HOME: /opt/wisp/device
+            WISP_LOCAL_DEVICE_DIR: /opt/wisp/link
+            # harnesses Wisp installs stay across image updates
+            NPM_CONFIG_PREFIX: /opt/wisp/device/.npm-global
+            PATH: /opt/wisp/device/.npm-global/bin:/opt/wisp/device/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          volumes:
+            - ./device:/opt/wisp/device
+            - ./link:/opt/wisp/link
+            - /var/run/docker.sock:/var/run/docker.sock
         caddy:
           image: caddy:2
           restart: unless-stopped
@@ -75,10 +104,15 @@ write_files:
 
       key=$(cat setup-key 2>/dev/null || true)
       guard=""
-      : > .env
+      printf 'WISP_REPO=eireijie/wisp\nDOCKER_GID=%s\n' "$(stat -c %g /var/run/docker.sock)" > .env
+      chmod 600 .env
+      # the device's user owns what it uses, and the folder it shares with the hub
+      mkdir -p device link
+      chown -R 1000:1000 device link
+      chmod 700 device link
       case "$key" in
         "" | __WISP_SETUP_KEY__) ;;
-        *) printf 'WISP_SETUP_CODE=%s\n' "$key" > .env; chmod 600 .env; guard="
+        *) printf 'WISP_SETUP_CODE=%s\n' "$key" >> .env; guard="
         @claim {
           method POST
           path /api/setup
@@ -109,7 +143,7 @@ write_files:
 
       echo "https://$ip" > url
       echo "https://$sslip" >> url
-      printf '\nWisp: https://%s (also https://%s)\nData: /opt/wisp/data   Logs: cd /opt/wisp && docker compose logs\nSetup code (until the first account exists): cat /opt/wisp/data/setup-code\n\n' "$ip" "$sslip" > /etc/motd
+      printf '\nWisp: https://%s (also https://%s)\nData: /opt/wisp/data and /opt/wisp/device   Logs: cd /opt/wisp && docker compose logs\nSetup code (until the first account exists): cat /opt/wisp/data/setup-code\n\n' "$ip" "$sslip" > /etc/motd
 
       docker compose pull
       docker compose up -d

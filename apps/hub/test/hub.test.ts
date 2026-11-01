@@ -1186,9 +1186,9 @@ describe("runs that go wrong", () => {
     const ch = (await api("POST", "/api/channels", { name: "signin" })).data.id;
     await api("POST", `/api/channels/${ch}/messages`, { body: "@atlas expired token" });
     const status = await waitFor(async () => (await channelMessagesIn(ch)).flatMap((m) => m.parts).find((p) => p.type === "status" && p.text.startsWith("Run failed")));
-    expect(status.type === "status" && status.text).toBe("Run failed: Claude Code on test-node needs to be signed in again. In a terminal there, run `claude (then /login)`; then ask again.");
+    expect(status.type === "status" && status.text).toBe("Run failed: Claude Code on test-node isn't signed in. Open Settings → Harnesses, sign in to Claude Code on test-node, then ask again.");
     const runs = (await api<any[]>("GET", `/api/agents/${atlas.id}/runs`)).data;
-    expect(runs[0]).toMatchObject({ status: "failed", error: expect.stringContaining("401"), hint: expect.stringContaining("needs to be signed in again") });
+    expect(runs[0]).toMatchObject({ status: "failed", error: expect.stringContaining("401"), hint: expect.stringContaining("isn't signed in") });
   });
 
   it("says so when a prompt can't even be built", async () => {

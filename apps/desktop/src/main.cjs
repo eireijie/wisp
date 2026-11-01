@@ -149,10 +149,23 @@ function createWindow() {
     if (process.platform === "darwin") app.dock?.hide();
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (onOrigin(url, hubOrigin)) return { action: "allow" };
+    // about:blank: setup opens a window first (browsers only allow that right on the click), then points it at a computer's screen
+    if (onOrigin(url, hubOrigin) || url === "about:blank") return { action: "allow" };
     // a device page's Open for RustDesk, AnyDesk and the like opens that app on this computer
     if (/^https?:|^mailto:/.test(url) || isExternalAppLink(url)) shell.openExternal(url);
     return { action: "deny" };
+  });
+  // a window Wisp opened only ever shows Wisp; anything else goes to the browser
+  win.webContents.on("did-create-window", (child) => {
+    child.webContents.on("will-navigate", (e, url) => {
+      if (onOrigin(url, hubOrigin)) return;
+      e.preventDefault();
+      if (/^https?:/.test(url)) shell.openExternal(url);
+    });
+    child.webContents.setWindowOpenHandler(({ url }) => {
+      if (/^https?:/.test(url)) shell.openExternal(url);
+      return { action: "deny" };
+    });
   });
   win.webContents.on("will-navigate", (e, url) => {
     if (isPage(url, SETUP_PAGE) || onOrigin(url, hubOrigin)) return;
