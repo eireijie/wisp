@@ -12,7 +12,7 @@ function fixture(state: Record<string, any> = { step: "cloud", server: { id: 42,
     cancelJoin: vi.fn(), discover: vi.fn(async () => ({ ok: true, wisps: [] })),
     requestJoin: vi.fn(async () => ({ ok: true, code: "482913", host: "mac.local", expiresAt: new Date(Date.now() + 600000).toISOString() })),
     pollJoin: vi.fn(async (): Promise<any> => ({ ok: true, status: "pending" })),
-    create: vi.fn(async () => ({ ok: true })),
+    create: vi.fn(async (): Promise<any> => ({ ok: true })), open: vi.fn(),
     cloudKeep: vi.fn(), check: async () => ({}), onCloudStep: vi.fn(), cloudPlans: vi.fn(async () => ({ ok: true, plans: [], locations: [], currency: "EUR" })), cloudCreate: vi.fn(async () => ({ ok: true, url: "https://hub" })),
   };
   const timers = new Map<number, () => Promise<void>>();
@@ -58,13 +58,31 @@ describe("resuming cloud setup after relaunch", () => {
 });
 
 describe("Wisp first launch", () => {
-  it("starts the existing create path directly from Welcome", async () => {
+  it("goes from Self-Host through installing to Continue, which opens the server", async () => {
     const f = fixture({});
     await new Promise((resolve) => setImmediate(resolve));
     expect(f.element("welcome").hidden).toBe(false);
-    await f.element("pick-create").onclick();
+    f.element("pick-create").onclick();
+    expect(f.element("create").hidden).toBe(false);
+    expect(f.setup.create).not.toHaveBeenCalled();
+    const installing = f.element("create-go").onclick();
+    expect(f.element("installing").hidden).toBe(false);
+    await installing;
     expect(f.setup.create).toHaveBeenCalledWith({ device: true });
+    expect(f.element("ready").hidden).toBe(false);
+    expect(f.setup.open).not.toHaveBeenCalled();
+    f.element("ready-go").onclick();
+    expect(f.setup.open).toHaveBeenCalledOnce();
     expect(f.element("starting").hidden).toBe(false);
+  });
+
+  it("goes back to Self-Host with the reason when the server doesn't start", async () => {
+    const f = fixture({});
+    f.setup.create.mockResolvedValueOnce({ ok: false, error: "The server didn't start.", log: "port in use" });
+    await f.element("create-go").onclick();
+    expect(f.element("create").hidden).toBe(false);
+    expect(f.element("create-error").textContent).toBe("The server didn't start.");
+    expect(f.element("log").textContent).toBe("port in use");
   });
 
   it("scans, asks with an invite, shows the code, then waits through approval", async () => {

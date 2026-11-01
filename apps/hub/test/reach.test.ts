@@ -39,6 +39,7 @@ describe("reading Tailscale", () => {
     expect(parseJson('Warning: x\n{"a":1}')).toEqual({ a: 1 });
     expect(explainTailscaleError("Access denied: serve config denied", "linux")).toMatch(/sudo tailscale set --operator=\$USER/);
     expect(explainTailscaleError("HTTPS is not enabled for this tailnet")).toMatch(/admin\/dns/);
+    expect(explainTailscaleError("Serve is not enabled on your tailnet.\nTo enable, visit:\n\n\thttps://login.tailscale.com/f/serve?node=abc")).toBe("Tailscale Serve is off for your tailnet. Turn it on, then try again: https://login.tailscale.com/f/serve?node=abc");
     expect(explainTailscaleError("failed to connect to local tailscaled; it doesn't appear to be running")).toMatch(/not running/);
   });
 

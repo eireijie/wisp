@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { chatgptAccount, type ConnectionSecret, type HarnessLogin, type ModelLogin, type ModelProvider, type NodeToHub } from "@wisp/core";
 import { modelLoginCommand, setupTokenFrom } from "@wisp/adapters";
@@ -9,21 +8,27 @@ import { HarnessLogins } from "./harness-login.ts";
  * Signing in to a model provider for the hub (Settings → Models → Connect): the device runs the
  * harness's own sign-in in a scratch folder nobody else uses, shows the link and code through the
  * hub, and once it's approved hands what the sign-in saved to the hub, which keeps it as a
- * connection. The scratch folder is deleted either way, so the device keeps nothing.
+ * connection. The scratch folder is deleted either way, so the device keeps nothing; scratch folders
+ * live under `scratchRoot`, which is emptied on start in case a crash left one with a sign-in in it.
  */
 export class ModelLogins {
   private logins: HarnessLogins;
   /** by the hub's id for the sign-in */
   private live = new Map<string, { inner: string; provider: ModelProvider; harness: string; dir: string; raw: string; wantsInput: boolean }>();
 
-  constructor(private send: (m: NodeToHub) => void) {
+  constructor(
+    private send: (m: NodeToHub) => void,
+    private scratchRoot: string,
+  ) {
+    fs.rmSync(scratchRoot, { recursive: true, force: true });
     this.logins = new HarnessLogins((l) => void this.finished(l));
   }
 
   start(loginId: string, provider: ModelProvider, harness: string, binary?: string): ModelLogin {
     for (const id of [...this.live.keys()]) if (id === loginId) this.cancel(id);
     const cmd = modelLoginCommand(provider, harness, binary);
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-login-"));
+    fs.mkdirSync(this.scratchRoot, { recursive: true, mode: 0o700 });
+    const dir = fs.mkdtempSync(path.join(this.scratchRoot, "login-"));
     const entry = { inner: "", provider, harness, dir, raw: "", wantsInput: cmd.wantsInput };
     this.live.set(loginId, entry);
     const state = this.logins.start(harness, `model-${loginId}`, { command: cmd.command, args: cmd.args, env: { [cmd.home]: dir } }, 15 * 60_000, {

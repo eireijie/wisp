@@ -118,6 +118,7 @@ export function registerModelsApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     const agents = usedBy(c.workspaceId, r.id);
     for (const a of agents) store.updateAgent(a.id, { settings: { connectionId: null } });
     hub.models.remove(r.id);
+    hub.connectionRemoved(c.workspaceId);
     if (agents.length) hub.broadcast(c.workspaceId, { type: "agents_changed" });
     changed(c);
     return { ok: true, agents: agents.map((a) => a.id) };

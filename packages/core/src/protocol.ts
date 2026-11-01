@@ -258,6 +258,8 @@ export const HubToNode = z.discriminatedUnion("type", [
   z.object({ type: z.literal("model_login"), requestId: z.string(), op: z.enum(["start", "input", "cancel"]), loginId: z.string().max(64), provider: ModelProviderId.optional(), harness: z.enum(["claude-code", "codex", "hermes"]).optional(), text: z.string().max(2000).optional() }),
   /** report the harnesses (and their models) installed inside this VM; answered with a catalog message */
   z.object({ type: z.literal("computer_catalog"), computer: ComputerSpec }),
+  /** the model connections this device may keep folders for; any other's sign-ins and keys are removed, here and in these VMs */
+  z.object({ type: z.literal("connections_keep"), connectionIds: z.array(z.string()), computers: z.array(ComputerSpec) }),
   /** open a harness's config file in the device's own editor; answered with a result ({ path }) */
   z.object({ type: z.literal("harness_open_config"), requestId: z.string(), harness: z.string().max(60), account: z.string().max(64).optional() }),
 ]);

@@ -6,30 +6,33 @@ vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
 afterEach(() => vi.unstubAllGlobals());
 const empty: OnboardingState = { devices: [], computers: [], agents: [], firstReply: null, memoryNotes: [] };
 
-describe("four-step setup progress", () => {
+describe("setup progress", () => {
   it("tracks choices separately from agent and reach readiness", () => {
-    expect(stepsDone(empty)).toEqual({ ready: false, agent: false, anywhere: false, devices: false });
-    expect(stepsDone({ ...empty, agents: [{ id: "a" } as Agent], reachable: true })).toEqual({ ready: false, agent: true, anywhere: true, devices: false });
-    expect(stepsDone(empty, { ready: true, agent: true, anywhere: true })).toEqual({ ready: true, agent: true, anywhere: true, devices: false });
-    expect(nextStep(stepsDone(empty, { ready: true, agent: true }))).toBe("anywhere");
+    expect(stepsDone(empty)).toEqual({ anywhere: false, address: false, agent: false, devices: false });
+    expect(stepsDone({ ...empty, agents: [{ id: "a" } as Agent], reachable: true })).toEqual({ anywhere: true, address: false, agent: true, devices: false });
+    expect(stepsDone(empty, { address: true, agent: true, anywhere: true })).toEqual({ anywhere: true, address: true, agent: true, devices: false });
+    expect(nextStep(stepsDone(empty, { anywhere: true, agent: true }))).toBe("address");
   });
   it("counts all four decisions including explicit skips", () => {
     expect(setupProgress(stepsDone(empty))).toEqual({ progress: 0, steps: 4, complete: false });
-    const done = stepsDone(empty, { ready: true, agent: true, anywhere: true, devices: true });
+    const done = stepsDone(empty, { address: true, agent: true, anywhere: true, devices: true });
     expect(setupProgress(done)).toEqual({ progress: 4, steps: 4, complete: true });
     expect(nextStep(done)).toBeNull();
+  });
+  it("doesn't reopen a setup finished before the address step existed", () => {
+    expect(stepsDone(empty, { agent: true, anywhere: true, devices: true }).address).toBe(true);
   });
   it("persists progress per workspace and tolerates unavailable browser storage", () => {
     const storage = new Map<string, string>();
     vi.stubGlobal("localStorage", { getItem: (key: string) => storage.get(key), setItem: (key: string, value: string) => storage.set(key, value) });
-    completeSetupStep("one", "ready");
+    completeSetupStep("one", "address");
     completeSetupStep("one", "agent");
-    expect(savedSetup("one")).toEqual({ ready: true, agent: true });
+    expect(savedSetup("one")).toEqual({ address: true, agent: true });
     expect(savedSetup("two")).toEqual({});
     storage.set("wisp.setup.v2.two", "bad-json");
     expect(savedSetup("two")).toEqual({});
     vi.stubGlobal("localStorage", { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } });
-    expect(() => completeSetupStep("one", "ready")).not.toThrow();
+    expect(() => completeSetupStep("one", "address")).not.toThrow();
     expect(savedSetup("one")).toEqual({});
   });
 });
