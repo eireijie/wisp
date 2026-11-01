@@ -22,7 +22,7 @@ import { canApproveJoin } from "../join.ts";
 import { PhonePairing } from "../views/settings/mobile.tsx";
 import { Button, CopyBlock, Modal } from "./ui.tsx";
 
-export function AddDeviceContent() {
+export function AddDeviceContent({ phone = true }: { phone?: boolean }) {
   const allowed = useStore((s) => canApproveJoin(s.me?.role));
   const info = useAccess();
   const [invite, setInvite] = useState<{
@@ -85,14 +85,16 @@ export function AddDeviceContent() {
           same account.
         </p>
       )}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <section className="rounded-2xl border border-line p-5 space-y-4">
-          <h3 className="flex items-center gap-2 font-semibold">
-            <Smartphone size={20} />
-            Phone
-          </h3>
-          <PhonePairing key={pairingRound} autoStart compact />
-        </section>
+      <div className={phone ? "grid gap-4 sm:grid-cols-2" : "grid gap-4"}>
+        {phone && (
+          <section className="rounded-2xl border border-line p-5 space-y-4">
+            <h3 className="flex items-center gap-2 font-semibold">
+              <Smartphone size={20} />
+              Phone
+            </h3>
+            <PhonePairing key={pairingRound} autoStart compact />
+          </section>
+        )}
         <section className="rounded-2xl border border-line p-5 space-y-5">
           <h3 className="flex items-center gap-2 font-semibold">
             <Monitor size={20} />
