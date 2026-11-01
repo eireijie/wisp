@@ -50,12 +50,15 @@ export function registerReachApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     if (!c) return;
     const body = parse(z.object({ action: z.enum(["login", "up", "serve", "unserve", "funnel", "unfunnel"]) }), req.body, reply);
     if (!body) return;
+    let acted;
     try {
-      await hub.reach.act(body.action);
+      acted = await hub.reach.act(body.action);
     } catch (e) {
       return reply.code(409).send({ error: (e as Error).message });
     }
-    return view(c, true);
+    const next = await view(c, true);
+    // a sign-in that's waiting prints its page, which status may not repeat
+    return { ...next, tailscale: { ...next.tailscale, authUrl: acted.authUrl } };
   });
 
   app.post("/api/reach/cloudflare", async (req, reply) => {

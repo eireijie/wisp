@@ -26,11 +26,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             dist: --mac --arm64
           # Intel Macs, built on Apple silicon (GitHub's Intel runners never started): the bundled
           # native modules are fetched for x64 (WISP_BUNDLE_ARCH) and electron-builder packs an x64 app
-          - os: macos-14
+          - os: macos-15
             dist: --mac --x64
             arch: x64
           - os: windows-latest

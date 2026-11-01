@@ -7,13 +7,13 @@ vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
 
 const dev = (o: Partial<DeviceInfo> = {}): DeviceInfo => ({ id: "n1", name: "my-mac", online: true, agents: [], ...o });
 const helper = (o: Partial<Agent> = {}) => ({ id: "a1", name: "Everyday Helper", nodeId: "n1", harness: "gemini", ...o }) as Agent;
-const none = { ready: false, agent: false, anywhere: false, devices: false };
-const all = { ready: true, agent: true, anywhere: true, devices: true };
+const none = { anywhere: false, address: false, agent: false, devices: false };
+const all = { anywhere: true, address: true, agent: true, devices: true };
 
 describe("nextStep", () => {
   it("names the first unmet step, or null when done", () => {
-    expect(nextStep(none)).toBe("ready");
-    expect(nextStep({ ...none, ready: true })).toBe("agent");
+    expect(nextStep(none)).toBe("anywhere");
+    expect(nextStep({ ...none, anywhere: true, address: true })).toBe("agent");
     expect(nextStep({ ...all, anywhere: false })).toBe("anywhere");
     expect(nextStep({ ...all, devices: false })).toBe("devices");
     expect(nextStep(all)).toBeNull();
@@ -31,7 +31,7 @@ describe("pickHelper", () => {
 
 describe("homeReadiness", () => {
   it("asks to continue setup when there is no helper", () => {
-    expect(homeReadiness({ ...none, ready: true }, [], [dev()])).toEqual({ kind: "setup", next: "agent" });
+    expect(homeReadiness({ ...none, anywhere: true, address: true }, [], [dev()])).toEqual({ kind: "setup", next: "agent" });
   });
   it("says what a helper is waiting for", () => {
     const r = homeReadiness(all, [helper()], [dev({ online: false })]);
