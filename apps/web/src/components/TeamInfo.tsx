@@ -6,6 +6,7 @@ import { go } from "../router.ts";
 import { useNames, useStore, type ChannelInfo } from "../store.ts";
 import { AnswerSelect, AboutChannel, ChannelAgents, ChannelMembers, ChannelPins, NOTIFY, leaveChannel, setArchived, setChannelPrefs, toGeneral, type ChannelMember, type ChannelSettingsTab } from "./Channels.tsx";
 import { ChatAvatar } from "./ChatList.tsx";
+import { TeamIconDialog } from "./TeamIcon.tsx";
 import { MoreOptions } from "./MoreOptions.tsx";
 import { RightPane } from "./RightPane.tsx";
 import { AgentAvatar, Modal, StatusDot, cx } from "./ui.tsx";
@@ -95,11 +96,17 @@ export function TeamInfo({ channel, tab, onTab, onClose, onSettings }: { channel
   const role = useStore((s) => s.me?.role);
   const canManage = role === "owner" || role === "member";
   const show = (t: InfoTab) => !wide || tab === t;
-  const [dialog, setDialog] = useState<null | "notify" | "answers" | "context" | "leave" | "archive" | "delete">(null);
+  const [dialog, setDialog] = useState<null | "notify" | "answers" | "context" | "leave" | "archive" | "delete" | "icon">(null);
   return (
     <RightPane label={`${channel.name} info`} className="!bg-panel">
       <header className="h-[4.5rem] shrink-0 px-4 flex items-center gap-3 border-b border-line safe-top">
-        <ChatAvatar chat={{ kind: "team", agent: null, channel }} size={36} />
+        {canManage && !channel.archivedAt ? (
+          <button onClick={() => setDialog("icon")} className="shrink-0 rounded-full" aria-label="Change team icon">
+            <ChatAvatar chat={{ kind: "team", agent: null, channel }} size={44} />
+          </button>
+        ) : (
+          <ChatAvatar chat={{ kind: "team", agent: null, channel }} size={36} />
+        )}
         <div className="min-w-0 flex-1">
           <div className="truncate text-body font-medium leading-tight">{channel.name}</div>
           <div className="truncate text-[13px] text-muted">{teamCount(channel, members)}</div>
@@ -153,6 +160,7 @@ export function TeamInfo({ channel, tab, onTab, onClose, onSettings }: { channel
           </section>
         )}
       </div>
+      {dialog === "icon" && <TeamIconDialog channel={channel} onClose={() => setDialog(null)} />}
       {dialog === "notify" && <NotifyDialog channel={channel} onClose={() => setDialog(null)} />}
       {dialog === "answers" && <AnswersDialog channel={channel} onClose={() => setDialog(null)} />}
       {dialog === "context" && <ContextAccessDialog channel={channel} members={members} onClose={() => setDialog(null)} />}

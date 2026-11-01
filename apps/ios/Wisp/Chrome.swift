@@ -198,28 +198,56 @@ struct CardCaption: View {
   }
 }
 
-/** A team: its first two agents as overlapped ghosts (a single agent is one ghost). */
+/** A team: its chosen image, else its first two agents as overlapped ghosts (a single agent is one ghost). */
 struct TeamGhosts: View {
   @Environment(Store.self) private var store
   var agents: [Agent]
-  /** keeps the stand-in ghosts the same from run to run when a team has fewer than two agents */
+  /** keeps the ghost of a team with nobody on it the same from run to run */
   var seed: String
   var size: CGFloat = 32
+  var iconFileId: String? = nil
+  @State private var failedIcon: String?
+  @State private var loadedIcon: (id: String, image: UIImage)?
+  private static var loaded: [String: UIImage] = [:]
 
   var body: some View {
-    let first = size * 0.71, second = size * 0.75
-    ZStack(alignment: .topLeading) {
-      ghost(0, first).offset(x: 0, y: 0)
-      ghost(1, second)
-        .padding(1.5).background(Circle().fill(Palette.ground).padding(2)).offset(x: size * 0.36, y: size * 0.25)
+    Group {
+      if let iconFileId, failedIcon != iconFileId { icon(iconFileId) }
+      else if agents.count >= 2 { overlapped }
+      else if let agent = agents.first { AgentAvatar(agent: agent, size: size, showStatus: false) }
+      else { GhostView(look: nil, seed: seed, size: size) }
     }
     .frame(width: size * 1.14, height: size, alignment: .topLeading)
     .accessibilityHidden(true)
   }
 
-  @ViewBuilder private func ghost(_ index: Int, _ side: CGFloat) -> some View {
-    if index < agents.count { AgentAvatar(agent: agents[index], size: side, showStatus: false) }
-    else { GhostView(look: nil, seed: seed + String(index), size: side) }
+  private var overlapped: some View {
+    let first = size * 0.71, second = size * 0.75
+    return ZStack(alignment: .topLeading) {
+      AgentAvatar(agent: agents[0], size: first, showStatus: false)
+      AgentAvatar(agent: agents[1], size: second, showStatus: false)
+        .padding(1.5).background(Circle().fill(Palette.ground).padding(2)).offset(x: size * 0.36, y: size * 0.25)
+    }
+  }
+
+  private func icon(_ id: String) -> some View {
+    let image = Self.loaded[id] ?? (loadedIcon?.id == id ? loadedIcon?.image : nil)
+    return Group {
+      if let image { Image(uiImage: image).resizable().scaledToFill() }
+      else { Palette.faint.opacity(0.2) }
+    }
+    .frame(width: size, height: size)
+    .clipShape(Circle())
+    .task(id: id) {
+      guard Self.loaded[id] == nil else { return }
+      do {
+        let url = try await store.localFile(id, name: "team-icon")
+        guard let picture = UIImage(contentsOfFile: url.path()) else { failedIcon = id; return }
+        Self.loaded[id] = picture
+        loadedIcon = (id, picture)
+      } catch is CancellationError {
+      } catch { failedIcon = id }
+    }
   }
 }
 

@@ -111,6 +111,8 @@ struct Channel: Codable, Identifiable, Hashable {
     var instructions: String?
     /** the channel's agent team, drawn as a flow chart; nil = no team (only @mentioned agents, or defaultAgentId, answer) */
     var team: ChannelTeam?
+    /** the image chosen as the team's icon; nil = its first two agents' ghosts */
+    var iconFileId: String?
   }
   var `private`: Bool?
   var archivedAt: String?
