@@ -7,7 +7,7 @@ import type { AgentEvent } from "@wisp/core";
 import { WispClient } from "@wisp/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
-import { afterQuietHours, inQuietHours, NOTHING_TO_WATCH, parseWhen, QUIET_LATELY, startOfDay } from "../src/background.ts";
+import { afterQuietHours, BACKOFF_CEILING_MINUTES, inQuietHours, NOTHING_TO_WATCH, parseWhen, QUIET_LATELY, startOfDay } from "../src/background.ts";
 import type { Hub } from "../src/hub.ts";
 import { openDb } from "../src/db.ts";
 import { Store } from "../src/store.ts";
@@ -234,7 +234,7 @@ describe("background work", () => {
     b = await check();
     expect(b.quietStreak).toBe(streak + 1);
     expect(b.nextReason).toBe(QUIET_LATELY);
-    expect(hours(b)).toBe(Math.min(24, 2 ** (b.quietStreak - 1)));
+    expect(hours(b)).toBe(Math.min(4, 2 ** (b.quietStreak - 1)));
     // the person writes: back to every hour
     await owner.send(dm().id, "any news?");
     await waitFor(() => hub.store.background(agentId, me)!.quietStreak === 0 || undefined);
@@ -252,6 +252,155 @@ describe("background work", () => {
     expect(hub.store.messages(dm().id).some((m) => m.body === "Your package shipped.")).toBe(true);
     expect(spoke.quietStreak).toBe(0);
     hub.store.setBackground(agentId, me, { enabled: false, quietStreak: 0, quietStart: "22:00", quietEnd: "07:00" });
+  });
+
+  describe("backing off never delays what can't wait", () => {
+    const mins = (b: { nextAt: string | null; lastAt: string | null }) => Math.round((new Date(b.nextAt!).getTime() - new Date(b.lastAt!).getTime()) / 60_000);
+    const off = () => hub.store.setBackground(agentId, me, { enabled: false, everyMinutes: 60, quietStreak: 0, quietStart: "22:00", quietEnd: "07:00", dailyCap: 24 });
+    const quietFor = (streak: number) => hub.store.setBackground(agentId, me, { enabled: true, everyMinutes: 60, quietStreak: streak, quietStart: "00:00", quietEnd: "00:00", dailyCap: null });
+    const check = async () => {
+      expect(hub.background.wake(agentId, me)).toBeTruthy();
+      await idle();
+      return hub.store.background(agentId, me)!;
+    };
+    /** waiting out a stretched wait of four hours, as if the checks before found nothing */
+    const backedOff = () => hub.store.setBackground(agentId, me, { enabled: true, everyMinutes: 60, quietStreak: 4, quietStart: "00:00", quietEnd: "00:00", dailyCap: null, lastAt: new Date().toISOString(), nextAt: new Date(Date.now() + 4 * 3_600_000).toISOString(), nextReason: QUIET_LATELY });
+
+    it("keeps the time the agent asked for, soon or late, however quiet it's been", async () => {
+      await idle();
+      quietFor(5);
+      onCheck = async (agent) => {
+        await agent.nextCheck(30, "waiting on Sam's reply");
+        return "nothing yet";
+      };
+      let b = await check();
+      expect(b.quietStreak).toBe(6);
+      expect(b.nextReason).toBe("waiting on Sam's reply");
+      expect(mins(b)).toBeLessThanOrEqual(31);
+      // with no reason given it's still the agent's own
+      onCheck = async (agent) => {
+        await agent.nextCheck(45);
+        return "nothing yet";
+      };
+      b = await check();
+      expect(b.nextReason).toBe("");
+      expect(mins(b)).toBeLessThanOrEqual(46);
+      onCheck = async () => "nothing new";
+      off();
+    });
+
+    it("doesn't let the person writing undo the time the agent asked for", async () => {
+      await idle();
+      quietFor(2);
+      onCheck = async (agent) => {
+        await agent.nextCheck(12 * 60, "report lands tonight");
+        return "calm";
+      };
+      const before = await check();
+      onCheck = async () => "ok";
+      hub.background.heardFrom(agentId, me);
+      const after = hub.store.background(agentId, me)!;
+      expect(after.nextAt).toBe(before.nextAt);
+      expect(after.nextReason).toBe("report lands tonight");
+      expect(after.quietStreak).toBe(0);
+      onCheck = async () => "nothing new";
+      off();
+    });
+
+    it("stretches the usual wait to four hours at most, not a day", async () => {
+      await idle();
+      quietFor(5);
+      onCheck = async () => "nothing new";
+      const b = await check();
+      expect(b.nextReason).toBe(QUIET_LATELY);
+      expect(mins(b)).toBe(BACKOFF_CEILING_MINUTES);
+      // a usual wait longer than that is left as it is
+      hub.store.setBackground(agentId, me, { everyMinutes: 6 * 60, quietStreak: 5 });
+      expect(mins(await check())).toBe(6 * 60);
+      off();
+    });
+
+    it("doesn't back off while a task is waiting on the agent, and a new task ends a stretched wait", async () => {
+      await idle();
+      onCheck = async () => "nothing new";
+      const ws = hub.store.agent(agentId)!.workspaceId;
+      const task = hub.store.createTask({ workspaceId: ws, from: { kind: "user", id: me }, toAgentId: agentId, title: "Book the venue", brief: "", channelId: null, threadId: null });
+      quietFor(5);
+      const b = await check();
+      expect(b.quietStreak).toBe(0);
+      expect(mins(b)).toBe(60);
+      hub.store.updateTask(task.id, "done");
+
+      backedOff();
+      hub.background.tick();
+      expect(hub.store.background(agentId, me)!.nextReason).toBe(QUIET_LATELY);
+      const next = hub.store.createTask({ workspaceId: ws, from: { kind: "user", id: me }, toAgentId: agentId, title: "Call the client", brief: "", channelId: null, threadId: null });
+      hub.background.tick();
+      const pulled = hub.store.background(agentId, me)!;
+      expect(pulled.quietStreak).toBe(0);
+      expect(pulled.nextReason).toBe("");
+      expect(mins(pulled)).toBe(60);
+      hub.store.updateTask(next.id, "done");
+      off();
+    });
+
+    it("ends a stretched wait when the person answers its approval", async () => {
+      await idle();
+      const ws = hub.store.agent(agentId)!.workspaceId;
+      const a = hub.store.createApproval({ workspaceId: ws, agentId, channelId: dm().id, threadId: null, summary: "Send it?", details: "" });
+      backedOff();
+      await new Promise((r) => setTimeout(r, 5));
+      hub.background.tick();
+      expect(hub.store.background(agentId, me)!.nextReason).toBe(QUIET_LATELY);
+      hub.store.decideApproval(a.id, "approved", me, "");
+      hub.background.tick();
+      expect(mins(hub.store.background(agentId, me)!)).toBe(60);
+      off();
+    });
+
+    it("leaves a stretched wait alone when nothing's come up, and never holds up a follow-up", async () => {
+      await idle();
+      onCheck = async () => "ok";
+      const b = backedOff();
+      const n = calls.length;
+      hub.background.tick();
+      expect(calls.length).toBe(n);
+      expect(hub.store.background(agentId, me)!.nextAt).toBe(b.nextAt);
+      const f = hub.store.createFollowup({ agentId, userId: me, dueAt: new Date(Date.now() + 60_000).toISOString(), note: "the deadline's in an hour" });
+      hub.background.tick(new Date(Date.now() + 2 * 60_000));
+      await waitFor(() => calls.length > n || undefined);
+      expect(calls.at(-1)!.prompt).toContain("the deadline's in an hour");
+      expect(hub.store.followup(f.id)!.status).toBe("done");
+      await idle();
+      onCheck = async () => "nothing new";
+      off();
+    });
+
+    it("looks at an agent with nothing to watch at its usual pace when that's under an hour, and stops skipping it once it has a task", async () => {
+      const node = hub.store.agent(agentId)!.nodeId;
+      const quietId = (await owner.request("POST", "/api/agents", { handle: "stillone", name: "Still", harness: "custom", nodeId: node })).id;
+      hub.store.setBackground(quietId, me, { enabled: true, everyMinutes: 15, quietStart: "00:00", quietEnd: "00:00", nextAt: null, lastAt: new Date().toISOString() });
+      hub.background.tick();
+      const b = hub.store.background(quietId, me)!;
+      expect(b.nextReason).toBe(NOTHING_TO_WATCH);
+      expect((new Date(b.nextAt!).getTime() - Date.now()) / 60_000).toBeLessThanOrEqual(15);
+      const ws = hub.store.agent(quietId)!.workspaceId;
+      hub.store.createTask({ workspaceId: ws, from: { kind: "user", id: me }, toAgentId: quietId, title: "Look at this", brief: "", channelId: null, threadId: null });
+      hub.background.tick();
+      expect(hub.store.background(quietId, me)!.nextReason).not.toBe(NOTHING_TO_WATCH);
+      hub.store.setBackground(quietId, me, { enabled: false });
+    });
+
+    it("tells agents to ask for a time only when they need one, so a calm agent's checks can slow down", async () => {
+      await idle();
+      onCheck = async () => "ok";
+      quietFor(0);
+      await check();
+      expect(calls.at(-1)!.prompt).toContain("If it's calm, don't call it");
+      expect(calls.at(-1)!.prompt).not.toContain("Before you finish, call next_check");
+      onCheck = async () => "nothing new";
+      off();
+    });
   });
 
   it("shows agents the draft behind an approval card, and the answer", async () => {
