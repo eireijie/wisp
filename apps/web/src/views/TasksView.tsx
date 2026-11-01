@@ -77,7 +77,7 @@ export function TasksView({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="shrink-0 px-[18px] md:px-7 pt-3 md:pt-[30px] pb-3 safe-top flex items-center gap-3.5">
+      <header className="shrink-0 px-[18px] md:px-7 pt-[max(0.75rem,env(safe-area-inset-top))] md:pt-[max(30px,env(safe-area-inset-top))] pb-3 flex items-center gap-3.5">
         {onBack && (
           <button className="md:hidden! circle" onClick={onBack} aria-label="Back to Inbox">
             <ChevronRight size={22} strokeWidth={2} className="rotate-180" />

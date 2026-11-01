@@ -146,7 +146,7 @@ const macBundle = (execPath = process.execPath) => path.resolve(execPath, "..", 
 function createUpdater(o) {
   const { app } = o;
   const dir = path.join(app.getPath("userData"), "updates");
-  /** idle | checking | downloading | ready | error | timed-out */
+  /** idle | checking | current | downloading | ready | unsupported | error | timed-out */
   let state = "idle";
   let detail = "";
   let found = null; // the release being downloaded or ready
@@ -161,25 +161,28 @@ function createUpdater(o) {
     o.refresh();
   };
 
-  async function check({ manual = false } = {}) {
+  async function check({ manual = false, quiet = false } = {}) {
+    const say = (title, body) => manual && !quiet && o.notify(title, body);
     if (!app.isPackaged) {
-      if (manual) o.notify("Updates", "Updates only work in the built app. From source, use git pull.");
+      set("unsupported", "Updates only work in the built app. From source, use git pull.");
+      say("Updates", "Updates only work in the built app. From source, use git pull.");
       return;
     }
     if (state === "checking" || state === "downloading" || installing) return;
     if (state === "ready") {
-      if (manual) o.notify(`Wisp ${found.version} is ready`, "Restart Wisp to finish updating.");
+      say(`Wisp ${found.version} is ready`, "Restart Wisp to finish updating.");
       return;
     }
     const name = assetName();
     const stuck = process.platform === "darwin" && !canReplace(macBundle());
     if (stuck) {
       set("error", "move Wisp to Applications to get updates");
-      if (manual) o.notify("Move Wisp to Applications", "Wisp can only update itself from your Applications folder.");
+      say("Move Wisp to Applications", "Wisp can only update itself from your Applications folder.");
       return;
     }
     if (!name) {
-      if (manual) o.notify("Updates", "This install updates through your package manager.");
+      set("unsupported", "This install updates through your package manager.");
+      say("Updates", "This install updates through your package manager.");
       return;
     }
     set("checking");
@@ -188,8 +191,8 @@ function createUpdater(o) {
       if (!res.ok) throw new Error(res.status === 404 ? "the release page isn't public yet" : `GitHub said ${res.status}`);
       const update = pickUpdate(await res.json(), app.getVersion(), name);
       if (!update) {
-        set("idle");
-        if (manual) o.notify("Wisp is up to date", `You have the newest version, ${app.getVersion()}.`);
+        set("current");
+        say("Wisp is up to date", `You have the newest version, ${app.getVersion()}.`);
         return;
       }
       found = update;
@@ -199,7 +202,7 @@ function createUpdater(o) {
       const timedOut = e.name === "TimeoutError" || e.name === "AbortError";
       const message = timedOut ? "The update request timed out. Try checking again." : e.message;
       set(timedOut ? "timed-out" : "error", message);
-      if (manual) o.notify("Couldn't check for updates", message);
+      say("Couldn't check for updates", message);
     }
   }
 
@@ -283,6 +286,8 @@ function createUpdater(o) {
     return true;
   }
 
+  const status = () => ({ state, detail, version: found?.version ?? null, current: app.getVersion() });
+
   return {
     start() {
       if (!app.isPackaged) return;
@@ -292,11 +297,16 @@ function createUpdater(o) {
     },
     stop: () => timer && clearInterval(timer),
     check: () => check({ manual: true }),
+    /** a check asked for from Wisp's own Updates page, which shows the result itself */
+    checkQuietly: async () => {
+      await check({ manual: true, quiet: true });
+      return status();
+    },
     /** restart into the new version now */
     restart,
     /** called while quitting: a downloaded update goes in quietly, without reopening Wisp */
     installOnQuit,
-    status: () => ({ state, detail, version: found?.version ?? null }),
+    status,
     /** the tray's update item(s) */
     menu() {
       if (state === "ready" || (state === "error" && file)) return [{ label: `Restart to Update to ${found.version}`, click: restart }];

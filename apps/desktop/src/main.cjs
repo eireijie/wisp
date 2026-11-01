@@ -780,6 +780,9 @@ ipcMain.on("badge", (_e, n) => {
   if (process.platform === "darwin") app.dock?.setBadge(count ? String(count) : "");
 });
 ipcMain.handle("desktop:info", async () => ({ version: app.getVersion(), platform: process.platform, device: await readDeviceStatus() }));
+ipcMain.handle("updates:status", (e) => (fromHub(e) ? updater.status() : null));
+ipcMain.handle("updates:check", (e) => (fromHub(e) ? updater.checkQuietly() : null));
+ipcMain.handle("updates:restart", (e) => (fromHub(e) ? updater.restart() : null));
 ipcMain.handle("desktop:connect-device", (e, claim) => (fromHub(e) ? startDevice({ confirmed: !!claim, claim: claim && typeof claim.token === "string" ? { token: claim.token, name: String(claim.name || "") } : null }) : null));
 
 // ---------------------------------------------------------------- lifecycle

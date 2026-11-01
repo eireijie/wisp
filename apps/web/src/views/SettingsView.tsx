@@ -210,7 +210,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
   if (fullWindow)
     return (
       <div className="flex-1 min-w-0 min-h-0 flex">
-        <aside className="w-[268px] shrink-0 border-r border-line overflow-y-auto px-3.5 py-7 safe-top flex flex-col">
+        <aside className="w-[268px] shrink-0 border-r border-line overflow-y-auto px-3.5 pt-[max(1.75rem,env(safe-area-inset-top))] pb-7 flex flex-col">
           <div className="px-3 pb-1.5">
             <h1 className="t-title">Settings</h1>
             <div className="mt-0.5 text-[13px] text-faint truncate">{who}</div>
@@ -228,7 +228,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       {current !== "apps" && (
-        <header className="shrink-0 px-[18px] pt-3 pb-2 flex items-center gap-3 safe-top">
+        <header className="shrink-0 px-[18px] pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 flex items-center gap-3">
           {(onBack || current) && (
             <button className="circle shrink-0" onClick={() => (current ? go({ view: "settings", page: null }) : onBack?.())} aria-label={current ? "Back to all settings" : "Back"}>
               <ChevronLeft size={22} aria-hidden />

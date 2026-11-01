@@ -285,7 +285,7 @@ function Workspace() {
       <div className="flex-1 min-w-0 flex flex-col">
         <div className="relative flex-1 min-h-0 flex">
           {withColumn && (
-            <aside className="w-[300px] shrink-0 my-2 rounded-xl border border-edge bg-panel overflow-hidden" data-pane>
+            <aside className="w-[340px] shrink-0 my-2 rounded-xl border border-edge bg-panel overflow-hidden" data-pane>
               <ChatList route={route} />
             </aside>
           )}
