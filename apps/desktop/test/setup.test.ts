@@ -58,6 +58,17 @@ describe("resuming cloud setup after relaunch", () => {
 });
 
 describe("Wisp first launch", () => {
+  it("draws six wisps from Ghost's own shapes, each on its own clock", () => {
+    const html = readFileSync(new URL("../src/setup.html", import.meta.url), "utf8");
+    const stage = html.match(/<script>[\s\S]*?<\/script>\s*<script>([\s\S]*?)<\/script>/)![1];
+    const crew = stage.match(/const CREW = \[([\s\S]*?)\n\s*\];/)![1];
+    const clocks = [...crew.matchAll(/T\("(animation-duration:[^"]+)"/g)].map((m) => m[1]);
+    expect(clocks).toHaveLength(5);
+    expect(new Set(clocks).size).toBe(5);
+    const ghost = readFileSync(new URL("../../web/src/components/Ghost.tsx", import.meta.url), "utf8");
+    expect(ghost).toContain(stage.match(/classic: \{ d: "([^"]+)"/)![1]);
+  });
+
   it("goes from Self-Host through installing to Continue, which opens the server", async () => {
     const f = fixture({});
     await new Promise((resolve) => setImmediate(resolve));

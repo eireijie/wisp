@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from "react";
-import { Bot, Check, Copy, ExternalLink, Loader2, Monitor, Plus } from "lucide-react";
+import { Bot, Check, Copy, ExternalLink, Loader2, Monitor, Shuffle } from "lucide-react";
 import { HARNESSES, harnessLabel, runsInVm, type Agent, type HarnessLogin, type HarnessSettings } from "@wisp/core";
 import { api } from "../api.ts";
 import { awayEnabled, enableTailscale } from "../components/Access.tsx";
@@ -13,6 +13,10 @@ import { AddDeviceContent } from "../components/AddDevice.tsx";
 import { AuthButton, AuthInput, AuthLink } from "../components/auth.tsx";
 import { PhonePairing } from "./settings/mobile.tsx";
 import { CopyBlock, Field, Input, cx } from "../components/ui.tsx";
+import { GHOST_PALETTES, GHOST_WHITE, randomAppearance, type GhostAppearance } from "@wisp/core/src/appearance.ts";
+import { SHAPES } from "../components/Ghost.tsx";
+import { HarnessLogo } from "../components/HarnessLogo.tsx";
+import { CodeTiles, RowState, SetupStage, WHITE_WISP, type StageScene } from "../components/SetupStage.tsx";
 import type { HarnessesResponse } from "./settings/harnesses.tsx";
 import { freeHandle } from "./CreateAgent.tsx";
 import { signInFor } from "./needs-sign-in.ts";
@@ -25,9 +29,13 @@ export const SETUP_LABELS: Record<StepId, string> = { anywhere: "Away from home"
  */
 export function WelcomeView({ intro }: { intro?: boolean }) {
   const me = useStore((s) => s.me)!;
+  const agents = useStore((s) => s.agents);
   const { done } = useOnboarding(3000);
   const devices = useDevices(3000);
   const [screen, setScreen] = useState<StepId>(() => (intro ? (onPublicAddress() ? "address" : "anywhere") : (nextStep(done) ?? "anywhere")));
+  // the agent's look, once you start making it; the wisp keeps it for the rest of setup
+  const [look, setLook] = useState<GhostAppearance | null>(() => agents[0]?.settings.appearance ?? null);
+  const [scene, setScene] = useState<StageScene>({ name: screen === "agent" ? "look" : screen === "devices" ? "phone" : screen });
   const advance = (step: StepId) => {
     completeSetupStep(me.workspace.id, step);
     setScreen(STEPS[STEPS.indexOf(step) + 1] ?? "devices");
@@ -37,24 +45,26 @@ export function WelcomeView({ intro }: { intro?: boolean }) {
     setDismissed(true);
     go({ view: "dashboard" });
   };
+  // the step's own Back wins; otherwise the screen before, unless going there would redo something
+  const before = STEPS[STEPS.indexOf(screen) - 1];
+  const canGoBack = !!before && !(screen === "address" && onPublicAddress()) && !(screen === "devices" && agents.length > 0);
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto bg-panel md:bg-app md:flex md:p-6" data-testid="setup">
-      <main className="m-auto w-full min-h-full md:min-h-[500px] md:max-w-[472px] flex flex-col bg-panel p-8 pt-[max(2rem,env(safe-area-inset-top))] md:rounded-[10px] md:border md:border-line">
-        <div key={screen} className="wizard-in flex-1 flex flex-col">
-          {screen === "anywhere" && <AwayStep onDone={() => advance("anywhere")} />}
-          {screen === "address" && <AddressStep onNext={() => advance("address")} />}
-          {screen === "agent" && <AgentStep devices={devices} onNext={() => advance("agent")} />}
-          {screen === "devices" && <PhoneStep onFinish={finish} />}
-        </div>
-      </main>
-    </div>
+    <SetupStage scene={{ look: look ?? undefined, ...scene, onBack: scene.onBack === undefined ? (canGoBack ? () => setScreen(before) : undefined) : scene.onBack }}>
+      {screen === "anywhere" && <AwayStep key={screen} onScene={setScene} onDone={() => advance("anywhere")} />}
+      {screen === "address" && <AddressStep key={screen} onScene={setScene} onNext={() => advance("address")} />}
+      {screen === "agent" && <AgentStep key={screen} look={look ?? START_LOOK} setLook={setLook} devices={devices} onScene={setScene} onNext={() => advance("agent")} />}
+      {screen === "devices" && <PhoneStep key={screen} onScene={setScene} onFinish={finish} />}
+    </SetupStage>
   );
 }
+
+/** What the white wisp turns into when you start making your agent. */
+const START_LOOK: GhostAppearance = { ...WHITE_WISP, color: "#8bd4ff", color2: "#ff51bf" };
 
 /** A screen's title, the line under it, and what goes with them. */
 function Thread({ title, sub, children }: { title: string; sub?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="flex-1 flex flex-col gap-3.5 pb-3.5">
+    <div key={title} className="setup-rise flex-1 flex flex-col gap-3.5 pb-3.5">
       <h1 className="text-[22px] font-semibold tracking-[-0.02em] leading-tight">{title}</h1>
       {sub && <p className="text-sm text-muted">{sub}</p>}
       {children}
@@ -69,7 +79,7 @@ function Actions({ children }: { children: ReactNode }) {
 
 /** The screens' tighter button. */
 function SetupButton({ className, ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" }) {
-  return <AuthButton {...p} className={cx("h-[42px] rounded-lg", className)} />;
+  return <AuthButton {...p} className={cx("setup-press h-[42px] rounded-lg", className)} />;
 }
 function Msg({ children, className }: { children: ReactNode; className?: string }) {
   return <p className={cx("text-sm text-muted", className)}>{children}</p>;
@@ -112,10 +122,11 @@ export function serverAddress(info: AccessInfo | null, loc: Pick<Location, "orig
 }
 
 /** Your server's address, to copy. */
-function AddressStep({ onNext }: { onNext: () => void }) {
+function AddressStep({ onScene, onNext }: { onScene: (s: StageScene) => void; onNext: () => void }) {
   const info = useAccess(3000);
   const address = serverAddress(info);
   const [copied, setCopied] = useState(false);
+  useEffect(() => onScene({ name: "address", address: address?.url }), [address?.url]);
   return (
     <>
       <Thread title="Your Wisp server address" sub={address?.note}>
@@ -138,15 +149,16 @@ function AddressStep({ onNext }: { onNext: () => void }) {
         )}
       </Thread>
       <Actions>
-        <SetupButton onClick={onNext}>Start using Wisp!</SetupButton>
+        <SetupButton onClick={onNext}>Continue</SetupButton>
       </Actions>
     </>
   );
 }
 
 /** Your phone, by QR code; other computers are one tap away. */
-function PhoneStep({ onFinish }: { onFinish: () => void }) {
+function PhoneStep({ onScene, onFinish }: { onScene: (s: StageScene) => void; onFinish: () => void }) {
   const [computer, setComputer] = useState(false);
+  useEffect(() => onScene({ name: "phone" }), []);
   return (
     <>
       {computer ? (
@@ -155,7 +167,7 @@ function PhoneStep({ onFinish }: { onFinish: () => void }) {
         </Thread>
       ) : (
         <Thread title="Add your phone" sub="Scan this with the Wisp app.">
-          <PhonePairing autoStart compact />
+          <div className="setup-qr"><PhonePairing autoStart compact /></div>
         </Thread>
       )}
       <Actions>
@@ -172,7 +184,7 @@ function PhoneStep({ onFinish }: { onFinish: () => void }) {
 export const NO_NODE = /Node\.js isn't installed on this computer/;
 
 /** Keep a detected sign-in on the device; install a new harness there when requested. */
-export async function makeFirstAgent(device: DeviceInfo, harness: string, name: string, agents: Agent[], computers: ComputerInfo[]) {
+export async function makeFirstAgent(device: DeviceInfo, harness: string, name: string, agents: Agent[], computers: ComputerInfo[], appearance?: GhostAppearance) {
   const installed = device.harnesses?.some((h) => h.id === harness);
   const inVm = !installed && runsInVm(harness) && device.role !== "headless" && device.role !== "screen" && !!device.capabilities?.vm.ok;
   if (!installed && !inVm) {
@@ -195,12 +207,12 @@ export async function makeFirstAgent(device: DeviceInfo, harness: string, name: 
     harness,
     nodeId: device.id,
     computerId: computer?.id ?? null,
-    settings: inVm ? { runIn: "computer" } : computer ? { runIn: "device" } : { headless: true },
+    settings: { ...(inVm ? { runIn: "computer" } : computer ? { runIn: "device" } : { headless: true }), ...(appearance ? { appearance } : {}) },
   });
 }
 
 /** The AI that powers your first agent, signing in to it, and making the agent. */
-function AgentStep({ devices, onNext }: { devices: DeviceInfo[] | null; onNext: () => void }) {
+function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostAppearance; setLook: (l: GhostAppearance) => void; devices: DeviceInfo[] | null; onScene: (s: StageScene) => void; onNext: () => void }) {
   const agents = useStore((s) => s.agents);
   const computers = useStore((s) => s.computers);
   const usable = usableDevices(devices ?? []).filter((d) => d.online && !d.paused);
@@ -208,7 +220,9 @@ function AgentStep({ devices, onNext }: { devices: DeviceInfo[] | null; onNext: 
   const device = usable.find((d) => d.id === deviceId) ?? usable.find((d) => d.mine) ?? usable[0];
   const [name, setName] = useState("Atlas");
   const [harness, setHarness] = useState("");
-  const [more, setMore] = useState(false);
+  const [view, setView] = useState<"look" | "harness">("look");
+  // signing in from the Make button: make the agent as soon as that's done
+  const [makeAfterSignIn, setMakeAfterSignIn] = useState(false);
   const [settings, setSettings] = useState<HarnessSettings[]>([]);
   const [signingIn, setSigningIn] = useState<HarnessSettings | null>(null);
   const [created, setCreated] = useState<Agent | null>(null);
@@ -247,16 +261,15 @@ function AgentStep({ devices, onNext }: { devices: DeviceInfo[] | null; onNext: 
   const pick = (id: string) => {
     setHarness(id);
     setError(null);
-    const s = signInFor(settings, id);
-    if (s && device?.mine) setSigningIn(s);
   };
   const create = async () => {
     if (!device) return;
     setBusy(true);
     setError(null);
     try {
-      const agent = await makeFirstAgent(device, selected, name.trim(), agents, computers);
+      const agent = await makeFirstAgent(device, selected, name.trim(), agents, computers, look);
       setCreated(agent);
+      setLook(look);
       await Promise.allSettled([useStore.getState().refreshAgents(), useStore.getState().refreshComputers()]);
       if (agent.settings.runIn !== "computer") {
         // read what the device says now: an AI that was just installed isn't in the list from before
@@ -270,30 +283,65 @@ function AgentStep({ devices, onNext }: { devices: DeviceInfo[] | null; onNext: 
       setBusy(false);
     }
   };
+  const displayName = name.trim() || "Atlas";
+  const tag = created?.handle ?? freeHandle(displayName, agents.map((a) => a.handle));
+  useEffect(() => {
+    if (created && !signingIn) return onScene({ name: "made", look, tag, badge: created.harness, onBack: null });
+    if (signingIn) return onScene({ name: "signin", look, badge: selected, onBack: null });
+    if (view === "harness") return onScene({ name: "harness", look, tag, badge: selected, onBack: () => setView("look") });
+    onScene({ name: "look", look, tag });
+  }, [view, !!signingIn, !!created, look, tag, selected]);
   if (signingIn && device && account(signingIn)) {
     return (
       <HarnessSignInChat
         device={device}
         settings={signingIn}
         account={account(signingIn)}
-        onClose={() => setSigningIn(null)}
+        onClose={() => {
+          setSigningIn(null);
+          setMakeAfterSignIn(false);
+        }}
         onDone={() => {
           setSigningIn(null);
           void loadSettings().catch(() => {});
+          if (makeAfterSignIn) {
+            setMakeAfterSignIn(false);
+            void create();
+          }
         }}
       />
     );
   }
-  if (created) return <AgentCreated agent={created} onNext={onNext} />;
+  if (created) return <AgentCreated agent={created} device={device?.name} onNext={onNext} />;
+  if (view === "look") {
+    return (
+      <>
+        <Thread title="Create your agent" sub="Name it and make it yours.">
+          <Field label="Name">
+            <Input className="h-[42px]! rounded-lg! bg-card!" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <LookPicker look={look} onChange={setLook} />
+        </Thread>
+        <Actions>
+          <SetupButton variant="secondary" onClick={() => setLook(randomAppearance())}>
+            <Shuffle size={16} />
+            Shuffle
+          </SetupButton>
+          <SetupButton disabled={!name.trim()} onClick={() => setView("harness")}>
+            Continue
+          </SetupButton>
+        </Actions>
+      </>
+    );
+  }
   const current = settings.find((s) => s.harness === selected);
   const needsSignIn = !!device?.mine && !!current && account(current)?.signedIn === false;
   const noNode = !!error && NO_NODE.test(error);
+  const notInstalled = HARNESSES.filter((h) => h.protocol !== "mcp" && (h.install?.npm || (runsInVm(h.id) && device?.capabilities?.vm.ok)) && !installed.some((i) => i.id === h.id));
+  const isInstalled = installed.some((h) => h.id === selected);
   return (
     <>
-      <Thread title="Create your agent" sub="Pick the AI that powers it.">
-        <Field label="Name">
-          <Input className="h-[42px]! rounded-lg! bg-card!" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
-        </Field>
+      <Thread title={`What powers ${displayName}?`} sub="You can change this later.">
         {usable.length > 1 && (
           <label className="self-start flex items-center gap-3 text-sm text-muted">
             Computer
@@ -306,39 +354,16 @@ function AgentStep({ devices, onNext }: { devices: DeviceInfo[] | null; onNext: 
             </select>
           </label>
         )}
-        <Group label="Agent app">
+        <div role="radiogroup" aria-label="Agent app" className="grid grid-cols-2 gap-2">
           {installed.map((h) => {
             const s = settings.find((s) => s.harness === h.id);
             const signedIn = s ? account(s)?.signedIn : null;
-            return <HarnessChoice key={h.id} title={harnessLabel(h.id)} body={signedIn === true ? "Signed in" : signedIn === false ? "Found on this computer. Sign in when you pick it." : "Found on this computer"} selected={selected === h.id} onClick={() => pick(h.id)} />;
+            return <HarnessChoice key={h.id} title={harnessLabel(h.id)} body={signedIn === true ? "Signed in" : "On this computer"} selected={selected === h.id} onClick={() => pick(h.id)} icon={<HarnessLogo harness={h.id} size={24} />} />;
           })}
-          <HarnessChoice
-            title="Hermes, Kimi, Gemini and more"
-            body="Not installed yet. Wisp installs it."
-            selected={!installed.some((h) => h.id === selected)}
-            onClick={() => {
-              setMore(!more);
-              if (installed.some((h) => h.id === selected)) pick("kimi");
-            }}
-            icon={<Plus size={20} />}
-          />
-        </Group>
-        {more && (
-          <div role="radiogroup" aria-label="More agent apps" className="grid grid-cols-2 gap-2">
-            {HARNESSES.filter((h) => h.protocol !== "mcp" && (h.install?.npm || (runsInVm(h.id) && device?.capabilities?.vm.ok)) && !installed.some((i) => i.id === h.id)).map((h) => (
-              <button
-                key={h.id}
-                type="button"
-                role="radio"
-                aria-checked={selected === h.id}
-                className={cx("rounded-2xl border px-3.5 py-3 text-body text-left", selected === h.id ? "border-ink bg-card" : "border-line hover:bg-hover")}
-                onClick={() => pick(h.id)}
-              >
-                {h.label}
-              </button>
-            ))}
-          </div>
-        )}
+          {notInstalled.map((h) => (
+            <HarnessChoice key={h.id} title={h.label} body="Wisp installs it" selected={selected === h.id} onClick={() => pick(h.id)} icon={<HarnessLogo harness={h.id} size={24} />} />
+          ))}
+        </div>
         {!device && (
           <p role="status" className="text-sm text-muted">
             Waiting for this computer to connect; you can skip this for now.
@@ -358,13 +383,20 @@ function AgentStep({ devices, onNext }: { devices: DeviceInfo[] | null; onNext: 
       </Thread>
       <Actions>
         {needsSignIn ? (
-          <SetupButton disabled={busy || !current} onClick={() => current && setSigningIn(current)}>
+          <SetupButton
+            disabled={busy || !current}
+            onClick={() => {
+              if (!current) return;
+              setMakeAfterSignIn(true);
+              setSigningIn(current);
+            }}
+          >
             Sign in to {harnessLabel(selected)}
           </SetupButton>
         ) : (
-          <SetupButton disabled={busy || !device || !name.trim() || (!device.mine && !installed.some((h) => h.id === selected))} onClick={() => void create()}>
+          <SetupButton disabled={busy || !device || !name.trim() || (!device.mine && !isInstalled)} onClick={() => void create()}>
             {busy && <Loader2 size={16} className="animate-spin" />}
-            {busy ? "Getting ready…" : noNode ? "Try again" : `Make ${name.trim() || "Atlas"}`}
+            {busy ? "Getting ready…" : noNode ? "Try again" : isInstalled ? `Make ${displayName}` : `Install ${harnessLabel(selected)} and make ${displayName}`}
           </SetupButton>
         )}
         <AuthLink onClick={onNext} disabled={busy} className="self-center">
@@ -375,13 +407,58 @@ function AgentStep({ devices, onNext }: { devices: DeviceInfo[] | null; onNext: 
   );
 }
 
-/** A harness you can pick: its name, whether it's found or signed in, and a check when chosen. */
+const SWATCHES: { name: string; color: string; color2: string }[] = [
+  { name: "White", ...GHOST_WHITE },
+  ...["Bubblegum sky", "Orchid peach", "Coral mint", "Arctic blue", "Solar flare", "Violet ember", "Ultraviolet tide"].map((n) => GHOST_PALETTES.find((p) => p.name === n)!),
+];
+const HATS: [string, GhostAppearance["hat"]][] = [["None", "none"], ["Top hat", "tophat"], ["Crown", "crown"], ["Beanie", "beanie"], ["Party", "party"]];
+
+/** The agent's color, shape and hat; the wisp on the stage shows each change. */
+function LookPicker({ look, onChange }: { look: GhostAppearance; onChange: (l: GhostAppearance) => void }) {
+  const label = "block text-[13px] font-medium text-muted mb-1.5";
+  return (
+    <>
+      <div>
+        <span className={label}>Color</span>
+        <div className="flex gap-2">
+          {SWATCHES.map((s) => (
+            <button key={s.name} type="button" aria-label={s.name} title={s.name} aria-pressed={look.color === s.color && look.color2 === s.color2} className="setup-swatch" style={{ background: `linear-gradient(${s.color}, ${s.color2})` }} onClick={() => onChange({ ...look, color: s.color, color2: s.color2 })} />
+          ))}
+        </div>
+      </div>
+      <div>
+        <span className={label}>Shape</span>
+        <div className="flex gap-1.5">
+          {(Object.keys(SHAPES) as GhostAppearance["shape"][]).map((s) => (
+            <button key={s} type="button" aria-label={s} aria-pressed={look.shape === s} className="setup-shape" onClick={() => onChange({ ...look, shape: s })}>
+              <svg viewBox="16 6 88 108" width="100%" height="100%" aria-hidden>
+                <path d={SHAPES[s].body[0]} fill="currentColor" />
+              </svg>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <span className={label}>Hat</span>
+        <div className="flex flex-wrap gap-1.5">
+          {HATS.map(([n, hat]) => (
+            <button key={hat} type="button" aria-pressed={look.hat === hat} className="setup-chip" onClick={() => onChange({ ...look, hat })}>
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** A harness you can pick: its logo, name, and whether it's here or signed in. */
 export function HarnessChoice({
   title,
   body,
   selected,
   onClick,
-  icon = <Bot size={20} />,
+  icon = <Bot size={24} />,
 }: {
   title: string;
   body: string;
@@ -390,17 +467,12 @@ export function HarnessChoice({
   icon?: ReactNode;
 }) {
   return (
-    <button type="button" role="radio" aria-checked={selected} onClick={onClick} className="w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-hover">
-      <span className="shrink-0 text-ink/85">{icon}</span>
+    <button type="button" role="radio" aria-checked={selected} onClick={onClick} className="setup-choice setup-tile">
+      <span className="shrink-0 grid place-items-center">{icon}</span>
       <span className="flex-1 min-w-0">
-        <span className="block text-body font-medium">{title}</span>
-        <span className="block text-sm mt-0.5 text-muted">{body}</span>
+        <span className="block text-[13.5px] font-medium leading-tight truncate">{title}</span>
+        <span className="block text-xs mt-px text-muted truncate">{body}</span>
       </span>
-      {selected && (
-        <span className="size-6 shrink-0 rounded-full bg-badge text-badge-ink grid place-items-center" aria-hidden>
-          <Check size={14} strokeWidth={3} />
-        </span>
-      )}
     </button>
   );
 }
@@ -486,17 +558,17 @@ function HarnessSignInChat({ device, settings, account, onClose, onDone }: { dev
           <>
             {login.url ? <Msg>Open the sign-in page{login.code ? ", then enter this code there." : ", then paste the code it gives you."}</Msg> : <Waiting>Starting {label}'s sign-in on {device.name}…</Waiting>}
             {login.code && (
-              <div className="self-stretch rounded-lg border border-line bg-card p-[18px] flex flex-col items-center gap-3.5">
-                <div className="font-mono text-[34px] font-bold tracking-[0.15em]">{login.code}</div>
+              <div className="self-stretch flex flex-col items-center gap-3.5">
+                <CodeTiles code={login.code} />
                 <button
                   type="button"
-                  className="h-11 px-5 rounded-full bg-control border border-control-line text-body font-medium inline-flex items-center gap-2 hover:bg-hover"
+                  className="setup-press h-9 px-4 rounded-lg bg-control border border-control-line text-[13px] font-medium inline-flex items-center gap-2 hover:bg-hover"
                   onClick={() => {
                     void navigator.clipboard?.writeText(login.code!);
                     setCopied(true);
                   }}
                 >
-                  {copied ? <Check size={17} /> : <Copy size={17} />}
+                  {copied ? <Check size={15} /> : <Copy size={15} />}
                   {copied ? "Copied" : "Copy code"}
                 </button>
               </div>
@@ -554,7 +626,7 @@ function HarnessSignInChat({ device, settings, account, onClose, onDone }: { dev
   );
 }
 
-function AgentCreated({ agent, onNext }: { agent: Agent; onNext: () => void }) {
+function AgentCreated({ agent, device, onNext }: { agent: Agent; device?: string; onNext: () => void }) {
   const inVm = agent.settings.runIn === "computer";
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -576,7 +648,7 @@ function AgentCreated({ agent, onNext }: { agent: Agent; onNext: () => void }) {
   }, [agent.id, inVm]);
   return (
     <>
-      <Thread title={`${agent.name} is made`}>
+      <Thread title={`${agent.name} is made`} sub={`Running on ${harnessLabel(agent.harness)}${device ? `, on ${device}` : ""}.`}>
         {inVm && signedIn !== true && (
           <Msg>
             Sign in to {harnessLabel(agent.harness)} on {agent.name}'s computer.
@@ -618,7 +690,7 @@ function AgentCreated({ agent, onNext }: { agent: Agent; onNext: () => void }) {
 }
 
 /** Reach Wisp from outside your home (Tailscale or Cloudflare), or only at home. */
-function AwayStep({ onDone }: { onDone: () => void }) {
+function AwayStep({ onScene, onDone }: { onScene: (s: StageScene) => void; onDone: () => void }) {
   const info = useAccess(3000);
   const failed = useAccessStore((s) => s.failed);
   const allowed = useStore((s) => canApproveJoin(s.me?.role));
@@ -688,6 +760,10 @@ function AwayStep({ onDone }: { onDone: () => void }) {
     skipAccess();
     onDone();
   };
+  useEffect(() => {
+    if (choice) onScene({ name: choice === "tailscale" ? "tailscale" : "anywhere", linked: state === "running", onBack: () => setChoice(null) });
+    else onScene({ name: "anywhere" });
+  }, [choice, state === "running"]);
   if (choice === "tailscale") {
     const problem = tailscaleProblem({ info, failed, found: found && found.state === state ? found.text : null, slow });
     return <TailscaleScreen info={info} authUrl={info?.tailscale.authUrl ?? loginUrl} problem={problem} onRetry={tryAgain} onSkip={only} />;
@@ -714,16 +790,27 @@ function AwayStep({ onDone }: { onDone: () => void }) {
           <SetupButton disabled={busy || !allowed || !credential.trim()}>
             {busy && <Loader2 size={16} className="animate-spin" />}Continue
           </SetupButton>
-          <AuthLink className="self-center" onClick={() => setChoice(null)}>
-            Back
-          </AuthLink>
         </Actions>
       </form>
     );
   }
   return (
     <>
-      <Thread title="Use Wisp outside your home?" sub="So your phone and laptop work on any Wi-Fi or on cell data. Tailscale is a free app that links your devices.">
+      <Thread title="Use Wisp outside your home?" sub="So your phone and laptop work on any Wi-Fi or on cell data.">
+        <button type="button" className="setup-choice" disabled={!allowed} onClick={() => setChoice("tailscale")}>
+          <BrandMark name="tailscale" />
+          <span>
+            <strong className="block text-sm font-medium">Yes, with Tailscale</strong>
+            <span className="block text-[13px] text-muted">A free app that links your devices.</span>
+          </span>
+        </button>
+        <button type="button" className="setup-choice" disabled={!allowed} onClick={() => setChoice("cloudflare")}>
+          <BrandMark name="cloudflare" />
+          <span>
+            <strong className="block text-sm font-medium">Yes, with Cloudflare</strong>
+            <span className="block text-[13px] text-muted">Needs a domain you own.</span>
+          </span>
+        </button>
         {!info && failed && (
           <p role="status" className="text-sm text-muted">
             Away from home isn't available yet; you can keep going.
@@ -732,17 +819,21 @@ function AwayStep({ onDone }: { onDone: () => void }) {
         {!allowed && <p className="text-sm text-muted">Your Wisp's owner can turn this on.</p>}
       </Thread>
       <Actions>
-        <SetupButton disabled={!allowed} onClick={() => setChoice("tailscale")}>
-          Yes, with Tailscale
-        </SetupButton>
-        <SetupButton variant="secondary" disabled={!allowed} onClick={() => setChoice("cloudflare")}>
-          Yes, with Cloudflare
-        </SetupButton>
         <AuthLink className="self-center" onClick={only}>
           Only at home for now
         </AuthLink>
       </Actions>
     </>
+  );
+}
+
+/** A company's own mark: Tailscale follows the theme, Cloudflare keeps its orange. */
+function BrandMark({ name }: { name: "tailscale" | "cloudflare" }) {
+  const src = `/brands/${name}.svg`;
+  return name === "cloudflare" ? (
+    <img src={src} alt="" width={24} height={24} className="shrink-0" />
+  ) : (
+    <span aria-hidden className="inline-block size-6 shrink-0 bg-current" style={{ mask: `url(${src}) center / contain no-repeat`, WebkitMask: `url(${src}) center / contain no-repeat` }} />
   );
 }
 
@@ -787,14 +878,14 @@ export function TailscaleScreen({ info, authUrl, problem, onRetry, onSkip }: { i
     <>
       <Thread title="Connect Tailscale" sub="Wisp moves on by itself once both are done.">
         <Group>
-          <StatusRow done={!!state && state !== "missing"} text="Tailscale is installed">
+          <StatusRow state={!state || state === "missing" ? "working" : "done"} text="Tailscale is installed">
             {state === "missing" && info && (
               <a href={info.download} target="_blank" rel="noreferrer" className="block text-[13px] text-info hover:underline">
                 Install Tailscale
               </a>
             )}
           </StatusRow>
-          <StatusRow done={state === "running"} text="Sign in to Tailscale">
+          <StatusRow state={state === "running" ? "done" : !state || state === "missing" ? "off" : "working"} text="Sign in to Tailscale">
             {authUrl && state !== "running" && (
               <a href={authUrl} target="_blank" rel="noreferrer" className="block text-[13px] text-info hover:underline">
                 Open the Tailscale sign-in page
@@ -816,11 +907,11 @@ export function TailscaleScreen({ info, authUrl, problem, onRetry, onSkip }: { i
   );
 }
 
-function StatusRow({ done, text, children }: { done: boolean; text: string; children?: ReactNode }) {
+function StatusRow({ state, text, children }: { state: "done" | "working" | "off"; text: string; children?: ReactNode }) {
   return (
     <div className="flex items-center gap-3 px-3.5 py-3 text-sm">
-      <span className={cx("size-2 shrink-0 rounded-full", done ? "bg-ok" : "bg-muted animate-pulse")} aria-label={done ? "Done" : "Waiting"} />
-      <span className="flex-1 min-w-0">
+      <RowState state={state} />
+      <span className={cx("flex-1 min-w-0", state === "off" && "text-faint")}>
         {text}
         {children}
       </span>
