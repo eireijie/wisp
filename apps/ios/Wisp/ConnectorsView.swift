@@ -209,7 +209,7 @@ struct ConnectorCatalogDetail: View {
     }
     .bottomAction {
       if let have { NavigationLink { ConnectorDetail(connector: have) } label: { Text("Manage").frame(maxWidth: .infinity, minHeight: 28).font(.system(size: 15, weight: .semibold)) }.primaryButton() }
-      else if store.canManage { MarketPrimaryButton(title: "Connect") { editor = ConnectorEditorTarget(entry: entry, presetEnv: presetEnv) } }
+      else if store.canManage { MarketPrimaryButton(title: "Add") { editor = ConnectorEditorTarget(entry: entry, presetEnv: presetEnv) } }
     }
     .connectFlow($editor, chat: $chat)
     .navigationDestination(item: $chat) { ChannelView(channel: $0.channel, draft: $0.draft) }

@@ -72,7 +72,9 @@ export const logoUrl = (names: (string | null | undefined)[]) => {
 /** Logos to try for a registry server, best first: its own icon, then its brand's. */
 export function entryLogos(e: Pick<MarketplaceEntry, "icon" | "name" | "brand" | "id">): string[] {
   const short = e.id.split("/").pop() ?? "";
-  return [e.icon, logoUrl([e.name, short, e.brand])].filter((x): x is string => !!x);
+  // a favicon is too small for a tile, and often gone; the brand's own logo is better
+  const icon = e.icon && !/favicon/i.test(e.icon) ? e.icon : null;
+  return [icon, logoUrl([e.name, short, e.brand])].filter((x): x is string => !!x);
 }
 
 // --- app categories ----------------------------------------------------------------------------
@@ -288,6 +290,6 @@ export function shelfSummary(items: Pick<ShelfItem, "kind">[]): string {
 export type StoreApp = MarketplaceEntry & { category: AppCategory | null; logos: string[] };
 
 /** The big cards at the top, when the registry has them. */
-export const POPULAR_APPS = ["com.mintmcp/gmail", "io.github.github/github-mcp-server", "com.notion/mcp"];
+export const POPULAR_APPS = ["io.github.github/github-mcp-server", "com.notion/mcp", "app.linear/linear"];
 
 export const storeApp = (e: MarketplaceEntry, category?: AppCategory | null): StoreApp => ({ ...e, category: category ?? appCategory(e), logos: entryLogos(e) });

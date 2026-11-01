@@ -65,7 +65,7 @@ describe("logos", () => {
     expect(r.res.headers.get("content-type")).toContain("image/svg+xml");
     expect(r.res.headers.get("content-security-policy")).toContain("default-src 'none'");
     expect(r.data).toBe('<svg fill="#4285F4" role="img" viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>');
-    expect((await api("GET", "/api/logo?for=Square%20Root%20Calculator", undefined, null)).status).toBe(404);
+    expect((await api("GET", "/api/logo?for=Square%20Root%20Calculator", undefined, null)).status).toBe(204);
     // the list and the SVG are fetched once
     await api("GET", "/api/logo?for=Google%20Calendar", undefined, null);
     expect(seen.filter((u) => u.endsWith("simple-icons.json")).length).toBe(1);

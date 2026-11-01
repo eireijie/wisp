@@ -383,7 +383,7 @@ private struct LibrarySkillPage: View {
     .bottomAction {
       HStack(spacing: 10) {
         Button { trying = true } label: { Label("Try it", systemImage: "paperplane").frame(maxWidth: .infinity, minHeight: 28) }.secondaryButton().controlSize(.large)
-        if store.canManage { Button { installing = true } label: { Text("Install").font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 28) }.primaryButton() }
+        if store.canManage { Button { installing = true } label: { Text("Add").font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 28) }.primaryButton() }
       }
     }
     .sheet(isPresented: $installing) { SkillInstallSheet(title: "Add \(skill.name)", request: ["catalogId": AnyEncodable(skill.id)]) }
@@ -436,7 +436,7 @@ struct StoreSkillDetail: View {
     .bottomAction {
       HStack(spacing: 10) {
         Button { trying = true } label: { Label("Try it", systemImage: "paperplane").frame(maxWidth: .infinity, minHeight: 28) }.secondaryButton().controlSize(.large)
-        if store.canManage && skill.license.open { Button { adding = true } label: { Text("Install").font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 28) }.primaryButton() }
+        if store.canManage && skill.license.open { Button { adding = true } label: { Text("Add").font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 28) }.primaryButton() }
       }
     }
     .sheet(isPresented: $adding) { SkillInstallSheet(title: "Add \(skill.name)", request: ["storeId": AnyEncodable(skill.id)]) }

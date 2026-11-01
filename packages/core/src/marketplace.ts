@@ -172,6 +172,25 @@ function packageInstall(p: NonNullable<RegistryServer["packages"]>[number]): Mar
   return null;
 }
 
+/** How brands write their own names, where the registry's title doesn't. */
+const BRAND_CASE: Record<string, string> = { gitlab: "GitLab", mongodb: "MongoDB", paypal: "PayPal", pagerduty: "PagerDuty", "monday.com": "monday.com" };
+
+/** An app's name without the protocol in it: "Figma MCP Server" is Figma. */
+export function plainAppName(name: string): string {
+  const bare = name.replace(/\b(mcp|server)\b/gi, " ").replace(/\s+/g, " ").trim();
+  const plain = bare || name;
+  return BRAND_CASE[plain.toLowerCase()] ?? plain;
+}
+
+/** An app's description in plain words: "A MCP server for Gmail" is an app for Gmail. */
+export function plainAppBlurb(text: string): string {
+  const said = text
+    .trim()
+    .replace(/\s+for MCP\b/gi, "")
+    .replace(/\b(an?\s+)?(mcp|model context protocol)\s+servers?\b/gi, (_, article) => (article ? "an app" : "app"));
+  return said.charAt(0).toUpperCase() + said.slice(1);
+}
+
 /** A registry server as Wisp shows it, or null when there's no way to add it here. */
 export function marketplaceEntry(s: RegistryServer, status = "active"): MarketplaceEntry | null {
   if (status !== "active") return null;
@@ -189,12 +208,12 @@ export function marketplaceEntry(s: RegistryServer, status = "active"): Marketpl
   const brand = domain ? (domain.split(".").at(-2) ?? domain) : publisherOf(s.name);
   const generic = /^(mcp|mcp-server|server|remote|remote-mcp)$/i.test(short);
   const name = s.title?.trim() || (generic ? brand : short).replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  const nice = name.replace(/\bMcp\b/g, "MCP");
+  const nice = plainAppName(name);
   const icon = s.icons?.find((i) => /^https:\/\//.test(i.src))?.src ?? null;
   return {
     id: s.name,
     name: nice,
-    description: (s.description ?? "").trim(),
+    description: plainAppBlurb(s.description ?? ""),
     publisher: publisherOf(s.name),
     brand: ghOrg ?? brand,
     domain,

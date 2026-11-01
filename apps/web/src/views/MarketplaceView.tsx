@@ -155,7 +155,7 @@ const SECTION_LABEL: Record<MarketSection, string> = { all: "All", apps: "Apps",
 
 /**
  * The marketplace: apps (MCP servers from the MCP Registry and Wisp's own list), skills (Wisp's
- * library and public SKILL.md repos), agents and mods, what your devices' harnesses already have,
+ * library and public SKILL.md repos), mods, what your devices' harnesses already have,
  * and what's installed. Apps sign in once in Wisp and every agent picked gets them.
  */
 export function MarketplaceView({ section, onBack, embedded }: { section: MarketSection; onBack?: () => void; embedded?: boolean }) {
@@ -407,7 +407,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
               badge={"library" in s ? <Badge tone="green">Made by Wisp</Badge> : <Badge>From {s.who}</Badge>}
               sub={whatItsFor(s.description, 90) || s.who}
               onOpen={() => openSkill(s)}
-              action={canEdit && (linkOnly ? <Add onClick={() => openSkill(s)} aria-label={`View ${s.name}`}>View</Add> : <Add onClick={() => addSkill(s)} aria-label={`${have ? "Open" : "Install"} ${s.name}`} className={cx(have && "text-faint")}>{have ? "Added" : "Install"}</Add>)}
+              action={canEdit && (linkOnly ? <Add onClick={() => openSkill(s)} aria-label={`View ${s.name}`}>View</Add> : <Add onClick={() => addSkill(s)} aria-label={`${have ? "Open" : "Add"} ${s.name}`} className={cx(have && "text-faint")}>{have ? "Added" : "Add"}</Add>)}
             />
           );
         })}
@@ -422,7 +422,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
           title={FEATURE_INFO[k].name}
           badge={<Badge tone="green">Made by Wisp</Badge>}
           sub={FEATURE_INFO[k].description}
-          action={features[k] ? <Badge tone="green">On</Badge> : isOwner ? <Add onClick={() => void setFeatures({ [k]: true }).catch((e) => setError((e as Error).message))}>Turn on</Add> : <Badge>Off</Badge>}
+          action={features[k] ? <Badge tone="green">On</Badge> : isOwner ? <Add onClick={() => void setFeatures({ [k]: true }).catch((e) => setError((e as Error).message))} aria-label={`Add ${FEATURE_INFO[k].name}`}>Add</Add> : <Badge>Off</Badge>}
         />
       ))}
     </Grid>
@@ -484,7 +484,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
         </div>
       )}
       {market.error && <RegistryError error={market.error} onRetry={() => setRetry((n) => n + 1)} />}
-      {appCards(category === "All" && !needle ? [...popularApps, ...shelfApps] : shelfApps)}
+      {appCards(category === "All" && !needle ? [...popularApps, ...shelfApps.filter((a) => !popularApps.includes(a))] : shelfApps)}
     </>
   );
 
@@ -662,7 +662,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
           </Circle>
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="t-title truncate">Connect apps</h1>
+          <h1 className="t-title truncate">Installed</h1>
           <p className="hidden text-sm text-faint md:block">{connectedCount} connected</p>
         </div>
         <span className="text-sm text-faint md:hidden">{connectedCount} connected</span>
@@ -897,7 +897,7 @@ function Devices({ shelves, canEdit, inWisp, onBring, onBringAll, pending, onRef
               )}
             </div>
             {d.items.length === 0 ? (
-              <p className="px-1 text-sm text-muted">{d.nodeName}: Nothing found in its harnesses.</p>
+              <p className="px-1 text-sm text-muted">Nothing found in its harnesses.</p>
             ) : (
               <Panel>
                 {harnesses.flatMap((h) =>
@@ -913,7 +913,7 @@ function Devices({ shelves, canEdit, inWisp, onBring, onBringAll, pending, onRef
                           icon={i.kind === "mcp" ? <AppTile name={i.name} size={40} /> : <Tile size={40}>{skillIcon(i.name)}</Tile>}
                           title={i.kind === "skill" ? skillTitle(i.name) : i.name}
                           sub={`${harnessName(h)}${i.kind === "mcp" ? (needs ? " · app, needs a key" : " · app") : ""}`}
-                          right={canEdit && (have ? <Badge tone="green">In Wisp</Badge> : <Add onClick={() => onBring(d, i)} aria-label={`Bring in ${i.name}`}>Bring in</Add>)}
+                          right={canEdit && (have ? <Badge tone="green">In Wisp</Badge> : <Add onClick={() => onBring(d, i)} aria-label={`Add ${i.name}`}>Add</Add>)}
                         />
                       );
                     }),
