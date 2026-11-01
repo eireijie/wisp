@@ -54,6 +54,7 @@ import { MAX_ROUNDS } from "./discussions.ts";
 import { bearer, hashPassword, issueToken, resolveToken, revokeSubjectTokens, revokeToken, verifyPassword, type Principal } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 import { HARNESS, registerComputerApi } from "./api-computers.ts";
+import { AGENT_TOKEN_TTL_MS } from "./db.ts";
 import { guestMessage } from "./guest-computers.ts";
 import { registerUpdateApi } from "./updates.ts";
 import { deviceLabel, registerSettingsApi } from "./api-settings.ts";
@@ -250,6 +251,14 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   /** Notes with a format of their own (souls, skills, what's remembered about people): no front matter is added. */
   const ownFormat = (p: string) => /^people\//i.test(p) || /(^|\/)SOUL\.md$/i.test(p) || /(^|\/)skills\/[^/]+\/SKILL\.md$/i.test(p);
 
+  /** An agent's folder is its soul and skills, so one on someone's own device only takes changes from them (or itself). */
+  const mayShape = (c: Caller, p: string) => {
+    const agent = store.agent(/^agents\/([^/]+)/.exec(p)?.[1] ?? "");
+    if (!agent || agent.workspaceId !== c.workspaceId || (c.actor.kind === "agent" && c.actor.id === agent.id)) return true;
+    const owner = deviceOwnerOf(agent);
+    return !owner || owner === requesterOf(c);
+  };
+
   /** Validate a note path and require at least `need` on it. Returns the normalized path. */
   function noteFor(c: Caller, raw: string, need: MemoryLevel, reply: FastifyReply): string | null {
     let p: string;
@@ -258,6 +267,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       vaultOf(c).resolve(p);
     } catch {
       reply.code(400).send({ error: "invalid path" });
+      return null;
+    }
+    if (need !== "read" && !mayShape(c, p)) {
+      reply.code(403).send({ error: "That agent runs directly on someone's device; only they can change its notes" });
       return null;
     }
     if (atLeast(memory(c)(p).level, need)) return p;
@@ -1260,6 +1273,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     }
     // a harness token belongs to the device the agent ran on
     if (body.nodeId !== undefined && body.nodeId !== agent.nodeId) db.prepare("DELETE FROM tokens WHERE kind = 'agent' AND subject_id = ? AND label LIKE 'harness:%'").run(agent.id);
+    if (moved) hub.connectors.leaveBehindOnMove(agent.id, c.actor.id, after.nodeId ? (store.node(after.nodeId)?.ownerId ?? null) : null);
     // giving an agent a computer means it isn't headless anymore
     if (body.computerId) body.settings = { ...body.settings, headless: false };
     const updated = store.updateAgent(agent.id, body)!;
@@ -1300,7 +1314,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
     const deviceOwner = deviceOwnerOf(agent);
     if (deviceOwner && deviceOwner !== c.actor.id) return reply.code(403).send({ error: `@${agent.handle} runs directly on someone's device; only they can connect to it` });
-    return { token: issueToken(db, "agent", agent.id, c.workspaceId, "mcp", c.actor.id) };
+    // the token acts as the agent with all its access, which can be more than this member's own
+    if (!deviceOwner && c.viewer.role !== "owner") return reply.code(403).send({ error: `Only an owner of this Wisp can connect apps to @${agent.handle}.` });
+    const expiresAt = new Date(Date.now() + AGENT_TOKEN_TTL_MS).toISOString();
+    return { token: issueToken(db, "agent", agent.id, c.workspaceId, "mcp", c.actor.id, expiresAt), expiresAt };
   });
 
   /** Models the agent's device offers for its harness, as reported by that device. */
@@ -2373,11 +2390,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return reply.send(fs.createReadStream(path.join(opts.filesDir, f.sha256.slice(0, 2), f.sha256)));
   });
 
-  registerComputerApi(app, hub, { need, parse, commitAuthor, agentView, requesterOf, channelVisible });
+  registerComputerApi(app, hub, { need, parse, commitAuthor, agentView, requesterOf, channelVisible, deviceOwnerOf });
   registerSettingsApi(app, hub, { need, parse, dataDir: opts.dataDir });
   registerOrgApi(app, hub, { need, parse });
   registerMemoryStorageApi(app, hub, { need, parse, dataDir: opts.dataDir, started: opts.vault, restart: opts.restart });
-  registerConnectorApi(app, hub, { need, parse, commitAuthor });
+  registerConnectorApi(app, hub, { need, parse, commitAuthor, deviceOwnerOf });
   registerModelsApi(app, hub, { need, parse });
   registerVoiceApi(app, hub, { need });
   registerBackgroundApi(app, hub, { need, parse, requesterOf });

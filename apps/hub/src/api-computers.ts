@@ -19,6 +19,7 @@ interface Helpers {
   requesterOf(c: Caller): string | null;
   /** the channel, when the caller may see it (DMs only for their members and owners) */
   channelVisible(c: Caller, channelId: string): unknown;
+  deviceOwnerOf(agent: NonNullable<ReturnType<Hub["store"]["agent"]>>): string | null;
 }
 
 const NAME = z.string().trim().min(1).max(80);
@@ -572,6 +573,15 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     return store.routines(c.workspaceId, agentId || undefined);
   });
 
+  /** A routine's steps run on the agent's device, so one on someone's own device only takes routines from them. Sends a 403 otherwise. */
+  const mayGiveRoutines = (c: Caller, agentId: string, reply: FastifyReply) => {
+    const agent = store.agent(agentId);
+    const owner = agent && h.deviceOwnerOf(agent);
+    if (!owner || owner === c.actor.id) return true;
+    reply.code(403).send({ error: `@${agent!.handle} runs directly on someone's device; only they can change its routines` });
+    return false;
+  };
+
   /** People write a routine's steps themselves (or agents save what they learned: see /save). */
   app.post("/api/routines", async (req, reply) => {
     const c = need(req, reply, { member: true });
@@ -580,6 +590,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!body) return;
     const agent = store.agent(body.agentId);
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown agent" });
+    if (!mayGiveRoutines(c, agent.id, reply)) return;
     if (body.channelId && store.channel(body.channelId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown channel" });
     const notePath = `agents/${agent.id}/routines/${routineSlug(body.name)}-${Date.now().toString(36)}.md`;
     await hub.vault(c.workspaceId).write(notePath, body.steps.trim().startsWith("#") ? body.steps : `# ${body.name}\n\n${body.steps}\n`, h.commitAuthor(c), `Routine "${body.name}" for @${agent.handle}`);
@@ -592,7 +603,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { member: true });
     if (!c) return;
     const r = routineFor(c, (req.params as { id: string }).id, reply);
-    if (!r) return;
+    if (!r || !mayGiveRoutines(c, r.agentId, reply)) return;
     const body = parse(z.object({ name: NAME, schedule: SCHEDULE.nullable(), timezone: TIMEZONE, channelId: z.string().nullable(), enabled: z.boolean() }).partial(), req.body, reply);
     if (!body) return;
     if (body.channelId && store.channel(body.channelId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown channel" });
@@ -605,7 +616,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { member: true });
     if (!c) return;
     const r = routineFor(c, (req.params as { id: string }).id, reply);
-    if (!r) return;
+    if (!r || !mayGiveRoutines(c, r.agentId, reply)) return;
     store.deleteRoutine(r.id);
     hub.broadcast(c.workspaceId, { type: "routines_changed" });
     return { ok: true };
@@ -631,6 +642,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!body) return;
     const agent = store.agent(body.agentId);
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown agent" });
+    if (!mayGiveRoutines(c, agent.id, reply)) return;
     if (body.computerId && !own(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
     for (const s of body.steps) if (s.imageFileId && store.file(s.imageFileId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown screenshot file" });
     const r = await hub.routines.teach({ workspaceId: c.workspaceId, agentId: agent.id, userId: c.actor.id, name: body.name, computerId: body.computerId, steps: body.steps as RecordedStep[], durationMs: body.durationMs, narration: body.narration });

@@ -41,6 +41,9 @@ export interface ConnectorInput {
 /** A header value is a secret unless it only fills in `{{KEY}}`s (then the secret lives in env). */
 const literalHeader = (v: string) => !/\{\{\s*[A-Za-z_]\w*\s*\}\}/.test(v);
 
+/** Values a catalog entry says aren't secret (a folder, a team ID, a URL). */
+const plainFields = (catalogId: string | null) => new Set((catalogConnector(catalogId ?? "")?.fields ?? []).filter((f) => !f.secret).map((f) => f.key));
+
 export class ConnectorStore {
   /** sign-ins to remote MCP servers */
   readonly auth: ConnectorAuth;
@@ -83,7 +86,7 @@ export class ConnectorStore {
   private view(r: ConnectorRow): Connector {
     const env = JSON.parse(r.env_json) as Record<string, string>;
     const headers = JSON.parse(r.headers_json) as Record<string, string>;
-    const plain = new Set((catalogConnector(r.catalog_id ?? "")?.fields ?? []).filter((f) => !f.secret).map((f) => f.key));
+    const plain = plainFields(r.catalog_id);
     return {
       id: r.id,
       workspaceId: r.workspace_id,
@@ -145,15 +148,30 @@ export class ConnectorStore {
 
   /**
    * Change a connector. In `env` and `headers`, a masked value (as returned on read) keeps what
-   * was saved; a key left out is removed.
+   * was saved; a key left out is removed. Saved secrets belong to the address or command they were
+   * given for: when that changes they're gone, along with any sign-in, and only values sent with
+   * the change are kept.
    */
   update(connectorId: string, patch: Partial<Omit<ConnectorInput, "kind" | "catalogId">>): Connector | undefined {
     const r = this.row(connectorId);
     if (!r) return undefined;
     const keep = (next: Record<string, string> | undefined, prev: Record<string, string>) =>
       next === undefined ? prev : dropBlank(Object.fromEntries(Object.entries(next).map(([k, v]) => [k, isMasked(v) ? (prev[k] ?? "") : v])));
-    const env = keep(patch.env, JSON.parse(r.env_json));
-    const headers = keep(patch.headers, JSON.parse(r.headers_json));
+    const savedEnv = JSON.parse(r.env_json) as Record<string, string>;
+    const savedHeaders = JSON.parse(r.headers_json) as Record<string, string>;
+    let env = keep(patch.env, savedEnv);
+    let headers = keep(patch.headers, savedHeaders);
+    // a `{{KEY}}` in the URL means a new value can move it too, so compare where it really goes
+    const moved =
+      r.kind === "mcp-http"
+        ? fillTemplate(patch.url ?? r.url ?? "", env) !== fillTemplate(r.url ?? "", savedEnv)
+        : r.kind === "mcp-stdio" && patch.command !== undefined && patch.command !== r.command;
+    if (moved) {
+      const plain = plainFields(r.catalog_id);
+      env = keep(patch.env, Object.fromEntries(Object.entries(savedEnv).filter(([k]) => plain.has(k))));
+      headers = keep(patch.headers, Object.fromEntries(Object.entries(savedHeaders).filter(([, v]) => !literalHeader(v))));
+      this.auth.forget(connectorId);
+    }
     this.db
       .prepare("UPDATE connectors SET name = ?, command = ?, args_json = ?, url = ?, headers_json = ?, env_json = ?, enabled = ?, all_agents = ? WHERE id = ?")
       .run(
@@ -172,6 +190,16 @@ export class ConnectorStore {
 
   remove(connectorId: string) {
     this.db.prepare("DELETE FROM connectors WHERE id = ?").run(connectorId);
+  }
+
+  /**
+   * The agent is moving to a device owned by `newOwner`, at `by`'s request. Secrets it was given only
+   * go along if their owner is the one moving it, or owns the device: nobody gets someone else's
+   * keys by moving an agent to their own computer.
+   */
+  leaveBehindOnMove(agentId: string, by: string, newOwner: string | null) {
+    const given = this.db.prepare("SELECT c.* FROM connectors c JOIN agent_connectors g ON g.connector_id = c.id WHERE g.agent_id = ?").all(agentId) as ConnectorRow[];
+    for (const r of given) if (this.rowHoldsSecrets(r) && r.created_by !== by && r.created_by !== newOwner) this.attach(r.id, agentId, false);
   }
 
   /** Give exactly these agents the connector. */
@@ -196,15 +224,29 @@ export class ConnectorStore {
   private forAgentRows(agentId: string): ConnectorRow[] {
     const rows = this.db
       .prepare(
-        "SELECT c.*, c.id IN (SELECT connector_id FROM agent_connectors WHERE agent_id = ?) AS given FROM connectors c WHERE c.id IN (SELECT connector_id FROM agent_connectors WHERE agent_id = ?) OR (c.all_agents = 1 AND c.workspace_id = (SELECT workspace_id FROM agents WHERE id = ?)) ORDER BY c.created_at",
+        "SELECT c.*, (SELECT role FROM memberships m WHERE m.workspace_id = c.workspace_id AND m.user_id = c.created_by) AS creator_role, c.id IN (SELECT connector_id FROM agent_connectors WHERE agent_id = ?) AS given FROM connectors c WHERE c.id IN (SELECT connector_id FROM agent_connectors WHERE agent_id = ?) OR (c.all_agents = 1 AND c.workspace_id = (SELECT workspace_id FROM agents WHERE id = ?)) ORDER BY c.created_at",
       )
-      .all(agentId, agentId, agentId) as (ConnectorRow & { given: number })[];
+      .all(agentId, agentId, agentId) as (ConnectorRow & { given: number; creator_role: string | null })[];
     const deviceOwner = (this.db.prepare("SELECT n.owner_id FROM agents a JOIN nodes n ON n.id = a.node_id WHERE a.id = ?").get(agentId) as { owner_id: string | null } | undefined)?.owner_id ?? null;
-    return rows.filter((r) => r.given || !this.holdsSecrets(r) || (!!r.created_by && r.created_by === deviceOwner)).map(({ given: _given, ...r }) => r);
+    const onCreatorsDevice = (r: ConnectorRow) => !!r.created_by && r.created_by === deviceOwner;
+    return rows
+      .filter((r) => {
+        // a command only runs if an owner added it, or the person whose device it runs on (older ones may not be either)
+        if (r.kind === "mcp-stdio" && r.creator_role !== "owner" && !onCreatorsDevice(r)) return false;
+        if (r.given || onCreatorsDevice(r)) return true;
+        // on for every agent: what runs or holds secrets stays on its creator's devices; a member's can't reach someone else's
+        return !this.rowHoldsSecrets(r) && (!deviceOwner || (r.creator_role === "owner" && r.kind !== "mcp-stdio"));
+      })
+      .map(({ given: _given, creator_role: _role, ...r }) => r);
   }
 
   /** Whether a connector carries anything secret: a value, a header that isn't only `{{KEY}}`s, or a sign-in. */
-  private holdsSecrets(r: ConnectorRow): boolean {
+  holdsSecrets(connectorId: string): boolean {
+    const r = this.row(connectorId);
+    return !!r && this.rowHoldsSecrets(r);
+  }
+
+  private rowHoldsSecrets(r: ConnectorRow): boolean {
     if (Object.keys(JSON.parse(r.env_json)).length) return true;
     if (Object.values(JSON.parse(r.headers_json) as Record<string, string>).some(literalHeader)) return true;
     return !!this.db.prepare("SELECT 1 FROM connector_auth WHERE connector_id = ? AND tokens_json IS NOT NULL").get(r.id);
