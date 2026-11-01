@@ -42,6 +42,8 @@ targets:
       path: Wisp/Info.plist
       properties:
         CFBundleDisplayName: Wisp
+        # only standard HTTPS and TLS, so App Store Connect doesn't ask about encryption on every build
+        ITSAppUsesNonExemptEncryption: false
         # pairing QR codes are wisp://pair links, so the Camera app opens them in Wisp
         CFBundleURLTypes:
           - CFBundleURLName: ai.wisp.pair
