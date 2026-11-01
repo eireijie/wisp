@@ -5,6 +5,7 @@ import { api } from "../../api.ts";
 import { useStore } from "../../store.ts";
 import { href } from "../../router.ts";
 import { Button, Modal, Pill } from "../../components/ui.tsx";
+import { DesktopUpdates } from "./DesktopUpdates.tsx";
 import { Card, PageHeader, Row, Section } from "./parts.tsx";
 
 interface UpdateInfo {
@@ -67,6 +68,7 @@ export function AboutPage() {
       setError((e as Error).message);
     }
   };
+  const desktop = typeof window !== "undefined" && !!window.wispDesktop?.updates;
   const v = info?.version;
   const c = info?.check;
   const u = info?.update;
@@ -118,7 +120,9 @@ export function AboutPage() {
         {v?.date && <> from {new Date(v.date).toLocaleDateString()}</>}
       </PageHeader>
       <Section title="Updates">
-        <Card>
+        {desktop && <DesktopUpdates />}
+        {/* in the desktop app its own copy of Wisp updates with the app, so the hub's git check only shows when it can act */}
+        <Card className={desktop && !c?.canUpdate ? "hidden" : undefined}>
           <Row
             label={
               !c ? (

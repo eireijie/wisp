@@ -279,7 +279,7 @@ function ArchivedBar({ channel }: { channel: ChannelInfo }) {
   const canManage = useStore((s) => s.me?.role !== "guest");
   const [error, setError] = useState<string | null>(null);
   return (
-    <div className="shrink-0 px-3 md:px-5 pb-3 pt-1 safe-bottom">
+    <div className="shrink-0 px-3 md:px-5 pt-1 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <div className="mx-auto max-w-2xl rounded-3xl bg-card px-4 py-3 flex items-center gap-3">
         <Archive size={18} className="text-muted shrink-0" />
         <span className="min-w-0 flex-1">
@@ -1817,7 +1817,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
   const swapped = useChangedSinceMount(hasContent);
   return (
     // @container: the toolbar fits itself to the composer's own width (a DM next to an open thread is narrow on a wide screen)
-    <div className="shrink-0 px-3 md:px-5 pb-3 pt-1 safe-bottom @container w-full max-w-3xl mx-auto flex flex-col">
+    <div className="shrink-0 px-3 md:px-5 pt-1 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-[max(1.5rem,env(safe-area-inset-bottom))] @container w-full max-w-3xl mx-auto flex flex-col">
       <input ref={fileInput} type="file" multiple hidden onChange={(e) => (attach(e.target.files), (e.target.value = ""))} />
       <input ref={photoInput} type="file" accept="image/*" multiple hidden onChange={(e) => (attach(e.target.files), (e.target.value = ""))} />
       {/* who's working here and on what; Stop and details are in its sheet */}

@@ -282,6 +282,26 @@ describe("update request deadlines", () => {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
+  it("reports a check from the Updates page without a notification", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-updater-"));
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => [] })));
+    vi.stubEnv("APPIMAGE", "/Wisp.AppImage");
+    try {
+      const notify = vi.fn();
+      const app = { isPackaged: true, getPath: () => root, getVersion: () => "0.0.1" };
+      const u = updater.createUpdater({ app, refresh: vi.fn(), log: vi.fn(), notify });
+      expect(await u.checkQuietly()).toEqual({ state: "current", detail: "", version: null, current: "0.0.1" });
+      expect(notify).not.toHaveBeenCalled();
+      const dev = updater.createUpdater({ app: { ...app, isPackaged: false }, refresh: vi.fn(), log: vi.fn(), notify });
+      expect(await dev.checkQuietly()).toMatchObject({ state: "unsupported", detail: expect.stringContaining("git pull") });
+      expect(notify).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("leaves update checks retryable after a deadline", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-updater-"));
     const fetch = vi.fn(async (_url, init) => {
