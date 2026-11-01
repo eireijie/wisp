@@ -86,6 +86,8 @@ struct MarketplaceEntry: Decodable, Identifiable {
   var brand: String?
   var website: String?
   var repository: String?
+  /** where its logo can be loaded from, best first */
+  var logos: [String]?
   var installs: [MarketplaceInstall]
 }
 struct MarketplaceInstall: Decodable {

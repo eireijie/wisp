@@ -45,7 +45,7 @@ enum MarketText {
     let forApp = named(e.name) || named(e.id.split(separator: "/").last.map(String.init) ?? "")
     let owns = e.domain ?? e.publisher ?? "the publisher"
     if forApp {
-      return TrustLabel(kind: .maker, text: "Made by \(titleCase(e.brand ?? ""))", explanation: "Published by \(e.publisher ?? owns), which the registry confirmed owns \(owns), and the app is theirs.")
+      return TrustLabel(kind: .maker, text: "Made by \((e.brand ?? "").lowercased() == "github" ? "GitHub" : titleCase(e.brand ?? ""))", explanation: "Published by \(e.publisher ?? owns), which the registry confirmed owns \(owns), and the app is theirs.")
     }
     return TrustLabel(kind: .verified, text: "Verified publisher", explanation: "The registry confirmed this publisher owns \(owns). That doesn't mean the app's maker made or endorses it.")
   }

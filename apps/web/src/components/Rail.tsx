@@ -57,19 +57,24 @@ function NavItem({ to, label, icon, active, badge, dot, accent }: { to: string; 
   );
 }
 
-/** The views the More menu opens, so the More item shows active on them. */
-const MORE_VIEWS: Route["view"][] = ["vault", "tasks", "marketplace", "mods", "help"];
+/** The views More opens, so More shows active on them. */
+export const MORE_VIEWS: Route["view"][] = ["more", "vault", "tasks", "marketplace", "connectors", "skills", "mods", "help"];
+
+/** What More holds, the same on desktops and phones. */
+export function useMoreItems(guest: boolean, size = 16): { label: string; icon: ReactNode; to: Route }[] {
+  const features = useFeatures();
+  const icon = { size, strokeWidth: 1.8 };
+  return [
+    { label: "Memory", icon: <BookOpen {...icon} />, to: { view: "vault", path: null } },
+    ...(!guest && features.tasks ? [{ label: "Tasks", icon: <ListTodo {...icon} />, to: { view: "tasks" } as Route }] : []),
+    ...(!guest ? [{ label: "Marketplace", icon: <Store {...icon} />, to: { view: "marketplace" } as Route }, { label: "Mods", icon: <Blocks {...icon} />, to: { view: "mods" } as Route }] : []),
+    { label: "Help", icon: <LifeBuoy {...icon} />, to: { view: "help" } },
+  ];
+}
 
 /** More: Memory, Tasks, Marketplace, Mods and Help in a small menu, so Settings only holds things you change. */
 function MoreItem({ route, guest }: { route: Route; guest: boolean }) {
-  const features = useFeatures();
-  const icon = { size: 16, strokeWidth: 1.8 };
-  const items = [
-    { label: "Memory", icon: <BookOpen {...icon} />, onSelect: () => go({ view: "vault", path: null }) },
-    ...(!guest && features.tasks ? [{ label: "Tasks", icon: <ListTodo {...icon} />, onSelect: () => go({ view: "tasks" }) }] : []),
-    ...(!guest ? [{ label: "Marketplace", icon: <Store {...icon} />, onSelect: () => go({ view: "marketplace" }) }, { label: "Mods", icon: <Blocks {...icon} />, onSelect: () => go({ view: "mods" }) }] : []),
-    { label: "Help", icon: <LifeBuoy {...icon} />, onSelect: () => go({ view: "help" }) },
-  ];
+  const items = useMoreItems(guest).map((i) => ({ label: i.label, icon: i.icon, onSelect: () => go(i.to) }));
   const active = MORE_VIEWS.includes(route.view);
   return (
     <Menu

@@ -18,11 +18,9 @@ import {
   Search,
   Shield,
   Sheet,
-  Sparkles,
   FileText,
   GitPullRequest,
   Wand2,
-  Puzzle,
   Package,
 
   Download,
@@ -32,8 +30,6 @@ import {
 import {
   APP_CATEGORIES,
   CONNECTOR_CATALOG,
-  FEATURE_INFO,
-  FEATURE_KEYS,
   POPULAR_APPS,
   SKILL_CATALOG,
   appCategory,
@@ -56,10 +52,9 @@ import {
 } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { setFeatures, useFeatures } from "../features.ts";
 import { href, type MarketSection } from "../router.ts";
 import { Loader, cx } from "../components/ui.tsx";
-import { Add, AppTile, Badge, Chip, Circle, Dlg, Item, Label, Panel, Prim, Sec, SearchBox, Tile, TrustPill } from "../components/MarketParts.tsx";
+import { Add, AppTile, Badge, Chip, Circle, Dlg, Item, Label, Panel, Prim, Sec, SearchBox, Tile } from "../components/MarketParts.tsx";
 import { AgentPicker, CatalogIcon } from "../components/ShopParts.tsx";
 import { ConnectorForm, connectorWhere, registryCatalog, type ConnectSummary } from "./ConnectorsView.tsx";
 import { AppDetail, Connected, ConnectSignIn, ManageApp, type AppItem } from "./AppPages.tsx";
@@ -151,19 +146,17 @@ const readyAsIs = (i: ShelfItem) => i.kind === "mcp" && !(i.secrets ?? []).lengt
 const needsSignIn = (c: Connector) => !!c.auth?.required && !c.auth.signedIn;
 const CONNECTING = "wisp.connecting";
 
-const SECTION_LABEL: Record<MarketSection, string> = { all: "All", apps: "Apps", skills: "Skills", mods: "Mods", devices: "On your devices", installed: "Installed" };
+const SECTION_LABEL: Record<MarketSection, string> = { all: "All", apps: "Apps", skills: "Skills", devices: "On your devices", installed: "Installed" };
 
 /**
  * The marketplace: apps (MCP servers from the MCP Registry and Wisp's own list), skills (Wisp's
- * library and public SKILL.md repos), mods, what your devices' harnesses already have,
+ * library and public SKILL.md repos), what your devices' harnesses already have,
  * and what's installed. Apps sign in once in Wisp and every agent picked gets them.
  */
 export function MarketplaceView({ section, onBack, embedded }: { section: MarketSection; onBack?: () => void; embedded?: boolean }) {
   const me = useStore((s) => s.me);
   const agents = useStore((s) => s.agents);
-  const features = useFeatures();
   const canEdit = !!me && me.role !== "guest";
-  const isOwner = me?.role === "owner";
   const [q, setQ] = useState("");
   const [category, setCategory] = useState<AppCategory | "All">("All");
   const [skillSource, setSkillSource] = useState("All");
@@ -359,11 +352,9 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
     { id: "all", label: "All", icon: <LayoutGrid size={18} /> },
     { id: "apps", label: "Apps", icon: <Plug size={18} /> },
     { id: "skills", label: "Skills", icon: <Wand2 size={18} /> },
-    { id: "mods", label: "Mods", icon: <Puzzle size={18} /> },
     ...(shelves.length ? [{ id: "devices" as const, label: "On your devices", count: pending.length || undefined, icon: <Laptop size={18} /> }] : []),
     { id: "installed", label: "Installed", count: installedCount || undefined, icon: <Package size={18} /> },
   ];
-  const chips = nav.filter((n) => n.id !== "installed");
 
   // --- lists ---
   const appCards = (list: AppItem[], limit?: number) =>
@@ -380,8 +371,9 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
               key={a.key}
               tile={<AppTile name={a.name} category={a.category} entry={"registry" in a ? a.registry : null} />}
               title={a.name}
-              badge={"registry" in a ? <TrustPill t={trustOf(a.registry)} /> : <Badge tone="blue">On Wisp's list</Badge>}
+              badge={"registry" in a ? <TrustLine t={trustOf(a.registry)} /> : <span className="text-xs text-[#0a6fd6] dark:text-[#5ea8ff]">On Wisp's list</span>}
               sub={whatItsFor(a.description, 90) || a.who}
+              phoneSub={`${whatItsFor(a.description, 60) || a.who}${"registry" in a && trustOf(a.registry).kind === "unverified" ? ` ${trustOf(a.registry).text}.` : ""}`}
               onOpen={() => setDetail({ kind: "app", app: a })}
               action={canEdit && <Add onClick={() => setDetail({ kind: "app", app: a })} aria-label={`${have ? "Open" : "Add"} ${a.name}`} className={cx(have && "text-faint")}>{have ? "Added" : "Add"}</Add>}
             />
@@ -404,8 +396,9 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
               key={s.key}
               tile={<Tile size={40}>{s.icon}</Tile>}
               title={s.name}
-              badge={"library" in s ? <Badge tone="green">Made by Wisp</Badge> : <Badge>From {s.who}</Badge>}
+              badge={<span className="text-xs text-muted">{"library" in s ? "Made by Wisp" : `From ${s.who}`}</span>}
               sub={whatItsFor(s.description, 90) || s.who}
+              phoneSub={"library" in s ? "Made by Wisp" : `From ${s.who}`}
               onOpen={() => openSkill(s)}
               action={canEdit && (linkOnly ? <Add onClick={() => openSkill(s)} aria-label={`View ${s.name}`}>View</Add> : <Add onClick={() => addSkill(s)} aria-label={`${have ? "Open" : "Add"} ${s.name}`} className={cx(have && "text-faint")}>{have ? "Added" : "Add"}</Add>)}
             />
@@ -413,21 +406,6 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
         })}
       </Grid>
     );
-  const modCards = (limit?: number) => (
-    <Grid>
-      {FEATURE_KEYS.slice(0, limit).map((k) => (
-        <Entry
-          key={k}
-          tile={<Tile size={40}><Sparkles size={20} strokeWidth={1.7} /></Tile>}
-          title={FEATURE_INFO[k].name}
-          badge={<Badge tone="green">Made by Wisp</Badge>}
-          sub={FEATURE_INFO[k].description}
-          action={features[k] ? <Badge tone="green">On</Badge> : isOwner ? <Add onClick={() => void setFeatures({ [k]: true }).catch((e) => setError((e as Error).message))} aria-label={`Add ${FEATURE_INFO[k].name}`}>Add</Add> : <Badge>Off</Badge>}
-        />
-      ))}
-    </Grid>
-  );
-
   // --- pages ---
   const shelf = (title: string, to: MarketSection, children: ReactNode) => (
     <section aria-label={title} className="space-y-3">
@@ -463,9 +441,8 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
         </>
       ) : (
         <>
-          {popularApps.length > 0 ? shelf("Popular apps", "apps", appCards(popularApps, 4)) : shelf("Apps", "apps", appCards(shelfApps, 4))}
-          {shelf("Skills", "skills", skillCards(takeTurns(shownSkills), 4))}
-          {shelf("Mods", "mods", modCards(2))}
+          {popularApps.length > 0 ? shelf("Popular apps", "apps", appCards(popularApps, 3)) : shelf("Apps", "apps", appCards(shelfApps, 3))}
+          {shelf("Skills", "skills", skillCards(takeTurns(shownSkills), 3))}
           {makeYourOwn}
         </>
       )}
@@ -589,10 +566,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
           </Panel>
         )}
       </section>
-      <Panel className="md:hidden">
-        <Item icon={<Tile size={40}><Plus size={20} strokeWidth={1.7} /></Tile>} title="Get more" sub="Browse the marketplace" href={href({ view: "marketplace", section: "apps" })} />
-      </Panel>
-    </>
+          </>
   );
 
   const body = (() => {
@@ -603,8 +577,6 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
         return appsPage;
       case "skills":
         return skillsPage;
-      case "mods":
-        return modCards();
       case "devices":
         return devicesPage;
       case "installed":
@@ -632,10 +604,10 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
       <SearchBox value={q} onChange={setQ} placeholder={section === "installed" ? "Search apps" : "Search apps and skills"} />
       {canEdit && section !== "installed" && (
         <div className="hidden items-center gap-3 md:flex">
-          <Prim className="h-[42px] text-sm" onClick={() => setEditing("new")}>
+          <Prim className="h-[42px] !rounded-[10px] text-sm" onClick={() => setEditing("new")}>
             <Wand2 size={16} /> Create a skill
           </Prim>
-          <Sec className="h-[42px] text-sm" onClick={() => setForm({})}>
+          <Sec className="h-[42px] !rounded-[10px] text-sm" onClick={() => setForm({})}>
             Add your own app
           </Sec>
           <Circle label="Bring a skill in" className="circle-sm" onClick={() => setSharing("import")}>
@@ -645,7 +617,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
       )}
       {section === "installed" && !embedded && (
         <a href={href({ view: "marketplace", section: "apps" })} className="hidden md:inline-flex">
-          <Prim className="h-[42px] text-sm">
+          <Prim className="h-[42px] !rounded-[10px] text-sm">
             <Plus size={16} /> Get more
           </Prim>
         </a>
@@ -653,21 +625,20 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
     </div>
   );
 
-  const titleBlock =
-    section === "installed" ? (
-      <div className="flex items-center gap-3">
-        {(onBack || !embedded) && (
-          <Circle label="Back" wrap="md:hidden" onClick={() => (onBack && embedded ? onBack() : (location.hash = href({ view: "marketplace", section: null })))}>
-            <ChevronLeft size={22} />
-          </Circle>
-        )}
-        <div className="min-w-0 flex-1">
-          <h1 className="t-title truncate">Installed</h1>
-          <p className="hidden text-sm text-faint md:block">{connectedCount} connected</p>
-        </div>
-        <span className="text-sm text-faint md:hidden">{connectedCount} connected</span>
+  const titleBlock = embedded ? (
+    <div className="flex items-center gap-3">
+      {onBack && (
+        <Circle label="Back" wrap="md:hidden" onClick={onBack}>
+          <ChevronLeft size={22} />
+        </Circle>
+      )}
+      <div className="min-w-0 flex-1">
+        <h1 className="t-title truncate">Installed</h1>
+        <p className="text-sm text-faint">{connectedCount} connected</p>
       </div>
-    ) : (
+    </div>
+  ) : (
+    <>
       <div className="flex items-center gap-3 md:hidden">
         {onBack && (
           <Circle label="Back" onClick={onBack}>
@@ -675,18 +646,24 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
           </Circle>
         )}
         <h1 className="min-w-0 flex-1 truncate t-title">Marketplace</h1>
-        <Sec onClick={() => (location.hash = href({ view: "marketplace", section: "installed" }))}>{connectedCount} connected</Sec>
       </div>
-    );
+      {section === "installed" && (
+        <div className="hidden md:block">
+          <h1 className="t-title truncate">Installed</h1>
+          <p className="text-sm text-faint">{connectedCount} connected</p>
+        </div>
+      )}
+    </>
+  );
 
   const content = (
     <div className="mx-auto w-full max-w-[1000px] space-y-5 px-4 pb-24 pt-4 md:px-8 md:pb-12 md:pt-8">
       {titleBlock}
       {!detail && searchRow}
-      {!detail && section !== "installed" && (
-        <nav aria-label="Marketplace sections" className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] md:hidden">
-          {chips.map((n) => (
-            <a key={n.id} href={href({ view: "marketplace", section: n.id === "all" ? null : n.id })} aria-current={section === n.id ? "page" : undefined} className={cx("inline-flex h-9 shrink-0 items-center rounded-full border px-4 text-sm font-medium", section === n.id ? "border-accent bg-accent text-accent-ink" : "border-control-line bg-control text-ink/80")}>
+      {!detail && !embedded && (
+        <nav aria-label="Marketplace sections" className="-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] md:hidden">
+          {nav.map((n) => (
+            <a key={n.id} href={href({ view: "marketplace", section: n.id === "all" ? null : n.id })} aria-current={section === n.id ? "page" : undefined} className={cx("inline-flex h-[34px] shrink-0 items-center rounded-[10px] border px-3.5 text-sm font-medium transition-colors", section === n.id ? "border-accent bg-accent text-accent-ink" : "border-control-line bg-control text-ink/80")}>
               {n.label}
               {!!n.count && <span className="ml-1.5 tabular-nums opacity-70">{n.count}</span>}
             </a>
@@ -714,7 +691,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
         <aside className="hidden w-60 shrink-0 flex-col gap-1 overflow-y-auto border-r border-line px-3 pb-5 pt-7 pl-5 md:flex" aria-label="Marketplace">
           <h2 className="t-title px-3 pb-3.5">Marketplace</h2>
           {nav.map((n) => (
-            <a key={n.id} href={href({ view: "marketplace", section: n.id === "all" ? null : n.id })} aria-current={section === n.id ? "page" : undefined} className={cx("flex h-11 items-center gap-3 rounded-2xl px-3 text-body", section === n.id ? "bg-side-active font-medium text-ink" : "font-medium text-muted hover:bg-side-hover hover:text-ink")}>
+            <a key={n.id} href={href({ view: "marketplace", section: n.id === "all" ? null : n.id })} aria-current={section === n.id ? "page" : undefined} className={cx("flex h-10 items-center gap-3 rounded-[10px] px-3 text-body transition-colors", section === n.id ? "bg-side-active font-medium text-ink" : "font-medium text-muted hover:bg-side-hover hover:text-ink")}>
               <span aria-hidden className="shrink-0">{n.icon}</span>
               <span className="flex-1">{n.label}</span>
               {!!n.count && <span className="tabular-nums text-sm text-faint">{n.count}</span>}
@@ -824,30 +801,39 @@ const trustOf = (e: StoreApp) => trustLabel(e);
 
 /** Cards in a grid on desktops; plain rows on phones. */
 function Grid({ children }: { children: ReactNode }) {
-  return <div className="flex flex-col gap-4 md:grid md:grid-cols-2 md:gap-3.5 xl:grid-cols-4">{children}</div>;
+  return <div className="flex flex-col gap-3.5 md:grid md:grid-cols-2 md:gap-3 xl:grid-cols-3">{children}</div>;
 }
 
-/** An app, skill, agent or mod: a card on desktops (tile, name, badge, line, button) and a row on phones. */
-function Entry({ tile, title, badge, sub, action, onOpen }: { tile: ReactNode; title: string; badge?: ReactNode; sub: string; action?: ReactNode; onOpen?: () => void }) {
+/** Who stands behind an app, as a small line under its name. The full explanation is on hover and for screen readers. */
+function TrustLine({ t }: { t: ReturnType<typeof trustLabel> }) {
   return (
-    <div className="flex min-w-0 items-center gap-3.5 md:flex-col md:items-stretch md:gap-3 md:rounded-3xl md:border md:border-line md:bg-card md:p-4">
-      <button type="button" onClick={onOpen} disabled={!onOpen} className="flex min-w-0 flex-1 items-center gap-3.5 text-left md:flex-none md:items-center md:gap-3">
+    <span title={t.explanation} aria-label={`${t.text}. ${t.explanation}`} className={cx("text-xs", t.kind === "unverified" ? "text-muted" : "text-[#0a6fd6] dark:text-[#5ea8ff]")}>
+      {t.text}
+    </span>
+  );
+}
+
+/** An app or skill: a card on desktops (tile, name, who made it, line, button) and a row on phones. */
+function Entry({ tile, title, badge, sub, phoneSub, action, onOpen }: { tile: ReactNode; title: string; badge?: ReactNode; sub: string; phoneSub?: string; action?: ReactNode; onOpen?: () => void }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 transition-colors md:flex-col md:items-stretch md:gap-2.5 md:rounded-[14px] md:border md:border-line md:p-4 md:hover:border-control-line">
+      <button type="button" onClick={onOpen} disabled={!onOpen} className="flex min-w-0 flex-1 items-center gap-3 text-left md:flex-none">
         <span className="max-md:hidden">{tile}</span>
         <span className="md:hidden">{cloneSize(tile)}</span>
-        <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="truncate text-[15px] font-medium md:text-base">{title}</span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="line-clamp-2 text-base font-medium leading-tight">{title}</span>
           <span className="hidden md:flex">{badge}</span>
-          <span className="truncate text-sm text-faint md:hidden">{sub}</span>
+          <span className="line-clamp-2 text-[13px] leading-snug text-muted md:hidden">{phoneSub ?? sub}</span>
         </span>
       </button>
-      <span className="hidden min-h-10 text-sm leading-snug text-faint md:line-clamp-2 md:block">{sub}</span>
+      <span className="hidden min-h-10 text-sm leading-snug text-muted md:line-clamp-2 md:block">{sub}</span>
       {action && <div className="shrink-0 md:self-start">{action}</div>}
     </div>
   );
 }
-/** The phone row's tile is a little bigger. */
+/** The phone row's tile. */
 function cloneSize(tile: ReactNode): ReactNode {
-  return <span className="block [&>span]:!size-[50px] [&>span]:!rounded-xl">{tile}</span>;
+  return <span className="block [&>span]:!size-[44px] [&>span]:!rounded-xl">{tile}</span>;
 }
 
 function RegistryError({ error, onRetry }: { error: string; onRetry: () => void }) {

@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum MarketSection: String, CaseIterable {
-  case all = "All", apps = "Apps", skills = "Skills", mods = "Mods", devices = "On your devices", installed = "Installed"
+  case all = "All", apps = "Apps", skills = "Skills", devices = "On your devices", installed = "Installed"
 }
 
 struct MarketApp: Identifiable {
@@ -36,7 +36,7 @@ struct ShelfSkill: Identifiable {
 }
 
 /**
- * Apps and skills in one place, like the web's Marketplace: what's on offer, mods, what your
+ * Apps and skills in one place, like the web's Marketplace: what's on offer, what your
  * devices already have, and what's installed.
  */
 struct MarketplaceView: View {
@@ -116,28 +116,18 @@ struct MarketplaceView: View {
   }
 
   private var tabs: [MarketSection] {
-    MarketSection.allCases.filter { $0 != .installed && ($0 != .devices || (store.canManage && (!shelves.isEmpty || section == .devices))) }
+    MarketSection.allCases.filter { $0 != .devices || (store.canManage && (!shelves.isEmpty || section == .devices)) }
   }
 
   var body: some View {
-    MarketScreen(title: installedPage ? "Installed" : "Marketplace", screenId: "marketplace", onBack: installedPage && start != .installed ? { section = .all } : nil, trailing: {
-      if installedPage { Text("\(store.connectors.count) connected").font(.system(size: 13)).foregroundStyle(Palette.faint) }
-      else {
-        Button { section = .installed } label: {
-          Text("\(store.connectors.count) connected").font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text).padding(.horizontal, 16).frame(height: 44).glassPill()
-        }.buttonStyle(.plain).accessibilityIdentifier("market-connected")
-      }
-    }) {
+    MarketScreen(title: "Marketplace", screenId: "marketplace") {
       MarketSearch(text: $query, prompt: installedPage ? "Search apps" : "Search apps and skills")
-      if !installedPage {
-        ChipRow(options: tabs.map(\.rawValue), selection: section.rawValue, counts: [MarketSection.devices.rawValue: pending.count]) { section = MarketSection(rawValue: $0) ?? .all }
-      }
+      ChipRow(options: tabs.map(\.rawValue), selection: section.rawValue, counts: [MarketSection.devices.rawValue: pending.count, MarketSection.installed.rawValue: store.connectors.count + store.skills.count]) { section = MarketSection(rawValue: $0) ?? .all }
       InlineError(error: action.error)
       switch section {
       case .all: allTab
       case .apps: appsTab
       case .skills: skillsTab
-      case .mods: modRows(limit: nil)
       case .devices:
         DeviceShelfList(shelves: shelves, query: needle, onBring: bringIn, onBringAll: { bringingAll = true }, onRefresh: refresh)
       case .installed: installedTab
@@ -174,8 +164,6 @@ struct MarketplaceView: View {
       appRows(apps, limit: 3)
       shelfHeader("Skills", to: .skills)
       skillRows(takeTurns(shownSkills), limit: 3)
-      shelfHeader("Mods", to: .mods)
-      modRows(limit: 2)
       makeYourOwn
     } else {
       shelfHeader("Apps", to: .apps)
@@ -236,14 +224,11 @@ struct MarketplaceView: View {
         }
       }
     }
-    CardGroup {
-      Button { section = .apps } label: { MarketRow(symbol: "plus", title: "Get more") }.buttonStyle(.plain)
-    }
   }
 
   private func connectorRow(_ c: AppConnector) -> some View {
     NavigationLink { ConnectorDetail(connector: c) } label: {
-      MarketRow(symbol: "powerplug", title: c.name, subtitle: connectorLine(c)) {
+      MarketRow(symbol: "powerplug", logos: AppLogo.byName(c.name), title: c.name, subtitle: connectorLine(c)) {
         if c.enabled == false { MarketPill(text: "Off") }
         else if c.needsSignIn { MarketPill(text: "Sign in", tone: .warn) }
         else { MarketPill(text: "On", tone: .green) }
@@ -285,7 +270,7 @@ struct MarketplaceView: View {
           if let entry = a.registry { MarketplaceDetail(entry: entry) }
           else if let c = a.builtIn { ConnectorCatalogDetail(entry: c, summary: MarketText.summary(builtIn: c)) }
         } label: {
-          MarketRow(symbol: "powerplug", tile: 50, title: a.name, subtitle: MarketText.whatItsFor(a.detail, max: 60), flush: true) { AddLabel(title: added(a) ? "Added" : "Add", muted: added(a)) }
+          MarketRow(symbol: "powerplug", logos: a.registry?.logos ?? AppLogo.byName(a.name), tile: 44, title: a.name, subtitle: MarketText.whatItsFor(a.detail, max: 60), flush: true) { AddLabel(title: added(a) ? "Added" : "Add", muted: added(a)) }
         }.buttonStyle(.plain)
       }
     }
@@ -305,22 +290,10 @@ struct MarketplaceView: View {
           else if let lib = s.library { SkillDetail(skill: lib, library: true) }
           else if let entry = s.store { StoreSkillDetail(skill: entry) }
         } label: {
-          MarketRow(symbol: MarketText.skillSymbol(s.id + " " + s.name), tile: 50, title: s.name, subtitle: MarketText.whatItsFor(s.detail, max: 60), flush: true) {
+          MarketRow(symbol: MarketText.skillSymbol(s.id + " " + s.name), tile: 44, title: s.name, subtitle: s.who == "Wisp" ? "Made by Wisp" : "From \(s.who)", flush: true) {
             AddLabel(title: installed(s) != nil ? "Added" : s.store?.license.open == false ? "View" : "Add", muted: installed(s) != nil)
           }
         }.buttonStyle(.plain)
-      }
-    }
-  }
-
-  @ViewBuilder private func modRows(limit: Int?) -> some View {
-    VStack(spacing: 0) {
-      ForEach(Array(FeatureKey.allCases.prefix(limit ?? 100))) { key in
-        MarketRow(symbol: "sparkles", tile: 50, title: key.name, subtitle: key.detail, flush: true) {
-          if store.features[key] { MarketPill(text: "On", tone: .green) }
-          else if store.isOwner { AddButton(title: "Add") { var next = store.features; next[key] = true; action.run { try await store.setFeatures(next) } } }
-          else { MarketPill(text: "Off") }
-        }
       }
     }
   }

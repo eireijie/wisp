@@ -72,6 +72,7 @@
   --accent-chats: #0062cc;
   --accent-agents: #8e3fc2;
   --accent-computers: #0072a3;
+  --accent-more: var(--ink);
   --st-online: #1a7f37;
   --st-working: #0062cc;
   --st-needs: #b25e00;
@@ -123,6 +124,7 @@
   --accent-chats: #0a84ff;
   --accent-agents: #bf5af2;
   --accent-computers: #64d2ff;
+  --accent-more: var(--ink);
   --st-online: #30d158;
   --st-working: #0a84ff;
   --st-needs: #ff9f0a;
@@ -768,3 +770,8 @@ body {
   .setup-spark { opacity: 0.6; }
   .setup-wisp, .setup-fill, .setup-tag { transition: none; }
 }
+
+/* the Save bar rises in when there's something to save */
+@keyframes m-savebar { from { opacity: 0; transform: translateY(12px); } }
+.m-savebar { animation: m-savebar 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+@media (prefers-reduced-motion: reduce) { .m-savebar { animation: none; } }

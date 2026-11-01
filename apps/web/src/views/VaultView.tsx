@@ -211,7 +211,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
       return <FolderView path={folder} notes={notes ?? []} onOpen={openPath} onFolder={(p) => go({ view: "vault", path: p })} onNew={() => setCreating({ dir: folder })} onBack={() => go({ view: "vault", path: null })} canNew={canNew} />;
     return (
       <div className="h-full flex flex-col min-h-0">
-        {phone && <PhoneBar title="Memory" onBack={onBack ?? (() => go({ view: "you" }))} trailing={moreMenu} />}
+        {phone && <PhoneBar title="Memory" onBack={onBack ?? (() => go({ view: "more" }))} trailing={moreMenu} />}
         <div className="flex-1 min-h-0">
           <MemoryHome
             graph={graph}

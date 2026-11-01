@@ -216,7 +216,7 @@ export function Sec({ className, ...p }: ButtonHTMLAttributes<HTMLButtonElement>
 
 /** "Add", "Install", "Bring in": the small button at the end of a row. */
 export function Add({ className, ...p }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button type="button" {...p} className={cx(btn, "h-[38px] rounded-full bg-chip px-[18px] text-body hover:bg-hover", className)} />;
+  return <button type="button" {...p} className={cx(btn, "h-[34px] rounded-[10px] bg-chip px-3.5 text-sm hover:bg-hover", className)} />;
 }
 
 /** A round glass button (the circle from the tokens), with a label for screen readers. */
@@ -257,7 +257,7 @@ export function Labeled({ label, hint, children, className }: { label: string; h
 /** A search field: a capsule with a magnifier. */
 export function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
-    <label className="flex h-[46px] min-w-0 flex-1 items-center gap-2.5 rounded-full border border-control-line bg-control px-4 text-faint focus-within:ring-3 focus-within:ring-ring/30">
+    <label className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-control-line bg-control px-4 text-faint focus-within:ring-3 focus-within:ring-ring/30">
       <Search size={18} aria-hidden className="shrink-0" />
       <input type="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-faint" />
     </label>
@@ -267,7 +267,7 @@ export function SearchBox({ value, onChange, placeholder }: { value: string; onC
 /** A chip that filters or picks. */
 export function Chip({ on, onClick, children, count }: { on?: boolean; onClick: () => void; children: ReactNode; count?: number }) {
   return (
-    <button type="button" aria-pressed={on} onClick={onClick} className={cx("inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 text-sm font-medium", on ? "border-accent bg-accent text-accent-ink" : "border-control-line bg-control text-ink/80 hover:text-ink")}>
+    <button type="button" aria-pressed={on} onClick={onClick} className={cx("inline-flex h-[34px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] border px-3.5 text-sm font-medium transition-colors", on ? "border-accent bg-accent text-accent-ink" : "border-control-line bg-control text-ink/80 hover:text-ink")}>
       {children}
       {!!count && <span className={cx("tabular-nums", on ? "opacity-70" : "text-faint")}>{count}</span>}
     </button>

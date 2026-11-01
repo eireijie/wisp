@@ -52,7 +52,7 @@ export function ModsPage() {
 
   return (
     <div className="space-y-8">
-      <h2 className="t-title">Mods</h2>
+      <h2 className="t-title max-md:hidden">Mods</h2>
       {isOwner ? <AskAgent placeholder={`Ask {name}, like "turn on voice calls"`} /> : <p className="text-sm text-muted">Only owners can turn mods on or off.</p>}
       {on.length > 0 && (
         <section className="space-y-2.5" aria-labelledby="mods-on">

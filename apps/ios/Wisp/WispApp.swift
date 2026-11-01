@@ -65,8 +65,8 @@ struct RootView: View {
   }
 }
 
-/** The four places: Inbox, Chats, Agents and Computers (hidden for guests). */
-enum MainTab: Int { case inbox, chats, agents, computers }
+/** The five places: Inbox, Chats, Agents, Computers (hidden for guests) and More. */
+enum MainTab: Int { case inbox, chats, agents, computers, more }
 
 struct MainTabs: View {
   @Environment(Store.self) private var store
@@ -87,6 +87,7 @@ struct MainTabs: View {
     case .chats: Palette.tabChats
     case .agents: Palette.tabAgents
     case .computers: Palette.tabComputers
+    case .more: Palette.text
     }
   }
 
@@ -100,6 +101,7 @@ struct MainTabs: View {
       if store.canViewComputers {
         Tab(value: MainTab.computers) { ComputersView().tint(Palette.text).tabEntrance(.computers, current: tab) } label: { Label { Text("Computers") } icon: { icon("desktopcomputer", .computers) } }
       }
+      Tab(value: MainTab.more) { MoreTab().tint(Palette.text).tabEntrance(.more, current: tab) } label: { Label { Text("More") } icon: { icon("ellipsis", .more) } }
     }
     .tint(accent)
     .animation(Motion.fade, value: tab)

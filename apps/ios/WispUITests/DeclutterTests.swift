@@ -56,6 +56,8 @@ final class DeclutterTests: XCTestCase {
     shot("usage")
     app.navigationBars.buttons.element(boundBy: 0).tap()
     app.navigationBars.buttons.element(boundBy: 0).tap()
+    app.buttons["Close"].firstMatch.tap(); settle()
+    app.tabBars.buttons["More"].tap()
     tap("you-mods")
     settle()
     shot("mods")

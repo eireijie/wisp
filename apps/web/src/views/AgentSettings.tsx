@@ -163,7 +163,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
             <Trash2 size={18} /> Remove agent
           </a>
         </nav>
-        <div ref={content} className="flex-1 min-w-0 overflow-y-auto px-[18px] md:px-9 py-4 md:py-7 pb-24 md:pb-7">
+        <div ref={content} className="flex-1 min-w-0 overflow-y-auto px-[18px] md:px-9 pt-4 md:pt-7 pb-24 md:pb-0 after:hidden md:after:block md:after:h-7 md:after:content-['']">
           {active === "overview" && (
             <div className="max-w-[720px] space-y-4">
               {/* the profile, on phones */}

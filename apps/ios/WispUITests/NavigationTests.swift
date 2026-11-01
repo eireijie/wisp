@@ -21,7 +21,7 @@ final class NavigationTests: XCTestCase {
 
     let bar = app.tabBars.firstMatch
     XCTAssertTrue(bar.buttons["Chats"].waitForExistence(timeout: 30))
-    for name in ["Inbox", "Chats", "Agents", "Computers"] { XCTAssertTrue(bar.buttons[name].exists, name) }
+    for name in ["Inbox", "Chats", "Agents", "Computers", "More"] { XCTAssertTrue(bar.buttons[name].exists, name) }
     XCTAssertFalse(bar.buttons["You"].exists, "The You tab is gone")
     settle(); shot("home")
 

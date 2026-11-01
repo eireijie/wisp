@@ -41,13 +41,14 @@ export type Route =
   | { view: "help" }
   | { view: "mods" }
   | { view: "chats" }
-  | { view: "you" };
+  | { view: "you" }
+  | { view: "more" };
 
 export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "access", "background", "routines", "memory", "skills", "apps", "permissions", "connect", "runs", "remove"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
 export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "usage", "voice", "appearance", "security", "devices", "mobile", "general", "access", "agent-defaults", "people", "agents", "runtimes", "models", "harnesses", "memory", "computers", "logins", "apps", "skills", "connections", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
-export const MARKET_SECTIONS = ["all", "apps", "skills", "mods", "devices", "installed"] as const;
+export const MARKET_SECTIONS = ["all", "apps", "skills", "devices", "installed"] as const;
 export type MarketSection = (typeof MARKET_SECTIONS)[number];
 
 export function routeForRole(route: Route, role?: "owner" | "member" | "guest"): Route {
@@ -70,6 +71,8 @@ export function parseRoute(hash: string): Route {
     case "inbox":
       return { view: "dashboard" };
     case "marketplace":
+      // mods have one home now: their own page
+      if (parts[1] === "mods") return { view: "mods" };
       return { view: "marketplace", section: MARKET_SECTIONS.find((x) => x === parts[1]) ?? null };
     case "connectors":
       return { view: "connectors" };
@@ -107,6 +110,8 @@ export function parseRoute(hash: string): Route {
       return { view: "chats" };
     case "you":
       return { view: "you" };
+    case "more":
+      return { view: "more" };
     case "c": {
       const messageIndex = parts[2] === "t" ? 4 : parts[2] === "call" ? 3 : 2;
       const messageId = parts[messageIndex] === "m" ? parts[messageIndex + 1] : undefined;
@@ -153,6 +158,8 @@ export function href(r: Route): string {
       return "#/chats";
     case "you":
       return "#/you";
+    case "more":
+      return "#/more";
     case "chat":
       return r.channelId ? `#/c/${r.channelId}${r.call ? "/call" : r.threadId ? `/t/${r.threadId}` : ""}${r.messageId ? `/m/${encodeURIComponent(r.messageId)}` : ""}` : "#/";
   }

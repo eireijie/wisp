@@ -89,9 +89,9 @@ struct AddButton: View {
       Text(title)
         .font(.system(size: 15, weight: .medium))
         .foregroundStyle(muted ? Palette.faint : Palette.text)
-        .padding(.horizontal, 18)
-        .frame(height: 38)
-        .background(Capsule().fill(MarketColor.chip))
+        .padding(.horizontal, 14)
+        .frame(height: 34)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(MarketColor.chip))
     }.buttonStyle(.plain)
   }
 }
@@ -99,6 +99,8 @@ struct AddButton: View {
 /** A row's content: a tile, a title with a line under it, and something on the right. */
 struct MarketRow<Trailing: View>: View {
   var symbol: String?
+  /** where its logo can be loaded from, best first; the symbol stands in until one does */
+  var logos: [String] = []
   var tile: CGFloat = 40
   var title: String
   var subtitle: String?
@@ -109,9 +111,10 @@ struct MarketRow<Trailing: View>: View {
 
   var body: some View {
     HStack(spacing: 14) {
-      if let symbol { MarketTile(symbol: symbol, size: tile) }
+      if !logos.isEmpty { AppLogo(sources: logos, symbol: symbol ?? "powerplug", size: tile) }
+      else if let symbol { MarketTile(symbol: symbol, size: tile) }
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.system(size: 15, weight: .medium)).foregroundStyle(danger ? Palette.red : Palette.text).lineLimit(1)
+        Text(title).font(.system(size: 15, weight: .medium)).foregroundStyle(danger ? Palette.red : Palette.text).lineLimit(2).fixedSize(horizontal: false, vertical: true)
         if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(2).fixedSize(horizontal: false, vertical: true) }
       }
       Spacer(minLength: 8)
@@ -259,8 +262,8 @@ struct MarketSearch: View {
     }
     .padding(.horizontal, 16)
     .frame(height: 50)
-    .background(Palette.control, in: Capsule())
-    .overlay(Capsule().strokeBorder(Palette.hairline))
+    .background(Palette.control, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline))
   }
 }
 
@@ -299,7 +302,7 @@ struct ChipRow: View {
 
   var body: some View {
     ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: 8) {
+      HStack(spacing: 6) {
         ForEach(options, id: \.self) { option in
           let on = option == selection
           Button { onPick(option) } label: {
@@ -309,9 +312,9 @@ struct ChipRow: View {
             }
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(on ? Color(.systemBackground) : Palette.text.opacity(0.8))
-            .padding(.horizontal, 16).frame(height: 36)
-            .background(Capsule().fill(on ? Palette.text : Palette.control))
-            .overlay(Capsule().strokeBorder(on ? Color.clear : Palette.hairline))
+            .padding(.horizontal, 14).frame(height: 34)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(on ? Palette.text : Palette.control))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(on ? Color.clear : Palette.hairline))
           }.buttonStyle(.plain).accessibilityAddTraits(on ? .isSelected : [])
         }
       }.padding(.horizontal, 18)

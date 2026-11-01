@@ -21,8 +21,8 @@ extension EnvironmentValues {
 }
 
 /**
- * Settings, opened from your avatar (Settings.dc.html). It holds what used to be the You tab: your
- * profile, computers, apps, memory, tasks, help and sign out, with the full settings list one row away.
+ * You, opened from your avatar: your profile and organization, the agent rules, notifications and
+ * appearance, and sign out, with the full settings list one row away. Features are in More.
  */
 struct SettingsSheet: View {
   @Environment(Store.self) private var store
@@ -30,11 +30,9 @@ struct SettingsSheet: View {
   @AppStorage(ThemeSettings.themeKey, store: WispPreferences.standard) private var theme = "mono"
   @Environment(\.openURL) private var openURL
   @State private var confirmSignOut = false
-  @State private var newTask = false
   @State private var orgs = false
   @State private var policyAction = FormAction()
 
-  private var online: Int { store.nodes.filter(\.online).count }
   private var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "" }
 
   var body: some View {
@@ -51,24 +49,24 @@ struct SettingsSheet: View {
               CardCaption("Agents")
               CardGroup {
                 if store.isOwner {
-                  ToggleRow(title: "Ask before risky actions", subtitle: "Shell, apps and computer use", isOn: askBefore, id: "you-ask-before")
+                  ToggleRow(title: "Ask before risky actions", subtitle: "Shell, apps and computer use", symbol: "shield", isOn: askBefore, id: "you-ask-before")
                     .disabled(policyAction.busy)
                 } else {
-                  NavigationLink { AgentPolicyView() } label: { RowLabel(title: "Ask before risky actions", subtitle: "Shell, apps and computer use") }
+                  NavigationLink { AgentPolicyView() } label: { RowLabel(title: "Ask before risky actions", subtitle: "Shell, apps and computer use", leading: { rowIcon("shield") }) }
                     .accessibilityIdentifier("you-ask-before")
                 }
-                NavigationLink { AgentDefaultsView() } label: { RowLabel(title: "Default model", value: store.agentDefaults?.model ?? "Each harness") }
+                NavigationLink { AgentDefaultsView() } label: { RowLabel(title: "Default model", value: store.agentDefaults?.model ?? "Each harness", leading: { rowIcon("cpu") }) }
                   .accessibilityIdentifier("settings-agent-defaults")
               }
             }
             CardGroup {
-              ToggleRow(title: "Notifications", isOn: notifications, id: "you-notifications")
-              NavigationLink { AppearanceSettingsView() } label: { RowLabel(title: "Appearance", value: themeName) }
+              ToggleRow(title: "Notifications", symbol: "bell", isOn: notifications, id: "you-notifications")
+              NavigationLink { AppearanceSettingsView() } label: { RowLabel(title: "Appearance", value: themeName, leading: { rowIcon("paintpalette") }) }
                 .accessibilityIdentifier("settings-appearance")
               if store.role != "guest" {
-                NavigationLink { NativeSettingsView() } label: { RowLabel(title: "All settings") }.accessibilityIdentifier("you-settings")
+                NavigationLink { NativeSettingsView() } label: { RowLabel(title: "All settings", leading: { rowIcon("gearshape") }) }.accessibilityIdentifier("you-settings")
               } else {
-                NavigationLink { NativeSettingsView() } label: { RowLabel(title: "Settings") }.accessibilityIdentifier("you-settings")
+                NavigationLink { NativeSettingsView() } label: { RowLabel(title: "Settings", leading: { rowIcon("gearshape") }) }.accessibilityIdentifier("you-settings")
               }
             }
             CardGroup {
@@ -88,7 +86,6 @@ struct SettingsSheet: View {
     .presentationBackground(Palette.sheet)
     .presentationCornerRadius(Corner.sheet)
     .presentationDragIndicator(.hidden)
-    .sheet(isPresented: $newTask) { NewTaskView() }
     .sheet(isPresented: $orgs) { OrgSwitcherSheet().environment(store) }
     .confirmCard($confirmSignOut, title: "Sign out of Wisp on this iPhone?", message: "Your agents keep working. To come back, scan your Wisp's QR code or sign in again.", confirm: "Sign out") {
       dismiss(); store.signOut()
@@ -122,7 +119,7 @@ struct SettingsSheet: View {
       .font(.system(size: 15)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
   }
 
-  /** profile, organization, computers, apps, memory, tasks (a guest sees their profile and the shared folder) */
+  /** profile, organization and what agents know about you (a guest sees their profile) */
   private var primary: some View {
     CardGroup {
       if store.me != nil {
@@ -133,30 +130,11 @@ struct SettingsSheet: View {
         }.accessibilityIdentifier("you-profile")
       }
       if store.role != "guest" {
-        Button { orgs = true } label: { RowLabel(title: "Organization", value: store.workspace?.name) }
+        Button { orgs = true } label: { RowLabel(title: "Organization", value: store.workspace?.name, leading: { rowIcon("building.2") }) }
           .buttonStyle(.plain).accessibilityIdentifier("you-organizations")
-        Button { dismiss(); store.route = .device(id: nil) } label: {
-          RowLabel(title: "Computers", value: online > 0 ? "\(online) online" : nil)
-        }.buttonStyle(.plain).accessibilityIdentifier("you-devices")
-        NavigationLink { MarketplaceView() } label: { RowLabel(title: "Connect apps") }
-          .accessibilityIdentifier("you-marketplace")
-      }
-      NavigationLink { MemoryView() } label: { RowLabel(title: "Memory", value: store.role == "guest" ? "Shared folder" : nil) }
-        .accessibilityIdentifier("you-memory")
-      if store.role != "guest" {
-        NavigationLink { FeaturesView() } label: { RowLabel(title: "Mods") }.accessibilityIdentifier("you-mods")
-        NavigationLink { AboutYouView() } label: { RowLabel(title: "About you") }
+        NavigationLink { AboutYouView() } label: { RowLabel(title: "About you", leading: { rowIcon("brain") }) }
           .accessibilityIdentifier("you-about")
-        if store.features.tasks {
-          NavigationLink { TasksView() } label: { RowLabel(title: "Tasks") }
-            .accessibilityIdentifier("you-tasks")
-          if store.canManage {
-            Button { newTask = true } label: { RowLabel(title: "New task", chevron: false) }
-              .buttonStyle(.plain).accessibilityIdentifier("you-new-task")
-          }
-        }
       }
-      NavigationLink { HelpView() } label: { RowLabel(title: "Help") }.accessibilityIdentifier("you-help")
     }
   }
 

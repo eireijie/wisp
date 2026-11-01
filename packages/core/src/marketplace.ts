@@ -173,7 +173,7 @@ function packageInstall(p: NonNullable<RegistryServer["packages"]>[number]): Mar
 }
 
 /** How brands write their own names, where the registry's title doesn't. */
-const BRAND_CASE: Record<string, string> = { gitlab: "GitLab", mongodb: "MongoDB", paypal: "PayPal", pagerduty: "PagerDuty", "monday.com": "monday.com" };
+const BRAND_CASE: Record<string, string> = { github: "GitHub", gitlab: "GitLab", mongodb: "MongoDB", paypal: "PayPal", pagerduty: "PagerDuty", "monday.com": "monday.com" };
 
 /** An app's name without the protocol in it: "Figma MCP Server" is Figma. */
 export function plainAppName(name: string): string {
@@ -257,7 +257,7 @@ export function trustLabel(e: Pick<MarketplaceEntry, "id" | "name" | "publisher"
   if (forApp) {
     return {
       kind: "maker",
-      text: `Made by ${titleCase(e.brand)}`,
+      text: `Made by ${BRAND_CASE[e.brand.toLowerCase()] ?? titleCase(e.brand)}`,
       explanation: `Published by ${e.publisher}, which the registry confirmed owns ${owns}, and the app is theirs.`,
     };
   }

@@ -10,15 +10,6 @@ struct FeaturesView: View {
 
   var body: some View {
     SettingsPage("Mods", id: "mods") {
-      SegmentedPicker(options: [("simple", "Simple"), ("everything", "Everything"), ("custom", "Custom")],
-                      selection: Binding(get: { store.features.preset }, set: { value in
-                        switch value {
-                        case "simple": save(.simple)
-                        case "everything": save(.everything)
-                        default: break
-                        }
-                      }), label: "Quick start", id: "mods-preset")
-        .disabled(!store.isOwner || action.busy)
       if !on.isEmpty {
         CardLabel("On")
         CardGroup { ForEach(on) { row($0) } }
@@ -34,7 +25,7 @@ struct FeaturesView: View {
   }
 
   private func row(_ key: FeatureKey) -> some View {
-    ToggleRow(title: key.name, subtitle: key.detail, isOn: Binding(get: { store.features[key] }, set: { on in
+    ToggleRow(title: key.name, subtitle: key.detail, symbol: key.symbol, isOn: Binding(get: { store.features[key] }, set: { on in
       var next = store.features
       next[key] = on
       save(next)
