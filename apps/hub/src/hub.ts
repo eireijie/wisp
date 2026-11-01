@@ -296,7 +296,7 @@ export class Hub {
     for (const c of this.clients) {
       if (c.workspaceId !== workspaceId) continue;
       this.clients.delete(c);
-      c.socket.close(4401, "organization deleted");
+      c.socket.close(4401, "workspace deleted");
     }
     for (const n of this.store.nodes(workspaceId)) this.disconnectNode(n.id);
   }

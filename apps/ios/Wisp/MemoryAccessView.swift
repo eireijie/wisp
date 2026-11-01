@@ -194,7 +194,7 @@ struct MemoryRuleEditor: View {
             CardGroup {
               Toggle(isOn: $startup) {
                 VStack(alignment: .leading, spacing: 2) {
-                  Text("Always remind this helper of this note").font(.system(size: 15)).foregroundStyle(Palette.text)
+                  Text("Always remind this agent of this note").font(.system(size: 15)).foregroundStyle(Palette.text)
                   Text("Loads at startup").font(.system(size: 13)).foregroundStyle(Palette.faint)
                 }
               }.padding(.horizontal, 18).padding(.vertical, 10).tint(Palette.blue)

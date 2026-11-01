@@ -242,18 +242,18 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
     const create = (key: string, icon: ReactNode, label: string, run: () => void, also = ""): Row & { words: string } => ({ key: `x:${key}`, group: "Create", kind: "Action", icon, label, run, words: `${label} ${also}` });
     const actions = [
       create("chat", <MessageSquare size={15} />, "New chat", () => useStore.setState({ newChatOpen: true }), "talk message direct"),
-      ...(!guest ? [create("agent", <Plus size={15} />, "New agent", startNewAgent, "add create helper")] : []),
+      ...(!guest ? [create("agent", <Plus size={15} />, "New agent", startNewAgent, "add create agent")] : []),
       create("browse-teams", <Users size={15} />, "Browse teams", () => useStore.setState({ channelBrowser: { sectionId: null } }), "find join public archived teams channels"),
       ...(!guest ? [create("team", <Users size={15} />, "New team", () => useStore.setState({ channelBrowser: { sectionId: null, create: true } }), "add create browse teams channels group")] : []),
       ...(!guest && features.tasks ? [create("task", <SquarePen size={15} />, "New task", () => useStore.setState({ newTaskOpen: true }), "create assign work")] : []),
-      create("org", <Building2 size={15} />, "New organization", onNewOrg, "create workspace"),
+      create("org", <Building2 size={15} />, "New workspace", onNewOrg, "create workspace"),
     ];
     // every page, including the ones that no longer have a place on the rail
     const pageRow = (key: string, icon: ReactNode, label: string, run: () => void, also = "", hint?: string): Row & { words: string } => ({ key: `p:${key}`, group: "Go to", kind: "Page", icon, label, hint, run, words: `${label} ${also}` });
     const pages = [
       pageRow("inbox", <Inbox size={15} />, "Inbox", () => go({ view: "dashboard" }), "dashboard waiting approvals", "⌘1"),
       pageRow("chats", <MessageSquare size={15} />, "Chats", () => (location.hash = chatsTarget()), "conversations teams", "⌘2"),
-      pageRow("agents", <Ghost size={15} />, "Agents", () => go({ view: "agents", agentId: null }), "manage helpers", "⌘3"),
+      pageRow("agents", <Ghost size={15} />, "Agents", () => go({ view: "agents", agentId: null }), "manage agents", "⌘3"),
       ...(!guest ? [pageRow("computers", <Monitor size={15} />, "Computers", () => go({ view: "computers", computerId: null }), "screens vm devices machines nodes", "⌘4")] : []),
       pageRow("vault", <BookOpen size={15} />, "Memory", () => go({ view: "vault", path: null }), "notes vault"),
       ...(features.tasks ? [pageRow("tasks", <ListTodo size={15} />, "Tasks", () => go({ view: "tasks" }), "work board")] : []),
@@ -263,7 +263,7 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
       pageRow("mods", <Blocks size={15} />, "Mods", () => go({ view: "mods" }), "features optional parts"),
       pageRow("about", <Brain size={15} />, "About you", () => go({ view: "about" }), "profile memory"),
       pageRow("help", <LifeBuoy size={15} />, "Help", () => go({ view: "help" }), "support setup"),
-      pageRow("settings", <Settings size={15} />, "Settings", () => go({ view: "settings" }), "preferences organization features", "⌘,"),
+      pageRow("settings", <Settings size={15} />, "Settings", () => go({ view: "settings" }), "preferences workspace features", "⌘,"),
     ];
     const match = (r: { words: string }) => !needle || r.words.toLowerCase().includes(needle);
     // with nothing typed, making something comes first; while searching, the results do

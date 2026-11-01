@@ -73,7 +73,7 @@ struct SkillsView: View {
   var body: some View {
     SettingsPage("Skills", id: "skills") {
       HStack(spacing: 8) {
-        NavigationLink { MarketplaceView(start: .skills) } label: { smallPill("Browse the shop", symbol: "bag") }
+        NavigationLink { MarketplaceView(start: .skills) } label: { smallPill("Browse the Marketplace", symbol: "bag") }
           .buttonStyle(.press).accessibilityIdentifier("skills-shop")
         if store.canManage {
           Button { importing = true } label: { smallPill("Import", symbol: "square.and.arrow.down") }
@@ -517,7 +517,7 @@ struct SkillEditor: View {
     MarketSheet(title: skill == nil ? "New skill" : "Edit \(skill?.name ?? "skill")", busy: action.busy) {
       MarketField(label: "Name", placeholder: guided ? "Summarize a meeting" : "Deploy the web app", text: $name)
       if guided {
-        MarketField(label: "What should your helper do?", placeholder: "Read what the team did this week and write a short update.", text: $what, lines: 3...8)
+        MarketField(label: "What should your agent do?", placeholder: "Read what the team did this week and write a short update.", text: $what, lines: 3...8)
         MarketField(label: "When should it use this?", placeholder: "Every Friday, or when I ask for an update", text: $when, lines: 2...5)
         MarketField(label: "What does a good result look like?", placeholder: "Five lines or fewer, plain words", text: $result, lines: 2...8)
       } else {

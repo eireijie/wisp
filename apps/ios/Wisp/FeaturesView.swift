@@ -75,7 +75,7 @@ struct AgentDefaultsView: View {
       if !store.isOwner { OwnersOnlyNote() }
       CardLabel("New agents start with")
       CardGroup {
-        PickerRow(title: "AI tool", options: harnesses.map { ($0.id, $0.label) }, selection: $harness, id: "defaults-harness")
+        PickerRow(title: "Harness", options: harnesses.map { ($0.id, $0.label) }, selection: $harness, id: "defaults-harness")
         FieldRow(title: "Model", text: $model, prompt: "Automatic", id: "defaults-model")
         NavigationLink { DefaultModelsView() } label: { RowLabel(title: "Default model per tool", value: "\(harnesses.count) tools") }.accessibilityIdentifier("defaults-models")
       }.disabled(!store.isOwner)
@@ -129,7 +129,7 @@ struct DefaultModelsView: View {
   private var harnesses: [HarnessChoice] { HarnessChoice.all.filter { $0.protocolName != "mcp" } }
 
   var body: some View {
-    SettingsPage("Default model", id: "default-models") {
+    SettingsPage("Agent defaults", id: "default-models") {
       if !store.isOwner { OwnersOnlyNote() }
       CardGroup {
         ForEach(harnesses) { h in

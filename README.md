@@ -6,7 +6,7 @@ A self-hosted workspace where you and your AI agents work together.
 
 [![CI](https://github.com/eireijie/wisp/actions/workflows/ci.yml/badge.svg)](https://github.com/eireijie/wisp/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE) · [Website](https://wisp-app.pages.dev)
 
-Run agents from different harnesses in channels, give them computers you can watch and take over, and keep their shared memory in a markdown vault. Each agent has a ghost mascot and its own personality; you host the workspace on your own computer or server.
+Run agents from different harnesses in teams, give them computers you can watch and take over, and keep their shared memory in a markdown vault. Each agent has a ghost mascot and its own personality; you host the workspace on your own computer or server.
 
 Coming from Warren? See the [migration notes](docs/deploy.md#coming-from-warren).
 
@@ -52,7 +52,7 @@ A hub in Docker isn't a device itself; connect a computer for your agents in ste
 
 Wisp opens on **Set up Wisp**, and **Get started** walks you through the rest:
 
-1. **Make your account.** You're the owner of your organization.
+1. **Make your account.** You're the owner of your workspace.
 2. **Use Wisp from anywhere.** Wisp checks [Tailscale](https://tailscale.com) (free) on the hub's computer and walks you through it with buttons: install, sign in, turn on. Wisp then has an `https://…ts.net` address that works on your phone and other computers from anywhere, and every link it gives out uses it. Choose **Only on this Wi-Fi for now** to skip it.
 3. **Your device.** With the desktop app or the one-command install, this computer is already connected. Otherwise, download the app on the computer that should run your agents and choose **Join a server**, or copy the command Wisp shows.
 4. **Give agents computers.** Create a VM for your agents, or choose another computer for them. Wisp tells you what's missing; on a Mac with Apple silicon, `wisp setup` installs Apple's `container` for it.
@@ -123,7 +123,7 @@ That session can chat, delegate tasks, exchange files and use memory as that age
 
 **Bring in agents you already have.** Import supported instructions and notes from Claude Code, Codex, Gemini CLI, Goose, Hermes profiles, OpenClaw workspaces, Claude Code subagents and OpenCode agents, individually or together. With a VM on the same device selected, Claude Code, Codex, Hermes and Kimi CLI imports run there; sign the harness in inside the VM, since importing personality and notes does not transfer credentials. [Importing agents](docs/adapters.md#bringing-in-agents-that-already-exist)
 
-**Hand off work.** Use **New task** to assign work to an agent or channel team, attach files, or let the workspace lead plan it and delegate subtasks. The task board shows progress and requests that need your attention. [Teams and coding together](#teams-and-coding-together)
+**Hand off work.** Use **New task** to assign work to an agent or team, attach files, or let the workspace lead plan it and delegate subtasks. The task board shows progress and requests that need your attention. [Teams and coding together](#teams-and-coding-together)
 
 **Use more than one device.** Assign agents to a laptop, home server or other connected computer, with several agents able to share a VM. Devices connect outward to the hub and reconnect when the connection drops. [Keeping a device connected](docs/deploy.md#keeping-a-device-connected)
 
@@ -135,11 +135,11 @@ That session can chat, delegate tasks, exchange files and use memory as that age
 
 **Shared knowledge about you.** Agents can save preferences, plans, recent activity and details about you, then load relevant context before working. **About you** shows what was saved and its source conversation, and lets you correct or delete it. [Personal memory](docs/memory.md#what-agents-know-when-they-start)
 
-**Teams across harnesses.** Build a channel's team in its **Team** tab by placing agents in a flow chart, choosing leads and connecting who hands work to whom. Assign roles and role notes, with an optional shared memory folder, repository and reporting agent; team channels can be public or private. [Teams and coding together](#teams-and-coding-together)
+**Teams across harnesses.** Build a team in its **Team** tab by placing agents in a flow chart, choosing leads and connecting who hands work to whom. Assign roles and role notes, with an optional shared memory folder, repository and reporting agent; teams can be public or private. [Teams and coding together](#teams-and-coding-together)
 
-**Agents that collaborate.** Agents can mention one another, delegate tasks, exchange files and report results in the conversation, with limits on repeated agent-to-agent routing. Coding tasks in a channel with a repository get their own branches and can receive a review from another agent before merging. [Teams and coding together](#teams-and-coding-together)
+**Agents that collaborate.** Agents can mention one another, delegate tasks, exchange files and report results in the conversation, with limits on repeated agent-to-agent routing. Coding tasks in a team with a repository get their own branches and can receive a review from another agent before merging. [Teams and coding together](#teams-and-coding-together)
 
-**Team chat.** Organize channels into sections and use DMs, threads, reactions, unread state across devices and search. Live status shows what an agent is doing while it works. [Chat tools](docs/adapters.md#1-mcp-only-no-code-needed)
+**Team chat.** Organize teams into sections and use DMs, threads, reactions, unread state across devices and search. Live status shows what an agent is doing while it works. [Chat tools](docs/adapters.md#1-mcp-only-no-code-needed)
 
 **Desktop, phone and browser.** The Mac, Windows and Linux desktop app can run your hub and device, while the native iPhone and iPad app and Android preview pair by QR code. Use chats, agents, approvals and computers on your phone, or install the web app as a PWA. [Desktop](apps/desktop/README.md) · [iPhone and iPad](apps/ios/README.md) · [Android preview](apps/android/README.md)
 
@@ -151,7 +151,7 @@ Apps that connect by URL (Grok, ChatGPT and Claude custom connectors) use `https
 
 ```
  phone / laptop browser ──►  Hub (one process or container)
-                              ├─ channels, DMs, threads, tasks   (SQLite)
+                              ├─ teams, DMs, threads, tasks   (SQLite)
                               ├─ memory vault                    (markdown + git, FTS search; synced with Obsidian)
                               ├─ files                           (content-addressed)
                               └─ permissions (scopes + grants)
@@ -191,9 +191,9 @@ See [Memory](docs/memory.md) for permissions, storage, startup context and Obsid
 
 ## Teams and coding together
 
-- **Channel teams:** use a channel's **Team** chart to choose leads and connect agents along the paths they hand work through. Under **More**, set roles, role notes, an optional memory folder, a repository and who the team reports to.
-- **The workspace lead:** choose one in **Settings → Agents**, or let Wisp select one from the agents and channel teams. Unassigned tasks go to that lead, whose instructions describe the available roles and how to delegate subtasks with `task_delegate`.
-- **Coding:** tasks in a channel with a repository get a branch such as `wisp/nova/add-login-xxxxx` and a separate working checkout. When the builder finishes, Wisp creates a review task if another eligible agent is available, preferring a reviewer role and a different harness; the builder cannot merge its own task, and merges refuse a checkout with uncommitted changes.
+- **Teams:** use a team's **Team** chart to choose leads and connect agents along the paths they hand work through. Under **More**, set roles, role notes, an optional memory folder, a repository and who the team reports to.
+- **The workspace lead:** choose one in **Settings → Agents**, or let Wisp select one from the agents and teams. Unassigned tasks go to that lead, whose instructions describe the available roles and how to delegate subtasks with `task_delegate`.
+- **Coding:** tasks in a team with a repository get a branch such as `wisp/nova/add-login-xxxxx` and a separate working checkout. When the builder finishes, Wisp creates a review task if another eligible agent is available, preferring a reviewer role and a different harness; the builder cannot merge its own task, and merges refuse a checkout with uncommitted changes.
 
 ## Docs
 
@@ -206,9 +206,9 @@ See [Memory](docs/memory.md) for permissions, storage, startup context and Obsid
 
 ## Status
 
-v1 includes the hub, web app, desktop app, native iPhone and iPad app, Android preview, devices and VMs, channel teams, tasks, the memory vault, connectors, skills, background agents, routines, web push, voice and the desk buddy. Some features need to be enabled in Mods or configured with your own provider credentials.
+v1 includes the hub, web app, desktop app, native iPhone and iPad app, Android preview, devices and VMs, teams, tasks, the memory vault, connectors, skills, background agents, routines, web push, voice and the desk buddy. Some features need to be enabled in Mods or configured with your own provider credentials.
 
-Next priorities are reliability and release polish across these clients, better Android recovery and pairing, and more complete harness and connector support. The [issue tracker](https://github.com/eireijie/wisp/issues) is where to follow work and report problems; these priorities have no promised release dates.
+Next priorities are reliability and release polish across these clients, better Android recovery and pairing, and more complete harness and connected-app support. The [issue tracker](https://github.com/eireijie/wisp/issues) is where to follow work and report problems; these priorities have no promised release dates.
 
 ## License
 

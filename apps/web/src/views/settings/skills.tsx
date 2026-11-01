@@ -155,7 +155,7 @@ export function SkillsPage() {
         <h2 className="t-title max-md:hidden">Skills</h2>
         <span className="flex gap-2">
           <a href={href({ view: "marketplace", section: "skills" })} className="inline-flex h-[34px] items-center rounded-lg bg-control px-3 text-[13px] font-medium text-ink/80 hover:text-ink">
-            Browse the shop
+            Browse the Marketplace
           </a>
           {canEdit && (
             <button type="button" onClick={() => setSharing("import")} className="inline-flex h-[34px] items-center rounded-lg bg-control px-3 text-[13px] font-medium text-ink/80 hover:text-ink">

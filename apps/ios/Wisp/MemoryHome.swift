@@ -88,7 +88,6 @@ struct MemoryHome: View {
         Button("Obsidian and storage", systemImage: "arrow.triangle.2.circlepath") { route = .storage }
       }
     }) {
-      Text("What your team remembers").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 4)
       if let agent = viewingAgent { ViewingBanner(agent: agent) { browse.viewAs = nil } }
       InlineError(error: action.error).padding(.horizontal, 4)
       MemorySearchField(prompt: "Search every note…", text: $query, id: "memory-search")
@@ -259,7 +258,7 @@ struct ViewAsSheet: View {
       SheetHeader(title: "View memory as") { dismiss() }
       ScrollView {
         VStack(alignment: .leading, spacing: 14) {
-          SectionCaption("Helper")
+          SectionCaption("Agent")
           CardGroup {
             Button { pick = "" } label: {
               HStack(spacing: 12) { Image(systemName: "person").font(.system(size: 18)).foregroundStyle(Palette.muted).frame(width: 40); Text("You").font(.system(size: 17)); Spacer(); RadioMark(on: pick.isEmpty) }

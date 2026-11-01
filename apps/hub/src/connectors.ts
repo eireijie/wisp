@@ -290,7 +290,7 @@ export class ConnectorStore {
     const specs = this.specsFor(agentId);
     if (!specs.length) return "";
     const lines = specs.map((s) => (s.kind === "secret" ? `- ${s.name}: set in your environment as ${Object.keys(s.env ?? {}).join(", ")}` : `- ${s.name}: MCP tools (named mcp__${s.name}__… or ${s.name}.…, depending on your harness)`));
-    return [`## Your connectors`, `Your owner connected these for you. Use them when they fit the task; never print secret values.`, ...lines].join("\n");
+    return [`## Your connected apps`, `Your owner connected these for you. Use them when they fit the task; never print secret values.`, ...lines].join("\n");
   }
 }
 

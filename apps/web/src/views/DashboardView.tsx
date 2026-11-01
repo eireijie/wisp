@@ -13,7 +13,6 @@ import { ChatAvatar, PulseDots, shortTime } from "../components/ChatList.tsx";
 import { ApprovalNeedCard, CardButton, runSummary, GroupCard, HelpNeedCard, LoginNeedCard, Rule, SectionHead, useHelpSeen, helpKey } from "../components/InboxParts.tsx";
 import { NEXT_STEP, homeReadiness, setupProgress, useOnboarding } from "../onboarding.ts";
 import { useDevices } from "../devices.ts";
-import { openDm as openHelperDm } from "../openDm.ts";
 import { setupNextStep } from "../components/AgentPanel.tsx";
 import { cleanPreview } from "../components/CommandPalette.tsx";
 
@@ -34,7 +33,6 @@ interface TaskLite {
 const RECENT_MS = 60_000;
 const DAY_MS = 86_400_000;
 
-const EXAMPLE_PROMPTS = ["Plan dinners for this week and make a shopping list", "Help me write a polite note to my landlord about a repair", "Summarize a document I'll paste in"];
 
 const sameDay = (iso: string | null | undefined) => !!iso && new Date(iso).toDateString() === new Date().toDateString();
 
@@ -526,7 +524,7 @@ function ReadinessCard() {
 
   if (r.kind === "setup") {
     return (
-      <Frame title="Your helper isn't ready yet" sub={`Next: ${NEXT_STEP[r.next]}`}>
+      <Frame title="Your agent isn't ready yet" sub={`Next: ${NEXT_STEP[r.next]}`}>
         {bar}
         <div className="flex gap-2.5">
           <CardButton tone="primary" onClick={() => go({ view: "welcome" })}>
@@ -552,24 +550,7 @@ function ReadinessCard() {
       </Frame>
     );
   }
-  const agent = r.agent;
-  return (
-    <Frame agent={agent} title={`Try asking ${agent.name}…`}>
-      <ul className="flex flex-col gap-2">
-        {EXAMPLE_PROMPTS.map((text) => (
-          <li key={text}>
-            <button type="button" onClick={() => void openHelperDm(agent.id, text)} className="w-full text-left rounded-2xl bg-panel border border-line px-3.5 py-2.5 text-sm hover:bg-hover outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
-              {text}
-            </button>
-          </li>
-        ))}
-      </ul>
-      <p className="text-xs text-muted">Pick one and it's ready in the chat. Change it if you like, then send.</p>
-      <div>
-        <CardButton onClick={() => void openHelperDm(agent.id)}>Open chat</CardButton>
-      </div>
-    </Frame>
-  );
+  return null;
 }
 
 /** How much of today's background allowance is used, linking to Settings → Usage. */

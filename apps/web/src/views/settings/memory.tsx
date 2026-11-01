@@ -61,7 +61,7 @@ function Location({ storage, reload }: { storage: MemoryStorage; reload: () => v
             <div>
               <Code>{storage.path}</Code>
             </div>
-            <div className="text-xs text-muted">{storage.movable === false ? "Each extra organization keeps its memory in Wisp's own data folder, so it can't be moved." : fixed ? "Set by WISP_VAULT_DIR where Wisp runs, so it can only be changed there." : storage.source === "default" ? "Wisp's own data folder, the default." : "Chosen here."}</div>
+            <div className="text-xs text-muted">{storage.movable === false ? "Each extra workspace keeps its memory in Wisp's own data folder, so it can't be moved." : fixed ? "Set by WISP_VAULT_DIR where Wisp runs, so it can only be changed there." : storage.source === "default" ? "Wisp's own data folder, the default." : "Chosen here."}</div>
           </div>
           {!fixed && (
             <form

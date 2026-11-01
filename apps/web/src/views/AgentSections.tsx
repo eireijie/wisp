@@ -14,7 +14,7 @@ import { AgentAvatar, cx, harnessLabel, timeAgo } from "../components/ui.tsx";
 export const TAB_TITLES: Record<AgentTab, string> = {
   overview: "Overview",
   model: "Model",
-  device: "Device",
+  device: "Computer",
   computer: "Computer",
   access: "Who can ask it",
   routines: "Routines",
@@ -163,7 +163,7 @@ export function AccessPanel({ agent, device }: { agent: Agent; device: DeviceInf
         onChange={(v) => void save({ respondTo: v })}
         options={[
           { value: "me", title: "Only me", body: "Just you can message it" },
-          { value: "anyone", title: "Anyone", body: "Everyone in the organization" },
+          { value: "anyone", title: "Anyone", body: "Everyone in the workspace" },
           { value: "people", title: "Picked people", body: "Choose who can ask" },
         ]}
       />

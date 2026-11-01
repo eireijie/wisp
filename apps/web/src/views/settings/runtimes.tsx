@@ -148,7 +148,7 @@ export function RuntimesPage() {
 
   return (
     <>
-      <PageHeader title="Agent runtimes" />
+      <PageHeader title="Harness setup" />
       {devices === null ? (
         <p className="text-sm text-muted">Loading devices…</p>
       ) : !device ? (
@@ -208,7 +208,7 @@ export function RuntimesPage() {
               {declared.map((d) => (
                 <Item key={d.id} icon={<Mark id={d.id} />} title={harnessLabel(d.id)} sub={`Added on ${device.name} · ${d.version ?? "ready"}`} right={<Badge tone="green">Ready</Badge>} />
               ))}
-              <Item icon={<Tile size={40}><Plus size={20} strokeWidth={1.7} /></Tile>} title="Add runtime" sub="Any agent that speaks ACP" onClick={() => setAdding(true)} />
+              <Item icon={<Tile size={40}><Plus size={20} strokeWidth={1.7} /></Tile>} title="Add a harness" sub="Any agent that speaks ACP" onClick={() => setAdding(true)} />
             </Panel>
           </section>
         </div>
@@ -274,7 +274,7 @@ function AddRuntime({ device, onClose }: { device: DeviceInfo | undefined; onClo
   "acp:my-agent": { "label": "My agent", "command": "my-agent", "args": ["acp"] }
 }`;
   return (
-    <Dlg title="Add a runtime" onClose={onClose} wide>
+    <Dlg title="Add a harness" onClose={onClose} wide>
       <div className="space-y-4 text-sm">
         <p>
           Any agent that speaks the Agent Client Protocol (ACP) can run in Wisp. Add it on {device?.name ?? "the device"}, in <code>~/.wisp/node.json</code>:

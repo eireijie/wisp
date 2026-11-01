@@ -172,11 +172,11 @@ export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | nul
   const out: HelperCheck[] = [];
   const unknown = (id: HelperCheck["id"], label: string): HelperCheck => ({ id, status: "unknown", label, fix: null, to: null });
   if (!agent) {
-    out.push({ id: "helper", status: "bad", label: "You have a helper", fix: "Make one in setup. It takes a few minutes.", to: { view: "welcome" } });
+    out.push({ id: "helper", status: "bad", label: "You have an agent", fix: "Make one in setup. It takes a few minutes.", to: { view: "welcome" } });
     out.push(unknown("device", "It has a device to work on"), unknown("online", "That device is on and connected"), unknown("harness", "Its AI is installed there"));
     return out;
   }
-  out.push({ id: "helper", status: "ok", label: `You have a helper: ${agent.name}`, fix: null, to: null });
+  out.push({ id: "helper", status: "ok", label: `You have an agent: ${agent.name}`, fix: null, to: null });
   // helpers that join from outside Wisp don't need a device here
   if (harnessInfo(agent.harness)?.protocol === "mcp") {
     out.push({ id: "device", status: "ok", label: `${agent.name} runs outside Wisp and needs no device here`, fix: null, to: null });

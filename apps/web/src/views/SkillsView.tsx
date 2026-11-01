@@ -39,7 +39,7 @@ export function whatItsFor(description: string, max = 110): string {
 /** "Everyday Helper has this" / "No helper has this yet", from the helpers that hold a skill. */
 export function helperLine(agents: Pick<Agent, "id" | "name">[], ids: string[]): string {
   const names = ids.map((id) => agents.find((a) => a.id === id)?.name).filter((n): n is string => !!n);
-  if (names.length === 0) return "No helper has this yet";
+  if (names.length === 0) return "No agent has this yet";
   if (names.length === 1) return `${names[0]} has this`;
   if (names.length === 2) return `${names[0]} and ${names[1]} have this`;
   return `${names[0]}, ${names[1]} and ${names.length - 2} more have this`;
@@ -457,14 +457,14 @@ export function TryDialog({ skill, agents, onClose }: { skill: { name: string; d
 
   return (
     <Dlg title="Try it" sub={skill.name} onClose={onClose}>
-      <p className="px-1 text-sm text-muted">{helper ? "Start a chat with this request ready. Add your own details, then send." : "Install the skill first so a helper can use it. Meanwhile, this is a request to try."}</p>
+      <p className="px-1 text-sm text-muted">{helper ? "Start a chat with this request ready. Add your own details, then send." : "Install the skill first so an agent can use it. Meanwhile, this is a request to try."}</p>
       <p className="select-all whitespace-pre-wrap rounded-2xl border border-control-line bg-control px-4 py-3.5 text-base leading-snug" aria-label="Suggested request">
         {text}
       </p>
       {holders.length > 1 && (
         <div className="flex items-center gap-2 px-1">
           <label htmlFor={sid} className="text-sm">
-            Which helper?
+            Which agent?
           </label>
           <select id={sid} value={helper?.id} onChange={(e) => setPick(e.target.value)} className="h-9 rounded-full border border-control-line bg-control px-3 text-sm">
             {holders.map((a) => (
@@ -504,12 +504,12 @@ export function InstallModal({ entry, body, agents, onClose, onDone }: { entry: 
     }
   }
   return (
-    <Dlg title={`Add ${entry.name}`} sub="Which helpers should know it?" onClose={onClose}>
+    <Dlg title={`Add ${entry.name}`} sub="Which agents should know it?" onClose={onClose}>
       <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} allAgents={{ on: allAgents, onChange: setAllAgents }} />
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="flex justify-end">
         <Prim disabled={busy} onClick={install} className="max-sm:w-full">
-          {allAgents || agentIds.length ? `Add ${entry.name}` : "Add to the organization"}
+          {allAgents || agentIds.length ? `Add ${entry.name}` : "Add to the workspace"}
         </Prim>
       </div>
     </Dlg>
@@ -651,7 +651,7 @@ export function SkillEditor({ skill, agents, onClose, onSaved, onShare }: { skil
         <Labeled label="Name">{(id) => <TextBox id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder={guided ? "Summarize a meeting" : "Deploy the web app"} required />}</Labeled>
         {guided ? (
           <>
-            <Labeled label="What should your helper do?">{(id) => <AreaBox id={id} rows={3} value={what} onChange={(e) => setWhat(e.target.value)} placeholder={GUIDE_HINTS.what} />}</Labeled>
+            <Labeled label="What should your agent do?">{(id) => <AreaBox id={id} rows={3} value={what} onChange={(e) => setWhat(e.target.value)} placeholder={GUIDE_HINTS.what} />}</Labeled>
             <Labeled label="When should it use this?">
               {(id) => <AreaBox id={id} rows={2} value={when} onChange={(e) => setWhen(e.target.value)} maxLength={500} placeholder={GUIDE_HINTS.when} />}
             </Labeled>
@@ -668,7 +668,7 @@ export function SkillEditor({ skill, agents, onClose, onSaved, onShare }: { skil
         </div>
         {guided ? <MoreOptions title="Edit the instructions directly">{editor}</MoreOptions> : editor}
         <div className="space-y-2">
-          <Label>Which helpers have it</Label>
+          <Label>Which agents have it</Label>
           <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} allAgents={{ on: allAgents, onChange: setAllAgents }} />
         </div>
         {error && <p className="text-sm text-bad">{error}</p>}
@@ -758,13 +758,13 @@ export function SkillShare({ skill, agents, canEdit, onClose, onBrought, onDevic
   const option = (icon: ReactNode, title: string, sub: string, onClick: () => void) => <Item icon={<Tile size={40}>{icon}</Tile>} title={title} sub={sub} onClick={onClick} />;
 
   return (
-    <Dlg title={view === "agents" ? "Share with another helper" : view === "paste" ? "Paste a link" : view === "found" ? "Bring it in" : skill ? "Share a skill" : "Bring one in"} onClose={onClose}>
+    <Dlg title={view === "agents" ? "Share with another agent" : view === "paste" ? "Paste a link" : view === "found" ? "Bring it in" : skill ? "Share a skill" : "Bring one in"} onClose={onClose}>
       {view === "home" && (
         <>
           {skill && shared && (
             <>
               <Panel>
-                <Item icon={<Tile size={50}><Wand2 size={22} strokeWidth={1.7} /></Tile>} title={skill.name} sub={used.length ? `Used by ${sentence(used)}` : "No helper has it yet"} />
+                <Item icon={<Tile size={50}><Wand2 size={22} strokeWidth={1.7} /></Tile>} title={skill.name} sub={used.length ? `Used by ${sentence(used)}` : "No agent has it yet"} />
               </Panel>
               <Panel>
                 {option(<Link2 size={20} strokeWidth={1.7} />, "Copy a link", "Anyone with it can bring the skill in", copyLink)}

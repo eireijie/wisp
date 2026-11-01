@@ -352,7 +352,7 @@ final class ChatTests: XCTestCase {
 
   func testMentionFilteringAndInsertion() {
     let agents = [Agent(id: "a1", handle: "scout", name: "Researcher", harness: "codex", status: .online),
-                  Agent(id: "a2", handle: "builder", name: "Sam helper", harness: "codex", status: .online)]
+                  Agent(id: "a2", handle: "builder", name: "Sam agent", harness: "codex", status: .online)]
     let people = [Member(id: "u1", email: "sam@example.test", name: "Samuel", preferredName: "Sam", role: "member")]
     let matches = ComposerMentions.suggestions("@SA", caret: 3, agents: agents, people: people)
     XCTAssertEqual(matches.map(\.actor), [Actor(kind: .agent, id: "a2"), Actor(kind: .user, id: "u1")])

@@ -130,7 +130,7 @@ private struct ImportDetails: View {
       if !pick.found.summary.isEmpty { CardCaption(pick.found.summary) }
       FieldCard(label: "Handle", text: Binding(get: { handle.isEmpty ? "" : "@" + handle }, set: { handle = ManagementText.typingHandle($0.replacingOccurrences(of: "@", with: "")) }), prompt: "@handle", lowercase: true)
       if taken { AgentError(text: "@\(handle) is taken.") }
-      CardCaption("Its soul, instructions and notes are copied into Wisp's memory. \(pick.found.path)")
+      CardCaption("Its personality, instructions and notes are copied into Wisp's memory. \(pick.found.path)")
       CardCaption("Computer")
       CardGroup {
         if node?.capabilities?.vm?.ok == true {
@@ -192,7 +192,7 @@ struct AgentInvite: View {
       if let made {
         done(made.agent, made.token)
       } else {
-        FieldCard(label: "Name", text: $name, prompt: "Outside helper").accessibilityIdentifier("invite-name")
+        FieldCard(label: "Name", text: $name, prompt: "Outside agent").accessibilityIdentifier("invite-name")
         CardCaption("Connect any MCP-capable session with an invitation. It shows up here as a normal agent.")
         FlowLayout(spacing: 8) {
           ForEach(kinds, id: \.id) { kind in AgentChip(title: kind.label, on: harness == kind.id) { harness = kind.id } }

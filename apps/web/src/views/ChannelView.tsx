@@ -1868,7 +1868,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
               {agents.length === 1 ? `Ask ${agents[0].name}` : "Ask an agent"}
             </button>
           )}
-          {!error && nobodyAsked && !hint && <span className="text-muted">Nobody was asked. @mention a helper to get an answer.</span>}
+          {!error && nobodyAsked && !hint && <span className="text-muted">Nobody was asked. @mention an agent to get an answer.</span>}
         </div>
       )}
     </div>

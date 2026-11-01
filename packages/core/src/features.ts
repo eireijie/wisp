@@ -14,7 +14,7 @@ export const FEATURE_INFO: Record<FeatureKey, { name: string; description: strin
   tasks: { name: "Tasks board", description: "Give out work and track it from start to done.", group: "many" },
   voice: { name: "Voice calls", description: "Call an agent and talk instead of typing.", group: "extras" },
   buddy: { name: "Desk buddy", description: "A small ghost on your desktop that shows what your agents are up to.", group: "extras" },
-  invite: { name: "Invite people", description: "Let other people into this organization. Adds a People page and lets agents answer more than just you.", group: "extras" },
+  invite: { name: "Invite people", description: "Let other people into this workspace. Adds a People page and lets agents answer more than just you.", group: "extras" },
   remoteDesktop: { name: "Remote desktop", description: "Reach your devices from anywhere with RustDesk, from each device's page.", group: "extras" },
 };
 

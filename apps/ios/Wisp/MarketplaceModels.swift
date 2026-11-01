@@ -38,7 +38,7 @@ enum MarketText {
 
   static func trust(_ e: MarketplaceEntry) -> TrustLabel {
     guard e.verified == true else {
-      return TrustLabel(kind: .unverified, text: "Not verified", explanation: "The registry hasn't confirmed who \(e.publisher ?? "the publisher") is. Only add servers you trust, since helpers send them data.")
+      return TrustLabel(kind: .unverified, text: "Not verified", explanation: "The registry hasn't confirmed who \(e.publisher ?? "the publisher") is. Only add servers you trust, since agents send them data.")
     }
     let brand = squash(e.brand ?? "")
     func named(_ s: String) -> Bool { brand.count >= 3 && squash(s).contains(brand) }
@@ -55,8 +55,8 @@ enum MarketText {
     let t = trust(e)
     let publisher = e.publisher ?? "its publisher"
     let can = install.fields?.isEmpty == false
-      ? "Your helpers get the key you enter, so they can use \(e.name) with it."
-      : "Your helpers will be able to use \(e.name) through this connection: read and act on what this app allows."
+      ? "Your agents get the key you enter, so they can use \(e.name) with it."
+      : "Your agents will be able to use \(e.name) through this connection: read and act on what this app allows."
     switch t.kind {
     case .unverified:
       return ConnectSummary(can: can, runBy: "Run by \(publisher), not by the app's maker or Wisp.", caution: "Nobody has confirmed who they are. Only connect if you trust them.")
@@ -73,11 +73,11 @@ enum MarketText {
     let host = c.url.flatMap { URL(string: $0)?.host }
     switch c.kind {
     case "secret":
-      return ConnectSummary(can: "Your helpers get the key you enter, so they can use \(c.name) with it.", runBy: "Wisp keeps the key and gives it only to the helpers you pick.", caution: nil)
+      return ConnectSummary(can: "Your agents get the key you enter, so they can use \(c.name) with it.", runBy: "Wisp keeps the key and gives it only to the agents you pick.", caution: nil)
     case "mcp-http":
-      return ConnectSummary(can: "Your helpers will be able to use \(c.name) through this connection: read and act on what this app allows.", runBy: "On Wisp's list of well-known apps. It connects to \(host ?? "the app's own address"), not to a server run by Wisp.", caution: nil)
+      return ConnectSummary(can: "Your agents will be able to use \(c.name) through this connection: read and act on what this app allows.", runBy: "On Wisp's list of well-known apps. It connects to \(host ?? "the app's own address"), not to a server run by Wisp.", caution: nil)
     default:
-      return ConnectSummary(can: "Your helpers will be able to use \(c.name) through this connection: read and act on what this app allows.", runBy: "On Wisp's list of well-known apps. It runs as a program on the helper's own computer.", caution: nil)
+      return ConnectSummary(can: "Your agents will be able to use \(c.name) through this connection: read and act on what this app allows.", runBy: "On Wisp's list of well-known apps. It runs as a program on the agent's own computer.", caution: nil)
     }
   }
 

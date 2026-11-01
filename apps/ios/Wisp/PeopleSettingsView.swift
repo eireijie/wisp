@@ -221,7 +221,7 @@ struct ManagePersonView: View {
             catch { role = savedRole; throw error }
           }
         }
-      if lastOwner { CardHint("An organization needs at least one owner; make someone else an owner first.") }
+      if lastOwner { CardHint("A workspace needs at least one owner; make someone else an owner first.") }
       CardGroup {
         NavigationLink { TemporaryPasswordView(member: member) } label: { RowLabel(title: "Set a temporary password") }
           .accessibilityIdentifier("manage-password")

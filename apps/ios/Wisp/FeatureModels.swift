@@ -102,7 +102,7 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
     case .tasks: "Give out work and track it from start to done."
     case .voice: "Call an agent and talk instead of typing."
     case .buddy: "A small ghost on your desktop that shows what your agents are up to."
-    case .invite: "Let other people into this organization. Adds a People page and lets agents answer more than just you."
+    case .invite: "Let other people into this workspace. Adds a People page and lets agents answer more than just you."
     case .remoteDesktop: "Reach your devices from anywhere with RustDesk, from each device's page."
     }
   }

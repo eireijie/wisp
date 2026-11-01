@@ -72,7 +72,7 @@ function useSpeakerTest(engine: VoiceSettings["speak"]) {
     setTesting(true); setResult(null);
     try {
       speaker.current = createSpeaker(engine, undefined, "test");
-      await speaker.current.speak("Hello! This is how your helpers will sound.", () => {});
+      await speaker.current.speak("Hello! This is how your agents will sound.", () => {});
       if (current === run.current) setResult({ ok: true, text: "Did you hear it? If not, check your volume." });
     } catch (e) { if (current === run.current) setResult({ ok: false, text: (e as Error).message }); }
     finally { if (current === run.current) setTesting(false); }
@@ -144,8 +144,8 @@ export function VoicePage() {
         <Row label="Speaker" hint={<>Plays a short sentence.<Outcome result={speakerTest.result} /></>}><Button disabled={speakerTest.testing} onClick={speakerTest.start}>{speakerTest.testing ? "Playing…" : "Test speaker"}</Button></Row>
       </Card>
     </Section>
-    <Section title="Each helper's voice">
-      {agents.length ? <Card>{agents.map((a) => <Row key={a.id} label={a.name}><a href={href({ view: "agents", agentId: a.id, tab: "look" })} className="text-sm text-accent-text hover:underline" aria-label={`Choose voice for ${a.name}`}>Choose voice</a></Row>)}</Card> : <p className="text-sm text-muted">Add a helper first, then you can choose its voice.</p>}
+    <Section title="Each agent's voice">
+      {agents.length ? <Card>{agents.map((a) => <Row key={a.id} label={a.name}><a href={href({ view: "agents", agentId: a.id, tab: "look" })} className="text-sm text-accent-text hover:underline" aria-label={`Choose voice for ${a.name}`}>Choose voice</a></Row>)}</Card> : <p className="text-sm text-muted">Add an agent first, then you can choose its voice.</p>}
     </Section>
   </>;
 }

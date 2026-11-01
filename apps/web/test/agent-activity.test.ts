@@ -10,13 +10,13 @@ describe("runTitle", () => {
     expect(runTitle("  \n ")).toBe("");
   });
   it("reads known hub message shapes", () => {
-    expect(runTitle("@helper New task **Write a note**\n\nPut it in the vault.")).toBe("Task: Write a note");
-    expect(runTitle("@helper Run the routine **Bin day**, because it is Monday")).toBe("Routine: Bin day");
-    expect(runTitle("@helper Run the routine **Bin day**.")).toBe("Routine: Bin day");
-    expect(runTitle("@helper I just showed you how to **file invoices**. Learn it now.")).toBe("Learning: file invoices");
+    expect(runTitle("@agent New task **Write a note**\n\nPut it in the vault.")).toBe("Task: Write a note");
+    expect(runTitle("@agent Run the routine **Bin day**, because it is Monday")).toBe("Routine: Bin day");
+    expect(runTitle("@agent Run the routine **Bin day**.")).toBe("Routine: Bin day");
+    expect(runTitle("@agent I just showed you how to **file invoices**. Learn it now.")).toBe("Learning: file invoices");
   });
   it("cleans other messages", () => {
-    expect(runTitle("@helper @sam   what is **up** with `this`?\nsecond line")).toBe("what is up with this?");
+    expect(runTitle("@agent @sam   what is **up** with `this`?\nsecond line")).toBe("what is up with this?");
     expect(runTitle("\n\n_hello_ there")).toBe("hello there");
     expect(runTitle("snake_case stays")).toBe("snake_case stays");
   });

@@ -8,7 +8,7 @@ describe("routineSteps", () => {
   it("puts the goal first and keeps written steps", () => {
     expect(routineSteps(" Send dinner ideas ", "1. Check fridge")).toBe("Goal: Send dinner ideas\n\n1. Check fridge");
   });
-  it("tells the helper to work out missing steps", () => {
+  it("tells the agent to work out missing steps", () => {
     expect(routineSteps("Send dinner ideas", "  ")).toMatch(/^Goal: Send dinner ideas\n\nNo steps were written/);
   });
   it("leaves steps alone without a goal", () => {

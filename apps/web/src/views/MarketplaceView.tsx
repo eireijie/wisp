@@ -291,7 +291,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
         entry: shelfConnector(d.nodeId, i),
         presetEnv: i.env,
         summary: {
-          can: `Your helpers will be able to use ${i.name}: read and act on what it allows.`,
+          can: `Your agents will be able to use ${i.name}: read and act on what it allows.`,
           runBy: i.transport === "http" ? `It connects to ${new URL(i.url ?? "https://x").host}, as it did in ${harnessName(i.harness)}.` : `It runs on each agent's own device, as it did in ${harnessName(i.harness)}.`,
           caution: null,
         },
@@ -341,7 +341,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
     }
   };
   const removeConnector = (c: Connector) => {
-    if (!confirm(`Remove ${c.name}? Helpers will lose access to it.`)) return;
+    if (!confirm(`Remove ${c.name}? Agents will lose access to it.`)) return;
     setManageId(null);
     void act(api("DELETE", `/api/connectors/${c.id}`));
   };
@@ -423,7 +423,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
     <section aria-label="Make your own" className="space-y-2 md:hidden">
       <Label>Make your own</Label>
       <Panel>
-        <Item icon={<Tile size={40}><Wand2 size={20} strokeWidth={1.7} /></Tile>} title="Create a skill" sub="Teach your helper a way of doing something" onClick={() => setEditing("new")} />
+        <Item icon={<Tile size={40}><Wand2 size={20} strokeWidth={1.7} /></Tile>} title="Create a skill" sub="Teach your agent a way of doing something" onClick={() => setEditing("new")} />
         <Item icon={<Tile size={40}><Plug size={20} strokeWidth={1.7} /></Tile>} title="Add your own app" sub="Use any MCP server or URL" onClick={() => setForm({})} />
         <Item icon={<Tile size={40}><Download size={20} strokeWidth={1.7} /></Tile>} title="Bring a skill in" sub="From a link or a file" onClick={() => setSharing("import")} />
       </Panel>
@@ -559,7 +559,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
                   key={s.id}
                   icon={<Tile size={40}>{catalogSkill(s.catalogId ?? "") ? <CatalogIcon name={catalogSkill(s.catalogId ?? "")!.icon} fallback={Wand2} size={20} /> : skillIcon(`${s.slug} ${s.name}`)}</Tile>}
                   title={s.name}
-                  sub={`${skillOrigin(s)} · ${s.allAgents ? "all agents" : s.agentIds.length ? `${s.agentIds.length} helper${s.agentIds.length === 1 ? "" : "s"}` : "no one yet"}`}
+                  sub={`${skillOrigin(s)} · ${s.allAgents ? "all agents" : s.agentIds.length ? `${s.agentIds.length} agent${s.agentIds.length === 1 ? "" : "s"}` : "no one yet"}`}
                   onClick={() => setDetail({ kind: "skill", open: { skill: s } })}
                 />
               ))}

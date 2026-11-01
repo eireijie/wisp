@@ -39,7 +39,7 @@ struct ScheduleFields: View {
       if ["daily", "weekdays", "weekly"].contains(preset) { DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute) }
       if preset == "custom" { customInput }
     } header: { Text("Schedule") } footer: {
-      Text(schedule.isEmpty ? "Run it from here, or ask the helper in chat." : "\(describeCron(schedule)), in \(timezone).")
+      Text(schedule.isEmpty ? "Run it from here, or ask the agent in chat." : "\(describeCron(schedule)), in \(timezone).")
     }
     .onAppear {
       guard !loaded else { return }

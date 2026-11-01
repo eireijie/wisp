@@ -189,7 +189,7 @@ Use this shape, and keep it under one screen:
     tags: ["code", "github", "support"],
     plain: {
       does: "Reads a new GitHub issue, checks for duplicates, tries to reproduce it, and suggests a label, priority and owner.",
-      needs: "GitHub connected under Connected apps (or the GitHub command-line tool signed in on the helper's device), and the issue to look at.",
+      needs: "GitHub connected under Connected apps (or the GitHub command-line tool signed in on the agent's device), and the issue to look at.",
       example: "Triage the newest issues in our app repository.",
     },
     content: `# Triage a GitHub issue
@@ -214,7 +214,7 @@ Never promise dates. Be kind to reporters; thank them for detail.`,
     tags: ["research", "writing"],
     plain: {
       does: "Researches a question across several sources and writes a one or two page brief with the bottom line first.",
-      needs: "The question, and what decision it will help with. Earlier notes your helper saved are used if they exist.",
+      needs: "The question, and what decision it will help with. Earlier notes your agent saved are used if they exist.",
       example: "Research which project tools small design teams use and write me a brief.",
     },
     content: `# Research brief
@@ -344,7 +344,7 @@ Never include internal notes, other customers' data, or secrets in a reply.`,
     tags: ["browser", "computer"],
     plain: {
       does: "Fills in a form on a website step by step, checks every answer, and stops to ask you before submitting.",
-      needs: "All the details the form needs, and a device or computer the helper can use. You enter passwords, card numbers and codes yourself.",
+      needs: "All the details the form needs, and a device or computer the agent can use. You enter passwords, card numbers and codes yourself.",
       example: "Fill in the vendor registration form on this site using the details I gave you.",
     },
     content: `# Fill a web form carefully
@@ -541,7 +541,7 @@ Update the snapshot note so next time compares against today. Stay on public pag
     tags: ["writing", "docs"],
     plain: {
       does: "Writes a clear step-by-step guide for how to do something, with a troubleshooting section.",
-      needs: "Who the guide is for and the task it covers. Trying the steps itself is only possible if the helper has a device.",
+      needs: "Who the guide is for and the task it covers. Trying the steps itself is only possible if the agent has a device.",
       example: "Write a guide for new staff on how to set up their work laptop.",
     },
     content: `# Write a how-to doc
@@ -623,7 +623,7 @@ Wisp fills in \`type\`, \`created\` and \`updated\` if you leave them out, but n
 - When a save comes back with "Mentions you could link", add the links that fit.
 
 ## 7. Never save secrets
-No passwords, API keys, tokens, card numbers or one-time codes, not even in your private folder. Write where the secret lives instead ("the API key is in the GitHub connector").`,
+No passwords, API keys, tokens, card numbers or one-time codes, not even in your private folder. Write where the secret lives instead ("the API key is in the GitHub connected app").`,
 };
 
 export const BUILTIN_SKILLS: CatalogSkill[] = [MEMORY_SKILL];

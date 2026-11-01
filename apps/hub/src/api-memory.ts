@@ -58,7 +58,7 @@ export function registerMemoryStorageApi(app: FastifyInstance, hub: Hub, h: Help
     if (!c) return;
     const body = parse(z.object({ path: z.string().max(1000).nullable() }), req.body, reply);
     if (!body) return;
-    if (!hub.vaults.isPrimary(c.workspaceId)) return reply.code(409).send({ error: "Only the first organization's memory can be moved to another folder; this one stays in Wisp's data folder." });
+    if (!hub.vaults.isPrimary(c.workspaceId)) return reply.code(409).send({ error: "Only the first workspace's memory can be moved to another folder; this one stays in Wisp's data folder." });
     if (h.started.location.source === "env") return reply.code(409).send({ error: "This is set by the WISP_VAULT_DIR setting where Wisp runs; change it there." });
     const saved = saveVaultLocation(h.dataDir, body.path);
     if (!saved.ok) return reply.code(400).send({ error: saved.error });

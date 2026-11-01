@@ -50,7 +50,7 @@ export function ComputersView({ computerId, teach, deviceId }: { computerId: str
 
 type Kind = "vm" | "device" | "orgo";
 
-/** The question: what should the helper be able to do? */
+/** The question: what should the agent be able to do? */
 export type Capability = "chat" | "vm" | "device";
 
 /** Which kind of computer to create for an answer. "Answer questions only" creates nothing. */
@@ -161,7 +161,7 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
     <Modal title="Add a computer" onClose={onClose} wide>
       <div className="space-y-4">
         <div className="space-y-2">
-          <p id="cap-q" className="text-sm font-medium">What should the helper be able to do?</p>
+          <p id="cap-q" className="text-sm font-medium">What should the agent be able to do?</p>
           <div role="radiogroup" aria-labelledby="cap-q" className="space-y-2">
             {card(capability === "chat", () => pickCapability("chat"), <Hand size={18} />, "Answer questions only", "No desktop needed")}
             {card(capability === "vm", () => pickCapability("vm"), <Monitor size={18} />, "Use apps in its own desktop", "A separate desktop with a web browser, a terminal and files. Your own computer stays untouched.", vmAvailabilityNote(usable))}
@@ -177,11 +177,11 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
 
         {chatOnly && (
           <div className="rounded-xl border border-line bg-bg p-3 text-sm space-y-1">
-            <p>The helper can chat, write and look things up without a desktop of its own. Nothing will be created.</p>
+            <p>The agent can chat, write and look things up without a desktop of its own. Nothing will be created.</p>
             <p className="text-muted">
-              To set this, open your helper's page and choose Computer.{" "}
+              To set this, open your agent's page and choose Computer.{" "}
               <a href={href({ view: "agents", agentId: null })} onClick={onClose} className="underline text-accent-text">
-                Open helpers
+                Open agents
               </a>
             </p>
           </div>

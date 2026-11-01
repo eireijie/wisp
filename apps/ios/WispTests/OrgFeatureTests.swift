@@ -136,7 +136,7 @@ final class OrgFeatureTests: XCTestCase {
     let screens: [(String, AnyView)] = [
       ("Mods", AnyView(NavigationStack { FeaturesView() }.environment(store))),
       ("Agent defaults", AnyView(NavigationStack { AgentDefaultsView() }.environment(store))),
-      ("New organization", AnyView(NewOrgSheet().environment(store))),
+      ("New workspace", AnyView(NewOrgSheet().environment(store))),
       ("Agent work", AnyView(AgentWorkSheet(agentId: "a1").environment(store))),
       ("Look", AnyView(LookEditor(look: .constant(GhostLook.defaultAppearance("nova")), name: "Nova", seed: "nova").environment(store))),
     ]

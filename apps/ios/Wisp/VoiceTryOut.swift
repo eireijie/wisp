@@ -68,7 +68,7 @@ final class VoiceTryOutModel {
       try CallAudio.activate()
       let voice = CallEngines.speaker(engine: engine, voice: nil, seed: "test", hub: hub)
       speaker = voice
-      try await voice.speak("Hello! This is how your helpers will sound.", level: { _ in })
+      try await voice.speak("Hello! This is how your agents will sound.", level: { _ in })
       if run == speakerRun { speakerResult = Outcome(ok: true, text: "Did you hear it? If not, check your volume.") }
     } catch {
       if run == speakerRun { speakerResult = Outcome(ok: false, text: error.localizedDescription) }

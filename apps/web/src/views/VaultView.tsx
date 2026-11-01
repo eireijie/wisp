@@ -216,7 +216,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
           <MemoryHome
             graph={graph}
             notes={notes}
-            hiddenFolders={hidden ? { count: hidden.count, name: asAgent?.name ?? "this helper" } : null}
+            hiddenFolders={hidden ? { count: hidden.count, name: asAgent?.name ?? "this agent" } : null}
             where={where}
             snippetHtml={snippetHtml}
             onOpen={openPath}
@@ -314,7 +314,7 @@ function ViewAsDialog({ viewAs, total, visible, hiddenNames, onClose, onPick }: 
         </button>
       }
     >
-      <Overline>Helper</Overline>
+      <Overline>Agent</Overline>
       <Cards>
         <button onClick={() => setSel(null)} className="w-full min-h-12 px-4 flex items-center gap-3 text-left hover:bg-hover/60">
           <span className="flex-1 text-body">You</span>

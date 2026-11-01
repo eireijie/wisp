@@ -88,7 +88,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
       const agent = store.agent(agentId);
       const owner = agent && deviceOwnerOf(agent);
       if (owner && owner !== c.actor.id) {
-        reply.code(403).send({ error: `@${agent!.handle} runs directly on ${store.user(owner)?.name ?? "someone"}'s device, so only they can change its connectors` });
+        reply.code(403).send({ error: `@${agent!.handle} runs directly on ${store.user(owner)?.name ?? "someone"}'s device, so only they can change its connected apps` });
         return false;
       }
     }
@@ -102,7 +102,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
   function canChange(c: Caller, conn: Connector, reply: FastifyReply): boolean {
     if (isOwner(c)) return true;
     if (conn.createdBy !== c.actor.id) {
-      reply.code(403).send({ error: "Only the person who added this connector, or an owner, can change it" });
+      reply.code(403).send({ error: "Only the person who added this connected app, or an owner, can change it" });
       return false;
     }
     return deviceAllows(c, conn.agentIds, reply);
@@ -111,7 +111,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
   /** Whether the hub may call this address for the caller: only owners can point it at their own network. */
   async function addressAllowed(c: Caller, url: string, env: Record<string, string>, reply: FastifyReply): Promise<boolean> {
     if (isOwner(c) || (await isPublicUrl(fillTemplate(url, env)))) return true;
-    reply.code(400).send({ error: "Connectors can only reach public addresses. Ask an owner to add one on a private network." });
+    reply.code(400).send({ error: "Connected apps can only reach public addresses. Ask an owner to add one on a private network." });
     return false;
   }
   const changed = (c: Caller) => hub.broadcast(c.workspaceId, { type: "skills_changed" });
@@ -130,9 +130,9 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!c) return;
     const body = parse(CONNECTOR, req.body, reply);
     if (!body) return;
-    if (body.kind === "mcp-stdio" && !isOwner(c)) return reply.code(403).send({ error: "Only an owner can add a connector that runs a command" });
+    if (body.kind === "mcp-stdio" && !isOwner(c)) return reply.code(403).send({ error: "Only an owner can add a connected app that runs a command" });
     if (body.kind === "mcp-http" && !(await addressAllowed(c, body.url, body.env, reply))) return;
-    if (connectors.byName(c.workspaceId, body.name)) return reply.code(409).send({ error: `there's already a connector named "${body.name}"` });
+    if (connectors.byName(c.workspaceId, body.name)) return reply.code(409).send({ error: `there's already a connected app named "${body.name}"` });
     const agentIds = agentsIn(c, body.agentIds ?? [], reply);
     if (!agentIds || !deviceAllows(c, agentIds, reply)) return;
     const conn = connectors.create(c.workspaceId, c.actor.id, body);
@@ -200,7 +200,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
   const ownConnector = (c: Caller, req: FastifyRequest, reply: FastifyReply) => {
     const conn = connectors.get((req.params as { id: string }).id);
     if (!conn || conn.workspaceId !== c.workspaceId) {
-      reply.code(404).send({ error: "connector not found" });
+      reply.code(404).send({ error: "connected app not found" });
       return null;
     }
     return conn;
@@ -219,16 +219,16 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!c) return;
     const conn = ownConnector(c, req, reply);
     if (!conn) return;
-    if (conn.kind === "mcp-stdio" && !isOwner(c)) return reply.code(403).send({ error: "Only an owner can change a connector that runs a command" });
+    if (conn.kind === "mcp-stdio" && !isOwner(c)) return reply.code(403).send({ error: "Only an owner can change a connected app that runs a command" });
     if (!canChange(c, conn, reply)) return;
     const body = parse(CONNECTOR_PATCH, req.body, reply);
     if (!body) return;
     if (conn.kind === "mcp-http" && (body.url || body.env) && !(await addressAllowed(c, body.url ?? conn.url ?? "", body.env ?? {}, reply))) return;
     if (body.allAgents !== undefined && body.allAgents !== conn.allAgents && conn.createdBy !== c.actor.id && store.role(c.workspaceId, c.actor.id) !== "owner")
-      return reply.code(403).send({ error: "Only the person who added this connector, or the workspace owner, can turn All agents on or off" });
+      return reply.code(403).send({ error: "Only the person who added this connected app, or the workspace owner, can turn All agents on or off" });
     if (body.name) {
       const other = connectors.byName(c.workspaceId, body.name);
-      if (other && other.id !== conn.id) return reply.code(409).send({ error: `there's already a connector named "${body.name}"` });
+      if (other && other.id !== conn.id) return reply.code(409).send({ error: `there's already a connected app named "${body.name}"` });
     }
     if (body.agentIds) {
       const ids = agentsIn(c, body.agentIds, reply);
@@ -250,7 +250,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!c) return;
     const conn = ownConnector(c, req, reply);
     if (!conn) return;
-    if (!isOwner(c) && conn.createdBy !== c.actor.id) return reply.code(403).send({ error: "Only the person who added this connector, or an owner, can remove it" });
+    if (!isOwner(c) && conn.createdBy !== c.actor.id) return reply.code(403).send({ error: "Only the person who added this connected app, or an owner, can remove it" });
     connectors.remove(conn.id);
     changed(c);
     return { ok: true };
@@ -270,7 +270,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
         // whoever added a connector can always take it back off
         if ((method === "PUT" || conn.createdBy !== c.actor.id) && !deviceAllows(c, ids, reply)) return;
         if (method === "PUT" && !isOwner(c) && conn.createdBy !== c.actor.id) {
-          if (conn.kind === "mcp-stdio") return reply.code(403).send({ error: "Only an owner can give an agent a connector that runs a command" });
+          if (conn.kind === "mcp-stdio") return reply.code(403).send({ error: "Only an owner can give an agent a connected app that runs a command" });
           // its values go to the agent's device in the clear, and that could be the caller's own
           if (connectors.holdsSecrets(conn.id)) return reply.code(403).send({ error: `${conn.name} holds someone's keys, so only they or an owner can give it to agents` });
         }

@@ -52,7 +52,7 @@ struct AccessView: View {
   @State private var action = FormAction()
 
   var body: some View {
-    SettingsPage("Access", id: "access") {
+    SettingsPage("Away from home", id: "access") {
       if !store.isOwner { CardHint("Your Wisp's owner can turn this on.") }
       if let info {
         CardLabel("Away from home")

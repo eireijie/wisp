@@ -150,15 +150,15 @@ describe("node daemon", () => {
     expect(box.capabilities.commands.uvx).toEqual(expect.any(Boolean));
   });
 
-  it("says when a connector didn't start because its command isn't on the device", async () => {
+  it("says when a connected app didn't start because its command isn't on the device", async () => {
     const bolt = (await owner.agents()).find((a) => a.handle === "bolt")!;
     const conn = await owner.request("POST", "/api/connectors", { kind: "mcp-stdio", name: "Widgets", command: "wisp-no-such-command-xyz", args: [], agentIds: [bolt.id] });
     const ch = await owner.request("POST", "/api/channels", { name: "widgets" });
     await owner.send(ch.id, "@bolt use widgets");
     const reply = await waitFor(async () => (await owner.messages(ch.id)).messages.find((m) => m.author.id === bolt.id));
-    expect(reply.parts).toContainEqual({ type: "notice", text: `Connector widgets didn't start: "wisp-no-such-command-xyz" isn't installed on box.` });
+    expect(reply.parts).toContainEqual({ type: "notice", text: `Connected app widgets didn't start: "wisp-no-such-command-xyz" isn't installed on box.` });
     expect(calls.at(-1)!.connectors ?? []).toEqual([]);
-    expect(logs.some((l) => l.includes("Connector widgets didn't start"))).toBe(true);
+    expect(logs.some((l) => l.includes("Connected app widgets didn't start"))).toBe(true);
     await owner.request("DELETE", `/api/connectors/${conn.id}`);
   });
 

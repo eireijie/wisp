@@ -94,7 +94,7 @@ export function YouPage() {
         {!complete && !isGuest && card(row(<Sparkles {...ICON} />, dismissed ? "Finish setup" : "Get started", href({ view: "welcome" }), dismissed ? `${progress} of ${steps}` : `${progress}/${steps}`))}
         {card(
           <>
-            {row(<Building2 {...ICON} />, "Organization", () => setOrgs(true), orgName)}
+            {row(<Building2 {...ICON} />, "Workspace", () => setOrgs(true), orgName)}
             {!isGuest && row(<Brain {...ICON} />, "About you", href({ view: "about" }))}
           </>,
         )}
@@ -113,7 +113,7 @@ export function YouPage() {
                   </span>
                   <Toggle on={askOn} onChange={setAsk} label="Ask before risky actions" disabled={!isOwner || !policy} />
                 </div>
-                {row(<Cpu {...ICON} />, "Default model", href({ view: "settings", page: "agent-defaults" }), "Each AI tool")}
+                {row(<Cpu {...ICON} />, "Agent defaults", href({ view: "settings", page: "agent-defaults" }), "Each harness")}
               </>,
             )}
           </>
@@ -129,7 +129,7 @@ export function YouPage() {
       </div>
       {orgs && (
         <div className="fixed inset-0 z-50 flex items-end bg-black/50" onMouseDown={(e) => e.target === e.currentTarget && setOrgs(false)}>
-          <div role="dialog" aria-modal="true" aria-label="Organizations" className="w-full bg-panel border-t border-line rounded-t-[16px] pb-6 safe-bottom">
+          <div role="dialog" aria-modal="true" aria-label="Workspaces" className="w-full bg-panel border-t border-line rounded-t-[16px] pb-6 safe-bottom">
             <div className="flex justify-end p-3.5 pb-0">
               <button onClick={() => setOrgs(false)} aria-label="Close" className="circle">
                 <X size={20} />

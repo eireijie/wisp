@@ -630,7 +630,7 @@ export class NodeDaemon {
     if (!inside) {
       const missing = connectors.filter((c) => c.kind === "mcp-stdio" && c.command && !commandExists(c.command));
       for (const c of missing) {
-        const text = `Connector ${c.name} didn't start: "${c.command}" isn't installed on ${this.cfg.name}.`;
+        const text = `Connected app ${c.name} didn't start: "${c.command}" isn't installed on ${this.cfg.name}.`;
         this.log(`@${agent.handle}: ${text}`);
         this.send({ type: "run_event", runId: run.runId, event: { type: "notice", text } });
       }

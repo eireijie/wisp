@@ -55,7 +55,7 @@ struct SettingsSheet: View {
                   NavigationLink { AgentPolicyView() } label: { RowLabel(title: "Ask before risky actions", subtitle: "Shell, apps and computer use", leading: { rowIcon("shield") }) }
                     .accessibilityIdentifier("you-ask-before")
                 }
-                NavigationLink { AgentDefaultsView() } label: { RowLabel(title: "Default model", value: store.agentDefaults?.model ?? "Each harness", leading: { rowIcon("cpu") }) }
+                NavigationLink { AgentDefaultsView() } label: { RowLabel(title: "Agent defaults", value: store.agentDefaults?.model ?? "Each harness", leading: { rowIcon("cpu") }) }
                   .accessibilityIdentifier("settings-agent-defaults")
               }
             }
@@ -115,7 +115,7 @@ struct SettingsSheet: View {
   }
 
   private var guestNote: some View {
-    Text("You're a guest in \(store.workspace?.name ?? "this organization"). You can chat in the teams you're added to and use the shared folder in memory. Agents, computers and settings belong to the owner.")
+    Text("You're a guest in \(store.workspace?.name ?? "this workspace"). You can chat in the teams you're added to and use the shared folder in memory. Agents, computers and settings belong to the owner.")
       .font(.system(size: 15)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
   }
 
@@ -130,8 +130,8 @@ struct SettingsSheet: View {
         }.accessibilityIdentifier("you-profile")
       }
       if store.role != "guest" {
-        Button { orgs = true } label: { RowLabel(title: "Organization", value: store.workspace?.name, leading: { rowIcon("building.2") }) }
-          .buttonStyle(.plain).accessibilityIdentifier("you-organizations")
+        Button { orgs = true } label: { RowLabel(title: "Workspace", value: store.workspace?.name, leading: { rowIcon("building.2") }) }
+          .buttonStyle(.plain).accessibilityIdentifier("you-workspaces")
         NavigationLink { AboutYouView() } label: { RowLabel(title: "About you", leading: { rowIcon("brain") }) }
           .accessibilityIdentifier("you-about")
       }

@@ -32,9 +32,9 @@ describe("add computer choices", () => {
 
   const render = () => renderToStaticMarkup(createElement(AddComputer, { devices: [], onClose: () => {}, onCreated: () => {} }));
 
-  it("asks what the helper should be able to do, with the cloud computer under More options", () => {
+  it("asks what the agent should be able to do, with the cloud computer under More options", () => {
     const html = render();
-    expect(html).toContain("What should the helper be able to do?");
+    expect(html).toContain("What should the agent be able to do?");
     expect(html).toContain("Answer questions only");
     expect(html).toContain("More options");
   });

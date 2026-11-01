@@ -31,7 +31,7 @@
 |---|---|
 | Chat | `/` command menu; pin and unpin; a note on approve/deny; live streaming replies; per-chat drafts |
 | DM controls | Access chip (read only / edit files / full); context ring with Compact |
-| Search | Search messages, notes, channels and agents from the Chats tab |
+| Search | Search messages, notes, teams and agents from the Chats tab |
 | Inbox | What agents are doing, new replies, recent chats, tasks to check, setup card, allowance |
 | Help | Help screen from You |
 | Agents | Permissions; Connect (MCP token) and invite an outside agent; import from a device; computer and where the harness runs; personality history and template; connected apps; voice |

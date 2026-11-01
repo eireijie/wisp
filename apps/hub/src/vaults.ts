@@ -38,7 +38,7 @@ export class Vaults {
 
   /** Where an organization other than the first keeps its own files (vault, index, git gateway). */
   orgDir(workspaceId: string): string {
-    if (!/^[A-Za-z0-9_-]+$/.test(workspaceId)) throw new Error("bad organization id");
+    if (!/^[A-Za-z0-9_-]+$/.test(workspaceId)) throw new Error("bad workspace id");
     return path.join(this.dataDir, "orgs", workspaceId);
   }
 
@@ -46,7 +46,7 @@ export class Vaults {
   get(workspaceId: string): Vault {
     if (this.isPrimary(workspaceId)) return this.primary;
     const v = this.others.get(workspaceId);
-    if (!v) throw new Error(`memory for organization ${workspaceId} isn't open`);
+    if (!v) throw new Error(`memory for workspace ${workspaceId} isn't open`);
     return v.vault;
   }
 
@@ -87,7 +87,7 @@ export class Vaults {
 
   /** Close an organization's vault and delete its files (the organization was deleted). Never the first one's. */
   async remove(workspaceId: string) {
-    if (this.isPrimary(workspaceId)) throw new Error("the first organization's memory can't be removed");
+    if (this.isPrimary(workspaceId)) throw new Error("the first workspace's memory can't be removed");
     await this.opening.get(workspaceId)?.catch(() => {});
     const o = this.others.get(workspaceId);
     if (o) {

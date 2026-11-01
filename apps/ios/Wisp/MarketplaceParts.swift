@@ -127,13 +127,13 @@ struct TryItSheet: View {
   var body: some View {
     let text = MarketText.trySuggestion(name: name, description: description)
     MarketSheet(title: "Try it", subtitle: name) {
-      Text(helper == nil ? "Install the skill first so a helper can use it. Meanwhile, this is a request to try." : "Start a chat with this request ready. Add your own details, then send.")
+      Text(helper == nil ? "Install the skill first so an agent can use it. Meanwhile, this is a request to try." : "Start a chat with this request ready. Add your own details, then send.")
         .font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       Text(text).font(.system(size: 15)).textSelection(.enabled).padding(16).frame(maxWidth: .infinity, alignment: .leading)
         .background(Palette.control, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline))
       if holders.count > 1 {
-        Picker("Which helper?", selection: Binding(get: { helper?.id ?? "" }, set: { pick = $0 })) { ForEach(holders) { Text($0.name).tag($0.id) } }.pickerStyle(.menu)
+        Picker("Which agent?", selection: Binding(get: { helper?.id ?? "" }, set: { pick = $0 })) { ForEach(holders) { Text($0.name).tag($0.id) } }.pickerStyle(.menu)
       }
       InlineError(error: action.error)
       HStack(spacing: 10) {
@@ -175,7 +175,7 @@ struct SkillShareSheet: View {
   private var title: String {
     switch page {
     case .home: skill == nil ? "Bring one in" : "Share a skill"
-    case .agents: "Share with another helper"
+    case .agents: "Share with another agent"
     case .paste: "Paste a link"
     case .found: "Bring it in"
     }
@@ -208,7 +208,7 @@ struct SkillShareSheet: View {
   @ViewBuilder private var home: some View {
     if let skill {
       CardGroup {
-        MarketRow(symbol: "wand.and.stars", tile: 50, title: skill.name, subtitle: used.isEmpty ? "No helper has it yet" : "Used by \(ShelfLogic.sentence(used))")
+        MarketRow(symbol: "wand.and.stars", tile: 50, title: skill.name, subtitle: used.isEmpty ? "No agent has it yet" : "Used by \(ShelfLogic.sentence(used))")
       }
       CardGroup {
         Button { UIPasteboard.general.string = SkillShare.link(SharedSkill(name: skill.name, description: skill.description ?? "", content: skill.content ?? "", tags: skill.tags ?? [])); note = "Link copied. Anyone with it can paste it into Bring one in." } label: {

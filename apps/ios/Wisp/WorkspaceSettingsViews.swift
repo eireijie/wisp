@@ -14,7 +14,7 @@ private let accessChoices: [(key: String, title: String, detail: String)] = [
   ("full", "Full access", "Files and commands on the device"),
 ]
 
-/** Settings → Agents policy (set-AgentsPolicy.dc.html): the rules every agent here follows. Changes save as you make them. */
+/** Settings → Permissions (set-AgentsPolicy.dc.html): the rules every agent here follows. Changes save as you make them. */
 struct AgentPolicyView: View {
   @Environment(Store.self) private var store
   @State private var action = FormAction()
@@ -25,7 +25,7 @@ struct AgentPolicyView: View {
   private var lead: String? { store.agent(store.taskLeadOverride ?? store.taskLead ?? "")?.name }
 
   var body: some View {
-    SettingsPage("Agents", id: "agent-policy") {
+    SettingsPage("Permissions", id: "agent-policy") {
       if !store.isOwner { OwnersOnlyNote() }
       if let policy {
         CardGroup {
@@ -159,7 +159,7 @@ struct TeamLeadView: View {
   private func save(_ id: String?) { action.run { try await store.saveLead(id) } }
 }
 
-/** Settings → Agent computers: how big new VMs are, and the Orgo cloud-computer key. */
+/** Settings → Computers: how big new VMs are, and the Orgo cloud-computer key. */
 struct ComputerSettingsView: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
@@ -171,7 +171,7 @@ struct ComputerSettingsView: View {
   @State private var action = FormAction()
 
   var body: some View {
-    SettingsPage("Agent computers", id: "computers-settings") {
+    SettingsPage("Computers", id: "computers-settings") {
       if !store.isOwner { OwnersOnlyNote() }
       CardLabel("Defaults")
       CardGroup {
@@ -194,7 +194,7 @@ struct ComputerSettingsView: View {
         CardLabel("New agents get")
         CardGroup {
           NavigationLink { AgentDefaultsView() } label: {
-            RowLabel(title: "AI tool, model and computer", value: store.agentDefaults?.model ?? "Each harness")
+            RowLabel(title: "Harness, model and computer", value: store.agentDefaults?.model ?? "Each harness")
           }
         }
       }
@@ -221,9 +221,9 @@ struct ConnectionsSettingsView: View {
   }
 
   var body: some View {
-    SettingsPage("Connections", id: "connections") {
-      group("Connection tokens", kind: "connection", name: { _ in "wisp-mcp" }, none: "None.", hint: "Made on an agent's Connect tab, for an AI tool that runs elsewhere.")
-      group("AI tools on devices", kind: "harness", name: { $0.device ?? "Device" }, none: "None.", hint: "Disconnecting one makes the device get a fresh one next run.")
+    SettingsPage("Outside agents", id: "connections") {
+      group("Connection tokens", kind: "connection", name: { _ in "wisp-mcp" }, none: "None.", hint: "Made on an agent's Connect tab, for a harness that runs elsewhere.")
+      group("Harnesses on devices", kind: "harness", name: { $0.device ?? "Device" }, none: "None.", hint: "Disconnecting one makes the device get a fresh one next run.")
       StatusLine(error: action.error)
     }
     .task { do { connections = try await store.connection().get("/api/connections") } catch { action.error = error.localizedDescription; connections = [] } }
@@ -255,7 +255,7 @@ struct ConnectionsSettingsView: View {
   }
 }
 
-/** Settings → Data and export (set-Data.dc.html). */
+/** Settings → Data (set-Data.dc.html). */
 struct DataExportView: View {
   @Environment(Store.self) private var store
   @State private var info: ExportInfo?
@@ -263,17 +263,16 @@ struct DataExportView: View {
   @State private var action = FormAction()
 
   var body: some View {
-    SettingsPage("Data and export", id: "data") {
+    SettingsPage("Data", id: "data") {
       CardLabel("Back up everything")
       if let info {
         CardGroup {
           ValueRow(title: "Where the folder is", value: store.nodes.first(where: { $0.online })?.name ?? "The computer Wisp runs on")
           ValueRow(title: "What is inside", value: "\(info.notes ?? 0) notes · \(info.messages ?? 0) messages")
         }
-        if let dir = info.dataDir { Text(dir).font(.system(size: 13, design: .monospaced)).foregroundStyle(Palette.faint).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6) }
         CardHint("\(info.files ?? 0) files and \(info.agents ?? 0) agents too. Copy the whole Wisp folder to a USB drive or cloud folder and you have a full backup. Memory notes live in a different folder if you moved it.")
       } else if !store.isOwner {
-        CardHint("Ask an organization owner for the backup folder.")
+        CardHint("Ask a workspace owner for the backup folder.")
       }
       CardGroup {
         NavigationLink { HowToBackUpView() } label: { RowLabel(title: "How to back up") }
@@ -289,7 +288,7 @@ struct DataExportView: View {
       }
       if action.busy { ProgressView() }
       if let exported { ShareLink("Save or share download", item: exported).buttonStyle(.pill(.secondary)) }
-      CardHint("Copies to keep or read. They can't restore an organization on their own; the folder backup does.")
+      CardHint("Copies to keep or read. They can't restore a workspace on their own; the folder backup does.")
       StatusLine(error: action.error)
     }
     .task { if store.isOwner { do { info = try await store.connection().get("/api/settings/data"); try? await store.refreshMemoryStorage() } catch { action.error = error.localizedDescription } } }

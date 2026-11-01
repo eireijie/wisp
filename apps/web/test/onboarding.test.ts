@@ -43,7 +43,7 @@ describe("isLocalOnlyHost", () => {
   });
 });
 
-describe("a helper whose AI isn't signed in (W-16)", () => {
+describe("an agent whose AI isn't signed in (W-16)", () => {
   const device = { id: "n1", name: "my-mac", online: true, agents: [], harnesses: [{ id: "codex", version: "1", accounts: { default: false } }] };
   const helper = { id: "a", name: "Atlas", nodeId: "n1", harness: "codex", settings: {}, computerId: null } as never;
   it("doesn't offer Try asking, and Help says what to fix", () => {

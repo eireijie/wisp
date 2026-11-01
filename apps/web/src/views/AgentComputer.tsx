@@ -331,7 +331,7 @@ export function RoutinesPanel({ agent, active }: { agent: Agent; active: boolean
   return (
     <div className="max-w-3xl space-y-5">
       <Intro title="Routines">
-        <p>A routine is something your helper does on a schedule, like dinner ideas every Monday.</p>
+        <p>A routine is something your agent does on a schedule, like dinner ideas every Monday.</p>
         <p>Things @{agent.handle} knows how to do again on its own. Teach one by doing the task once while it watches, or write the steps yourself. Routines can run on a schedule.</p>
       </Intro>
       <div className="flex flex-wrap gap-2">
@@ -429,7 +429,7 @@ function WriteRoutine({ agent, onClose }: { agent: Agent; onClose: () => void })
         <Field label="Name">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dinner ideas" />
         </Field>
-        <Field label="Steps (optional)" hint="Your helper works out the steps if you leave this empty. Name buttons and fields by their labels, say what changes each time, and what done looks like.">
+        <Field label="Steps (optional)" hint="Your agent works out the steps if you leave this empty. Name buttons and fields by their labels, say what changes each time, and what done looks like.">
           <Textarea rows={5} value={steps} onChange={(e) => setSteps(e.target.value)} placeholder="1. Look at what is in the fridge" />
         </Field>
         <ScheduleEditor value={schedule} onChange={setSchedule} />
@@ -559,7 +559,7 @@ function ScheduleEditor({ value, onChange }: { value: string | null; onChange: (
         {preset === "custom" && startedCustom && customInput}
       </div>
       {!startedCustom && <MoreOptions about="a custom schedule">{customInput}</MoreOptions>}
-      <p className="text-xs text-muted">{cron ? `${describeCron(cron)}, in ${TZ}.` : "Run it from here, or ask the helper in chat."}</p>
+      <p className="text-xs text-muted">{cron ? `${describeCron(cron)}, in ${TZ}.` : "Run it from here, or ask the agent in chat."}</p>
     </div>
   );
 }

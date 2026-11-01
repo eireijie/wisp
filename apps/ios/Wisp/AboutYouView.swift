@@ -64,7 +64,7 @@ struct AboutYouView: View {
 
   private var composer: some View {
     VStack(alignment: .leading, spacing: 12) {
-      TextField("What would you like your helper to remember?", text: $draft, axis: .vertical).lineLimit(1...6).focused($focused).foregroundStyle(Palette.text)
+      TextField("What would you like your agent to remember?", text: $draft, axis: .vertical).lineLimit(1...6).focused($focused).foregroundStyle(Palette.text)
         .accessibilityIdentifier("about-remember")
       HStack(spacing: 8) {
         if !draft.trimmed.isEmpty || draftKind == "plan" || focused {
@@ -183,7 +183,7 @@ struct MemoryItemEditor: View {
         try await store.remember(body, user: user); dismiss()
       }
     }) {
-      TextField("What would you like your helper to remember?", text: $text, axis: .vertical).lineLimit(4...12)
+      TextField("What would you like your agent to remember?", text: $text, axis: .vertical).lineLimit(4...12)
       if item == nil { Picker("Category", selection: $selectedKind) { ForEach(AboutYouView.kinds, id: \.0) { Text($0.1).tag($0.0) } } }
       if selectedKind == "plan" { TextField("Due date (YYYY-MM-DD)", text: $due).keyboardType(.numbersAndPunctuation) }
     }

@@ -39,7 +39,7 @@ export function UserAvatarButton({ size, desktop }: { size?: number; desktop?: b
   return (
     <a href={desktop ? href({ view: "settings", page: null }) : href({ view: "you" })} aria-label="You and settings" title="You and settings" className="circle relative font-medium text-ink/85" style={{ width: size, height: size, fontSize: size * 0.3 }}>
       {initialsOf(me.user.name)}
-      {elsewhere && <span className="absolute right-0 bottom-0 size-3 rounded-full bg-badge border-2 border-app" aria-label="New messages in another organization" />}
+      {elsewhere && <span className="absolute right-0 bottom-0 size-3 rounded-full bg-badge border-2 border-app" aria-label="New messages in another workspace" />}
     </a>
   );
 }
@@ -105,7 +105,7 @@ export function Rail({ route }: { route: Route }) {
     <nav aria-label="Wisp" className="w-[96px] shrink-0 flex flex-col items-center gap-1 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4">
       <OrgSwitcher
         trigger={(open, toggle) => (
-          <button onClick={toggle} aria-expanded={open} aria-haspopup="menu" aria-label={`${me.workspace.name}, switch organization`} title={me.workspace.name} className="mb-4 flex text-ink rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
+          <button onClick={toggle} aria-expanded={open} aria-haspopup="menu" aria-label={`${me.workspace.name}, switch workspace`} title={me.workspace.name} className="mb-4 flex text-ink rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
             <WispGhost size={34} />
           </button>
         )}

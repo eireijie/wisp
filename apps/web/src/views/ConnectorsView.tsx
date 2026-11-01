@@ -43,13 +43,13 @@ export function connectSummary(src: { builtIn: CatalogConnector } | { entry: Mar
     const c = src.builtIn;
     const host = c.kind === "mcp-http" ? hostOf(c.url) : null;
     return {
-      can: c.kind === "secret" ? `Your helpers get the key you enter, so they can use ${c.name} with it.` : `Your helpers will be able to use ${c.name} through this connection: read and act on what this app allows.`,
+      can: c.kind === "secret" ? `Your agents get the key you enter, so they can use ${c.name} with it.` : `Your agents will be able to use ${c.name} through this connection: read and act on what this app allows.`,
       runBy:
         c.kind === "secret"
-          ? "Wisp keeps the key and gives it only to the helpers you pick."
+          ? "Wisp keeps the key and gives it only to the agents you pick."
           : c.kind === "mcp-http"
             ? `On Wisp's list of well-known apps. It connects to ${host ?? "the app's own address"}, not to a server run by Wisp.`
-            : "On Wisp's list of well-known apps. It runs as a program on the helper's own computer.",
+            : "On Wisp's list of well-known apps. It runs as a program on the agent's own computer.",
       caution: null,
     };
   }
@@ -57,7 +57,7 @@ export function connectSummary(src: { builtIn: CatalogConnector } | { entry: Mar
   const trust = trustLabel(entry);
   const name = entry.name;
   const who = entry.domain ? `${entry.publisher} (${entry.domain})` : entry.publisher;
-  const can = install.fields.length ? `Your helpers get the key you enter, so they can use ${name} with it.` : `Your helpers will be able to use ${name} through this connection: read and act on what this app allows.`;
+  const can = install.fields.length ? `Your agents get the key you enter, so they can use ${name} with it.` : `Your agents will be able to use ${name} through this connection: read and act on what this app allows.`;
   if (trust.kind === "unverified") {
     return { can, runBy: `Run by ${entry.publisher}, not by the app's maker or Wisp.`, caution: "Nobody has confirmed who they are. Only connect if you trust them." };
   }
@@ -73,7 +73,7 @@ export function BeforeYouConnect({ s }: { s: ConnectSummary }) {
     <section aria-label="Before you connect" className="space-y-2">
       <Label>Before you connect</Label>
       <Panel>
-        <Item icon={<Tile size={40}><Plug size={20} strokeWidth={1.7} /></Tile>} title="What helpers can do" sub={<span className="whitespace-normal">{s.can}</span>} />
+        <Item icon={<Tile size={40}><Plug size={20} strokeWidth={1.7} /></Tile>} title="What agents can do" sub={<span className="whitespace-normal">{s.can}</span>} />
         <Item icon={<Tile size={40}><ShieldCheck size={20} strokeWidth={1.7} /></Tile>} title="Who runs it" sub={<span className="whitespace-normal">{s.runBy}</span>} />
         {s.caution && <Item icon={<Tile size={40}><TriangleAlert size={20} strokeWidth={1.7} className="text-warn" /></Tile>} title="Take care" sub={<span className="whitespace-normal text-warn">{s.caution}</span>} />}
       </Panel>
@@ -327,7 +327,7 @@ export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved
         )}
 
         <div className="space-y-2">
-          <Label>Which helpers get it</Label>
+          <Label>Which agents get it</Label>
           <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} note={agentNote(kind, command, devices)} unavailable={(a) => !harnessSupportsConnectors(a.harness, kind)} allAgents={{ on: allAgents, onChange: setAllAgents }} />
         </div>
         <MoreOptions about="what it works with">

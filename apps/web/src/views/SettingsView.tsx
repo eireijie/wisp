@@ -56,15 +56,15 @@ const NAV: NavSection[] = [
   {
     section: "Agents",
     pages: [
-      { id: "agents", label: "Agents policy", icon: ic(Bot), noGuests: true },
+      { id: "agents", label: "Permissions", icon: ic(Bot), noGuests: true },
       { id: "agent-defaults", label: "Agent defaults", icon: ic(Wrench), noGuests: true },
       { id: "models", label: "Models", icon: ic(Brain), noGuests: true },
       { id: "harnesses", label: "Harnesses", icon: ic(SquareTerminal), noGuests: true },
-      { id: "runtimes", label: "Agent runtimes", icon: ic(Cpu), noGuests: true },
-      { id: "logins", label: "Agent logins", icon: ic(KeyRound), noGuests: true },
+      { id: "runtimes", label: "Harness setup", icon: ic(Cpu), noGuests: true },
+      { id: "logins", label: "Logins", icon: ic(KeyRound), noGuests: true },
       { id: "apps", label: "Connected apps", icon: ic(Store), noGuests: true },
       { id: "skills", label: "Skills", icon: ic(Wand2), noGuests: true },
-      { id: "connections", label: "Connections", icon: ic(Plug), noGuests: true },
+      { id: "connections", label: "Outside agents", icon: ic(Plug), noGuests: true },
       { id: "memory", label: "Memory", icon: ic(BookOpen), noGuests: true },
     ],
   },
@@ -72,15 +72,15 @@ const NAV: NavSection[] = [
     section: "Devices",
     pages: [
       { id: "devices", label: "Devices", icon: ic(Monitor), noGuests: true },
-      { id: "computers", label: "Agent computers", icon: ic(Sparkles), noGuests: true },
-      { id: "access", label: "Access", icon: ic(Wifi), noGuests: true },
+      { id: "computers", label: "Computers", icon: ic(Sparkles), noGuests: true },
+      { id: "access", label: "Away from home", icon: ic(Wifi), noGuests: true },
       { id: "mobile", label: "Mobile", icon: ic(Smartphone), noGuests: true },
     ],
   },
   {
     section: "More",
     pages: [
-      { id: "data", label: "Data and export", icon: ic(Database), noGuests: true },
+      { id: "data", label: "Data", icon: ic(Database), noGuests: true },
       { id: "updates", label: "About", icon: ic(Info) },
     ],
   },
@@ -109,7 +109,7 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   ),
   access: () => (
     <>
-      <PageHeader title="Access" />
+      <PageHeader title="Away from home" />
       <AccessPanel />
     </>
   ),

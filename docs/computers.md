@@ -105,7 +105,7 @@ wisp node rustdesk        # at that device
 It installs [RustDesk](https://rustdesk.com), free and open-source remote desktop, after asking (Homebrew on a Mac, winget on Windows, RustDesk's own .deb from its GitHub releases on Debian and Ubuntu; anywhere else, install it yourself and run the command again). Then it opens RustDesk and reads the device's RustDesk ID.
 
 - **The password is yours.** Set a permanent password in RustDesk (**Settings → Security → Use permanent password**) and keep it in your password manager. Wisp never sees or stores it.
-- **Only you see the ID.** It shows on the device's page under **Remote desktop**, with **Copy ID** and **Open in RustDesk** (which opens the RustDesk app on the computer or phone you're using). Nobody else in the organization gets it.
+- **Only you see the ID.** It shows on the device's page under **Remote desktop**, with **Copy ID** and **Open in RustDesk** (which opens the RustDesk app on the computer or phone you're using). Nobody else in the workspace gets it.
 - **On a Mac**, RustDesk asks for Screen Recording and Accessibility in System Settings → Privacy & Security.
 - `wisp node rustdesk off` stops showing the ID in Wisp. RustDesk stays installed and works as before. `wisp doctor` shows whether it's set up.
 

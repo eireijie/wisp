@@ -101,7 +101,7 @@ export function registerOrgApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     const c = need(req, reply, { user: true });
     if (!c) return;
     const wsId = (req.params as { id: string }).id;
-    if (!store.role(wsId, c.actor.id)) return reply.code(403).send({ error: "you're not in that organization" });
+    if (!store.role(wsId, c.actor.id)) return reply.code(403).send({ error: "you're not in that workspace" });
     return { token: moveSession(req, c.actor.id, wsId) };
   });
 
@@ -117,14 +117,14 @@ export function registerOrgApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     const body = parse(z.object({ name: z.string() }), req.body ?? {}, reply);
     if (!body) return;
     const ws = store.workspace(wsId);
-    if (!ws || !store.role(wsId, c.actor.id)) return reply.code(404).send({ error: "organization not found" });
-    if (store.role(wsId, c.actor.id) !== "owner") return reply.code(403).send({ error: "only an owner can delete this organization" });
-    if (body.name.trim() !== ws.name) return reply.code(400).send({ error: "type the organization's name to delete it" });
-    if (hub.vaults.isPrimary(wsId)) return reply.code(409).send({ error: "this is the first organization on this Wisp, so it can't be deleted" });
+    if (!ws || !store.role(wsId, c.actor.id)) return reply.code(404).send({ error: "workspace not found" });
+    if (store.role(wsId, c.actor.id) !== "owner") return reply.code(403).send({ error: "only an owner can delete this workspace" });
+    if (body.name.trim() !== ws.name) return reply.code(400).send({ error: "type the workspace's name to delete it" });
+    if (hub.vaults.isPrimary(wsId)) return reply.code(409).send({ error: "this is the first workspace on this Wisp, so it can't be deleted" });
     const next = db
       .prepare("SELECT w.id FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? AND w.id != ? ORDER BY w.created_at LIMIT 1")
       .get(c.actor.id, wsId) as { id: string } | undefined;
-    if (!next) return reply.code(409).send({ error: "this is your only organization; make or join another one first" });
+    if (!next) return reply.code(409).send({ error: "this is your only workspace; make or join another one first" });
 
     for (const a of store.agents(wsId)) for (const r of store.activeRuns(a.id)) hub.cancelRun(r.id);
     for (const comp of store.computers(wsId)) await hub.computers.remove(comp);
