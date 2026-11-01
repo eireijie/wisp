@@ -42,6 +42,8 @@ export function agentPolicy(hub: Hub, workspaceId: string) {
     subAgents: get("agents.subAgents") === "true",
     /** most agents agents may have made in the organization at once */
     maxAgentMade: num("agents.maxAgentMade", 10, 1, 50),
+    /** agents save how they did things as skills (skill_save); on unless an owner turns it off */
+    learnSkills: get("agents.learnSkills") !== "false",
   };
 }
 

@@ -28,23 +28,30 @@
   body {
     background: var(--ground); color: var(--ink);
     font: 15px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif;
-    display: grid; place-items: center; padding: 24px; min-height: 100vh; -webkit-font-smoothing: antialiased;
+    display: flex; height: 100vh; overflow: hidden; -webkit-font-smoothing: antialiased; --k: 1;
   }
+  /* the stage where the wisps live, and beside it the panel with what you do next */
+  #stage { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+  .side { width: 448px; flex: none; padding: 12px 12px 12px 0; display: flex; min-height: 0; }
   main {
-    width: 100%; max-width: 472px; min-height: 500px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 32px;
-    display: flex; flex-direction: column; gap: 14px;
+    flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 32px 28px;
+    display: flex; flex-direction: column; gap: 0; overflow-y: auto;
   }
-  header { display: grid; gap: 14px; }
-  header svg { width: 44px; height: 44px; color: var(--ink); }
+  .top { display: flex; align-items: center; gap: 12px; height: 36px; flex: none; margin-bottom: 26px; }
+  #back { width: 32px; height: 32px; flex: none; padding: 0; border-radius: 50%; display: grid; place-items: center; }
+  #back svg { width: 16px; height: 16px; }
+  #back:active { transform: scale(0.9); }
+  .track { flex: 1; height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  #fill { height: 3px; width: 4%; border-radius: 2px; background: var(--ink); transition: width 600ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  header { display: grid; gap: 14px; margin-bottom: 18px; }
   h1 { font-size: 22px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.02em; line-height: 1.2; }
   header p { margin: 0; color: var(--muted); font-size: 14px; }
   header p:empty { display: none; }
-  /* only the first screen has the big welcome; the others lead with their own title (and the ghost keeps floating while Wisp starts) */
-  main[data-screen]:not([data-screen="welcome"]):not([data-screen="starting"]):not([data-screen="unreachable"]) header { display: none; }
-  main[data-screen="starting"] header div, main[data-screen="unreachable"] header div { display: none; }
+  /* only the first screen has the welcome; the others lead with their own title */
+  main[data-screen]:not([data-screen="welcome"]) header { display: none; }
   section { display: flex; flex-direction: column; flex: 1; }
   /* the screens that fill the panel: what you do next sits at the bottom */
-  main > div:not([hidden]) { display: flex; flex-direction: column; flex: 1; }
+  main > div:not([hidden]):not(.top) { display: flex; flex-direction: column; flex: 1; }
   .push { flex: 1; min-height: 14px; }
   section > h2 { font-size: 22px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.02em; line-height: 1.2; }
   section > p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
@@ -55,7 +62,10 @@
     font: inherit; font-weight: 500; font-size: 15px; height: 42px; border-radius: 8px; padding: 0 22px; cursor: pointer;
     border: 1px solid var(--control-line); background: var(--control); color: var(--ink);
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+    transition: transform 180ms cubic-bezier(0.2, 0.9, 0.25, 1.3), border-color 160ms, opacity 160ms;
   }
+  button:hover:not(:disabled):not(.link) { transform: translateY(-1px); }
+  button:active:not(:disabled) { transform: scale(0.97); }
   button:disabled { opacity: 0.5; cursor: default; }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); box-shadow: none; }
   button.link { border: 0; background: none; box-shadow: none; height: 44px; padding: 0 12px; color: var(--link); font-weight: 500; }
@@ -81,14 +91,13 @@
     background: var(--card); border: 1px solid var(--line); box-shadow: none; font-weight: 400; width: 100%; flex: none;
   }
   .choice:hover { border-color: var(--faint); }
-  .choice.primary { background: var(--card); border-color: var(--ink); color: var(--ink); }
+  .choice:hover:not(:disabled) { transform: translateY(-2px); }
+  .choice.primary { background: var(--card); border-color: var(--line); color: var(--ink); }
+  .choice.primary:hover { border-color: var(--faint); }
   .choice > svg { width: 22px; height: 22px; flex: none; }
   .choice .text { flex: 1; display: grid; gap: 3px; }
   .choice strong { font-size: 15px; font-weight: 500; }
   .choice .text span { color: var(--muted); font-size: 13px; }
-  .bar { height: 4px; background: var(--chip); border-radius: 2px; overflow: hidden; margin-bottom: 14px; }
-  .bar i { display: block; height: 4px; width: 40%; background: var(--ink); border-radius: 2px; animation: slide 1.4s ease-in-out infinite alternate; }
-  @keyframes slide { from { transform: translateX(-20%); } to { transform: translateX(170%); } }
   a { color: var(--link); }
   /* found Wisps and waiting rows */
   .found { display: grid; margin: 0; }
@@ -101,29 +110,38 @@
   .found-row button { height: 38px; padding: 0 18px; }
   .status-row { display: flex; align-items: center; gap: 12px; padding: 0 18px; min-height: 64px; color: var(--muted); font-size: 15px; }
   .status-row .dots { display: flex; gap: 4px; }
-  .status-row .dots i, .checks .dot.wait { width: 6px; height: 6px; border-radius: 3px; background: var(--muted); animation: pulse 1.2s infinite; }
+  .status-row .dots i { width: 6px; height: 6px; border-radius: 3px; background: var(--muted); animation: pulse 1.2s infinite; }
   .status-row .dots i:nth-child(2) { animation-delay: 0.2s; }
   .status-row .dots i:nth-child(3) { animation-delay: 0.4s; }
   .found:empty + .status-row { border-top: 0; }
   .waiting { text-align: center; }
-  .code {
-    font-size: 34px; font-weight: 600; letter-spacing: 0.2em; font-variant-numeric: tabular-nums; margin: 6px 0 18px;
-    background: var(--card); border-radius: 12px; padding: 20px 18px 20px calc(18px + 0.2em);
-  }
+  .code { display: flex; justify-content: center; align-items: center; gap: 6px; margin: 6px 0 18px; }
+  .digit { width: 44px; height: 58px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); display: grid; place-items: center; font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; animation: digit 500ms cubic-bezier(0.2, 0.9, 0.25, 1.3) both; }
+  .digit.gap { width: 10px; background: none; border: 0; color: transparent; }
+  @keyframes digit { from { opacity: 0; transform: translateY(10px) scale(0.9); } }
   .checks { list-style: none; padding: 0; margin: 0 0 12px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
   .checks li { display: flex; gap: 12px; align-items: center; padding: 12px 14px; font-size: 14px; border-top: 1px solid var(--line); }
   .checks li:first-child { border-top: 0; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .dot.ok { background: var(--ok); } .dot.no { background: var(--off); } .dot.wait { background: var(--muted); } .checks .dot.bad { background: var(--bad); }
+  /* a row's state: a check that draws itself, a spinning ring, a quiet dot, or what went wrong */
+  .dot { width: 18px; height: 18px; flex: none; display: grid; place-items: center; }
+  .dot.ok::after { content: ""; width: 12px; height: 7px; margin-top: -3px; border-left: 3px solid var(--ok); border-bottom: 3px solid var(--ok); border-radius: 1px; transform: rotate(-45deg); animation: tick 340ms cubic-bezier(0.2, 0.9, 0.25, 1.4) both; }
+  @keyframes tick { from { opacity: 0; transform: rotate(-45deg) scale(0.3); } }
+  .dot.wait::after { content: ""; width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--ink); animation: spin 800ms linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .dot.no::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+  .checks .dot.bad::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
   @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
   pre {
     font: 11.5px ui-monospace, Menlo, monospace; background: var(--card); border-radius: 10px; padding: 12px;
     max-height: 200px; overflow: auto; white-space: pre-wrap; color: var(--muted);
   }
   .center { text-align: center; padding: 6px 0; }
-  .spinner { display: none; }
-  .float { animation: float 2.6s ease-in-out infinite; }
-  @keyframes float { 50% { transform: translateY(-6px); } }
+  /* each screen's content eases in, a little after the last line */
+  #welcome > *, main > section > *, main > div > section > * { animation: rise 460ms cubic-bezier(0.2, 0.85, 0.25, 1) both; }
+  #welcome > :nth-child(2), main > section > :nth-child(2), main > div > section > :nth-child(2) { animation-delay: 50ms; }
+  #welcome > :nth-child(3), main > section > :nth-child(3), main > div > section > :nth-child(3) { animation-delay: 100ms; }
+  main > section > :nth-child(n+4), main > div > section > :nth-child(n+4) { animation-delay: 150ms; }
+  @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
   ol.steps { margin: 0 0 14px; padding-left: 20px; color: var(--muted); }
   ol.steps li { margin-bottom: 4px; }
   .plans { display: grid; gap: 8px; margin: 4px 0 14px; }
@@ -135,15 +153,68 @@
   .plan .price { font-weight: 600; white-space: nowrap; }
   .tag { font-size: 11.5px; background: var(--chip); border-radius: 6px; padding: 1px 6px; margin-left: 6px; font-weight: 500; color: var(--muted); }
   :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
-  @media (prefers-reduced-motion: reduce) { .float, .status-row .dots i, .checks .dot.wait, .bar i { animation: none; } }
-  @media (max-width: 520px) { main { padding: 24px 18px; } }
+  /* the wisps: the same drawing and motion as the app's ghost */
+  .w { position: absolute; left: 0; top: 0; width: 300px; height: 300px; pointer-events: none; transition: left 850ms cubic-bezier(0.3, 0.85, 0.3, 1), top 850ms cubic-bezier(0.3, 0.85, 0.3, 1), transform 850ms cubic-bezier(0.3, 0.85, 0.3, 1), opacity 600ms; }
+  .w svg { display: block; overflow: visible; width: 100%; height: 100%; }
+  @property --ga-a{syntax:"<angle>";inherits:false;initial-value:52deg}
+  @property --ga-w{syntax:"<angle>";inherits:false;initial-value:0deg}
+  .ga{transform-box:view-box;transform-origin:0 0}
+  .ga-awake{--ga-a:52deg}
+  .ga-breathe{animation:ga-breathe 4s ease-in-out infinite}
+  .ga-wave{animation:ga-hi-wave 5s ease-in-out infinite}
+  .ga-cheer{--ga-a:-52deg;animation:ga-cheer 1.1s ease-in-out infinite}
+  .ga-signarm{--ga-a:-30deg;animation:ga-sign 1.5s ease-in-out infinite}
+  .ga-tap{--ga-a:120deg;animation:ga-tap .46s ease-in-out infinite}
+  @keyframes ga-hi-wave{0%,54%{--ga-a:52deg}62%{--ga-a:-62deg}67%{--ga-a:-36deg}72%{--ga-a:-72deg}77%{--ga-a:-38deg}82%{--ga-a:-72deg}88%{--ga-a:-52deg}97%,100%{--ga-a:52deg}}
+  @keyframes ga-breathe{0%,100%{--ga-w:0deg}50%{--ga-w:3deg}}
+  @keyframes ga-cheer{0%,100%{--ga-a:-36deg}50%{--ga-a:-76deg}}
+  @keyframes ga-sign{0%,100%{--ga-a:-22deg}50%{--ga-a:-40deg}}
+  @keyframes ga-tap{0%,100%{--ga-w:0deg}50%{--ga-w:-9deg}}
+  .keys{animation:keys .9s steps(2) infinite}
+  @keyframes keys{50%{stroke-opacity:1}}
+  .mo{transform-box:view-box;transform-origin:60px 100px}
+  .mo-float{animation:ghost-float 3.2s ease-in-out infinite}
+  .mo-bounce{animation:ghost-bounce 1.7s ease-in-out infinite}
+  .mo-sway{animation:ghost-sway 3s ease-in-out infinite}
+  .mo-hop{animation:ga-hop 1.1s ease-in-out infinite}
+  .mo-wait{animation:ghost-nudge 4.5s ease-in-out infinite}
+  @keyframes ghost-float{0%,100%{transform:translateY(1.5px)}50%{transform:translateY(-4px)}}
+  @keyframes ghost-bounce{0%,100%{transform:translateY(0) scale(1.04,.96)}45%{transform:translateY(-7px) scale(.97,1.03)}60%{transform:translateY(-7px) scale(1,1)}}
+  @keyframes ghost-sway{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+  @keyframes ga-hop{0%,100%{transform:translateY(0) scale(1.05,.95)}18%,82%{transform:translateY(0) scale(1)}50%{transform:translateY(-7px) scale(.98,1.03)}}
+  @keyframes ghost-nudge{0%,72%,100%{transform:rotate(0)}80%,92%{transform:rotate(-4deg)}86%{transform:rotate(4deg)}}
+  .ground{transform-box:fill-box;transform-origin:center;animation:ground 3.2s ease-in-out infinite}
+  @keyframes ground{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.84)}}
+  .blink{transform-box:fill-box;transform-origin:center;animation:blink 4.6s infinite}
+  @keyframes blink{0%,90%,100%{transform:scaleY(1)}93%{transform:scaleY(.12)}}
+  .prop { position: absolute; color: var(--muted); animation: prop 600ms cubic-bezier(0.2, 0.85, 0.25, 1) both; }
+  @keyframes prop { from { opacity: 0; translate: 0 14px; scale: 0.96; } }
+  .spark { position: absolute; color: var(--ink); animation: spark 1.4s ease-in-out infinite both; }
+  @keyframes spark { 0%, 100% { opacity: 0; transform: scale(0.4); } 50% { opacity: 1; transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) {
+    .status-row .dots i, .dot::after, .digit, .prop, .spark, .ga, .mo, .ground, .keys, .blink, #welcome > *, main > section > *, main > div > section > * { animation: none !important; }
+    .w, #fill { transition: opacity 200ms; }
+    .spark { opacity: 0.6; }
+  }
+  @media (max-width: 767px) {
+    body { flex-direction: column; overflow-y: auto; height: auto; min-height: 100vh; --k: 0.55; }
+    #stage { flex: none; height: 240px; }
+    .side { width: 100%; flex: 1; padding: 0; }
+    main { border: 0; padding: 12px 22px 24px; border-radius: 12px 12px 0 0; }
+    .prop { display: none; }
+  }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
+<div id="stage" aria-hidden="true"></div>
+<div class="side">
 <main>
+  <div class="top">
+    <button id="back" data-back aria-label="Back" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div class="track"><div id="fill"></div></div>
+  </div>
   <header>
-    <svg class="float" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5a7.5 7.5 0 0 0-7.5 7.5v11l2.5-1.7 2.5 1.7 2.5-1.7 2.5 1.7 2.5-1.7 2.5 1.7V10A7.5 7.5 0 0 0 12 2.5z"/><circle cx="9.5" cy="10.5" r="1.3" fill="var(--panel)"/><circle cx="14.5" cy="10.5" r="1.3" fill="var(--panel)"/></svg>
     <div>
       <h1 id="title">Welcome to Wisp!</h1>
       <p id="subtitle">How do you want to begin?</p>
@@ -167,22 +238,16 @@
     <section>
       <h2>Host the server here</h2>
       <p>Install the Wisp server on this computer. All your devices will connect to it.</p>
-      <ul class="checks">
-        <li><span class="dot ok"></span>Keeps running when you close this window</li>
-        <li><span class="dot ok"></span>Agents can work on this computer</li>
-      </ul>
       <p class="error" id="create-error" hidden></p>
       <pre id="log" hidden></pre>
       <div class="push"></div>
       <button class="primary wide" id="create-go">Install server</button>
-      <button class="link wide" data-back>Back</button>
     </section>
   </div>
 
   <section id="installing" hidden>
     <h2>Installing…</h2>
     <p>This can take a minute.</p>
-    <div class="bar" aria-hidden="true"><i></i></div>
     <ul class="checks" role="status">
       <li><span class="dot ok"></span>Server is in place</li>
       <li><span class="dot wait"></span>Starting it</li>
@@ -211,8 +276,6 @@
         <div class="row" style="margin-top:14px"><button class="primary" type="submit" id="join-go">Join</button></div>
       </form>
       <p class="error" id="join-error" role="alert" hidden></p>
-      <div class="push"></div>
-      <button class="link wide" data-back>Back</button>
     </section>
   </div>
 
@@ -231,7 +294,7 @@
 
   <div id="cloud" hidden>
     <section id="cloud-connect">
-      <h2>Connect your Hetzner account</h2>
+      <h2><svg viewBox="0 0 24 24" width="16" height="16" fill="#D50C2D" aria-hidden="true" style="vertical-align:-3px;margin-right:8px"><path d="M0 0v24h24V0H0zm4.602 4.025h2.244c.509 0 .716.215.716.717v5.64h8.883v-5.64c0-.509.215-.717.717-.717h2.229c.5 0 .71.23.724.717v14.516c0 .509-.215.717-.717.717h-2.23c-.51 0-.717-.215-.717-.717v-5.735H7.562v5.735c0 .516-.215.717-.716.717H4.602c-.51 0-.717-.208-.717-.717V4.742c0-.509.207-.717.717-.717z"/></svg>Connect your Hetzner account</h2>
       <p>Your server runs in your own <a href="https://www.hetzner.com/cloud" target="_blank">Hetzner Cloud</a> account, and Hetzner bills you directly.</p>
       <ol class="steps">
         <li>Sign in at <a href="https://console.hetzner.com" target="_blank">console.hetzner.com</a> (or sign up) and open a project.</li>
@@ -246,8 +309,6 @@
         <button class="primary wide" type="submit" id="cloud-token-go">Continue</button>
       </form>
       <p class="error" id="cloud-token-error" hidden></p>
-      <div class="push"></div>
-      <button class="link wide" data-back>Back</button>
     </section>
 
     <section id="cloud-choose" hidden>
@@ -276,13 +337,10 @@
         <button class="link" id="cloud-keep">Keep it</button>
       </div>
       <p class="hint" id="cloud-fail-hint" style="text-align:center" hidden></p>
-      <div class="push"></div>
-      <button class="link wide" data-back hidden>Back</button>
     </section>
   </div>
 
   <section id="starting" class="center" hidden>
-    <div class="spinner"></div>
     <h2 id="starting-title">Getting ready…</h2>
     <p>The first start can take a minute.</p>
   </section>
@@ -296,6 +354,7 @@
     <div class="row"><button class="link" id="switch">Start or join another Wisp</button></div>
   </section>
 </main>
+</div>
 
 <script>
   const $ = (id) => document.getElementById(id);
@@ -305,6 +364,7 @@
   const show = (id) => {
     SCREENS.forEach((s) => ($(s).hidden = s !== id));
     document.querySelector("main")?.setAttribute("data-screen", id);
+    $("back").hidden = ["welcome", "installing", "ready", "waiting", "starting", "unreachable"].includes(id);
   };
   const err = (id, msg) => { $(id).hidden = !msg; $(id).textContent = msg || ""; };
 
@@ -654,6 +714,208 @@
     $("cloud-progress-title").textContent = "Your Wisp isn't ready";
     showCloudFailure(state.server);
   }
+</script>
+<script>
+  // The stage's wisps. Plain script, because this page runs before the app does; the drawing and the
+  // numbers come from the app's Ghost.tsx and GhostArms.tsx, so the same wisp carries on after this page.
+  (() => {
+const BODY = {
+  classic: { d: "M30 60 C30 32 44 18 60 18 C76 18 90 32 90 60 L90 96 Q85 104 80 96 Q75 88 70 96 Q65 104 60 96 Q55 88 50 96 Q45 104 40 96 Q35 88 30 96 Z", ey: 54, ex: [50, 70], my: 66, top: 18, bottom: 100, hs: 1, ground: 111 },
+  round: { d: "M22 64 C22 38 38 26 60 26 C82 26 98 38 98 64 L98 92 Q92 100 86 92 Q80 84 74 92 Q67 100 60 92 Q53 84 46 92 Q40 100 34 92 Q28 84 22 92 Z", ey: 58, ex: [47, 73], my: 70, top: 26, bottom: 96, hs: 1.38, ground: 107 },
+  tall: { d: "M38 52 C38 24 47 10 60 10 C73 10 82 24 82 52 L82 102 Q76.5 110 71 102 Q65.5 94 60 102 Q54.5 110 49 102 Q43.5 94 38 102 Z", ey: 44, ex: [52, 68], my: 56, top: 10, bottom: 106, hs: .77, ground: 115 },
+  sheet: { d: "M42 52 C42 28 50 16 60 16 C70 16 78 28 78 52 C80 72 92 86 100 100 Q93 95 86 102 Q78 95 70 102 Q60 95 50 102 Q42 95 34 102 Q27 95 20 100 C28 86 40 72 42 52 Z", ey: 46, ex: [53, 67], my: 57, top: 16, bottom: 102, hs: .65, ground: 110 },
+  wisp: { d: "M60 16 C80 16 90 32 90 52 C90 74 78 84 68 90 C60 95 58 104 66 108 C52 110 46 98 50 90 C36 84 30 72 30 52 C30 32 40 16 60 16 Z", ey: 50, ex: [50, 70], my: 62, top: 16, bottom: 109, hs: 1.09, ground: 115 },
+};
+const COLORS = [["White", "#ffffff", "#ffffff"], ["Bubblegum sky", "#8bd4ff", "#ff51bf"], ["Orchid peach", "#e771ff", "#ffd87c"], ["Coral mint", "#beffe8", "#ff797b"], ["Arctic blue", "#97fff3", "#0084ff"], ["Solar flare", "#ecca5c", "#fe3c3f"], ["Violet ember", "#ff5c43", "#6262ff"], ["Ultraviolet tide", "#7516cf", "#00e8d1"]];
+const swap = (d, a, b) => d.replaceAll(a, "§").replaceAll(b, a).replaceAll("§", b);
+const SHEET_B = "M42 52 C42 28 50 16 60 16 C70 16 78 28 78 52 C80 72 92 86 100 100 Q93 105 86 98 Q78 105 70 98 Q60 105 50 98 Q42 105 34 98 Q27 105 20 100 C28 86 40 72 42 52 Z";
+const WISP_B = "M60 16 C80 16 90 32 90 52 C90 74 80 86 70 92 C62 97 64 106 72 110 C58 110 52 100 52 92 C38 86 30 72 30 52 C30 32 40 16 60 16 Z";
+const ALT = { classic: (d) => swap(d, "104", "88"), round: (d) => swap(d, "100", "84"), tall: (d) => swap(d, "110", "94"), sheet: () => SHEET_B, wisp: () => WISP_B };
+const RIG = { classic: { y: 66, x: [30, 90], tilt: [0, 0], s: .95 }, round: { y: 70, x: [22, 98], tilt: [0, 0], s: 1.08 }, tall: { y: 58, x: [38, 82], tilt: [0, 0], s: .82 }, sheet: { y: 67, x: [38.5, 81.5], tilt: [-20.4, -20.4], s: .86 }, wisp: { y: 62, x: [30.4, 89], tilt: [6.9, 11.4], s: .98 } };
+const r2 = (n) => Math.round(n * 100) / 100;
+const NONE = "M0 0";
+const armFrame = (shape, i) => { const r = RIG[shape]; return `translate(${r.x[i]}px,${r.y}px) scale(${i ? 1 : -1},1) rotate(${r.tilt[i]}deg) scale(${r.s}) translate(-3.8px,0px) rotate(calc(var(--ga-a) + var(--ga-w)))`; };
+function toBody(shape, i, angle) {
+  const rig = RIG[shape], a = angle * Math.PI / 180, t = rig.tilt[i] * Math.PI / 180;
+  const x0 = (10.6 * Math.cos(a) - 3.8) * rig.s, y0 = 10.6 * Math.sin(a) * rig.s;
+  const x = x0 * Math.cos(t) - y0 * Math.sin(t), y = x0 * Math.sin(t) + y0 * Math.cos(t);
+  return { x: r2(rig.x[i] + (i ? x : -x)), y: r2(rig.y + y) };
+}
+function laptop(shape, bottom) {
+  const rig = RIG[shape], hl = toBody(shape, 0, 120), hr = toBody(shape, 1, 120), hy = (hl.y + hr.y) / 2, hand = 3.6 * rig.s;
+  const lidTop = r2(hy + hand + .6), deckTop = r2(hy - 1.6 * rig.s), w = r2(hr.x - hl.x + 18 * rig.s), h = r2(Math.min(28, Math.max(18, bottom - lidTop + 1.5)));
+  const [x0, x1, b0, b1, y1, c] = [60 - w / 2, 60 + w / 2, 60 - (w - 5) / 2, 60 + (w - 5) / 2, lidTop + h, 3.2];
+  const [dt, db] = [(w - 11) / 2, (w - 2) / 2];
+  const keys = [.38, .75].flatMap((k) => { const ky = r2(deckTop + (lidTop - deckTop) * k), half = dt + (db - dt) * k - 3; return Array.from({ length: 7 }, (_, i) => `M${r2(60 - half + half / 3 * i - 1.3)} ${ky} h2.6`); }).join(" ");
+  return {
+    deck: `M${r2(60 - dt)} ${deckTop} H${r2(60 + dt)} L${r2(60 + db)} ${r2(lidTop + 1)} H${r2(60 - db)} Z`, keys,
+    lid2: `M${r2(x0 + c)} ${lidTop} H${r2(x1 - c)} Q${r2(x1)} ${lidTop} ${r2(x1 - .3)} ${r2(lidTop + c)} L${r2(b1 + .2)} ${r2(y1 - c)} Q${r2(b1)} ${r2(y1)} ${r2(b1 - c)} ${r2(y1)} H${r2(b0 + c)} Q${r2(b0)} ${r2(y1)} ${r2(b0 - .2)} ${r2(y1 - c)} L${r2(x0 + .3)} ${r2(lidTop + c)} Q${r2(x0)} ${lidTop} ${r2(x0 + c)} ${lidTop} Z`,
+    lidline: `M${r2(x0 + 3.5)} ${r2(lidTop + .9)} H${r2(x1 - 3.5)}`,
+  };
+}
+const oval = (cx, cy, rx, ry) => `M${cx - rx} ${cy} a${rx} ${ry} 0 1 0 ${2 * rx} 0 a${rx} ${ry} 0 1 0 ${-2 * rx} 0`;
+function eyesFor(style, x, y) {
+  const out = { whites: NONE, pupils: NONE, shine: NONE, arcs: NONE, pupilDark: false };
+  if (style === "happy") out.arcs = x.map((c) => `M${c - 4.8} ${y + 1.5} Q${c} ${y - 4.5} ${c + 4.8} ${y + 1.5}`).join(" ");
+  else if (style === "big") { out.whites = x.map((c) => oval(c, y, 6.2, 6.2)).join(" "); out.pupils = x.map((c) => oval(c, y + .5, 3.6, 3.6)).join(" "); out.shine = x.map((c) => oval(c + 1.4, y - 1, 1.2, 1.2)).join(" "); out.pupilDark = true; }
+  else if (style === "sparkle") { out.pupils = x.map((c) => oval(c, y, 4.4, 5.6)).join(" "); out.shine = x.map((c) => oval(c + 1.4, y - 2, 1.6, 1.6) + " " + oval(c - 1.4, y + 2, .9, .9)).join(" "); }
+  else if (style === "wink") { out.pupils = oval(x[0], y, 3.4, 4.4); out.arcs = `M${x[1] - 4.6} ${y} Q${x[1]} ${y - 3.6} ${x[1] + 4.6} ${y}`; }
+  else { out.pupils = x.map((c) => oval(c, y, 3.9, 4.9)).join(" "); out.shine = x.map((c) => oval(c + 1.3, y - 1.8, 1.4, 1.4) + " " + oval(c - 1.2, y + 1.9, .7, .7)).join(" "); }
+  return out;
+}
+function mouthFor(style, y) {
+  const x = 60, m = { mouthS: NONE, mouthF: NONE, mouthP: NONE, mouthW: NONE };
+  if (style === "open") { m.mouthF = oval(x, y + 1, 3.4, 4); m.mouthP = oval(x, y + 3, 2.2, 1.4); }
+  else if (style === "cat") m.mouthS = `M${x - 5.5} ${y} Q${x - 2.75} ${y + 3.6} ${x} ${y} Q${x + 2.75} ${y + 3.6} ${x + 5.5} ${y}`;
+  else if (style === "fangs") { m.mouthS = `M${x - 6} ${y} Q${x} ${y + 4.5} ${x + 6} ${y}`; m.mouthW = `M${x - 4} ${y + 1.6} l1.4 3.6 l1.4 -3.2 Z M${x + 1.2} ${y + 1.9} l1.4 3.2 l1.4 -3.6 Z`; }
+  else if (style === "tongue") { m.mouthS = `M${x - 5} ${y} Q${x} ${y + 4} ${x + 5} ${y}`; m.mouthP = `M${x + .2} ${y + 1.6} q0 5 3.2 5 q3.2 0 2.6 -5.8 Z`; }
+  else if (style === "flat") m.mouthS = `M${x - 3.2} ${y + 1.2} L${x + 3.2} ${y + 1.2}`;
+  else m.mouthS = `M${x - 4.5} ${y} Q${x} ${y + 4.2} ${x + 4.5} ${y}`;
+  return m;
+}
+// Each of the crew has its own face, way of moving and clock, so no two ever line up
+const T = (motion, ripple, left, right, blink) => ({ motion, ground: motion, ripple, left, right, blink });
+const CREW = [
+  { shape: "round", c: 1, hat: "none", eyes: "big", mouth: "open", cheeks: true, motion: "bounce", x: 20, y: 31, size: 132, time: T("animation-duration:2.1s;animation-delay:-.7s", "2.1s", "animation-duration:3.3s;animation-delay:-1s", "animation-duration:6.4s;animation-delay:-3.9s", "animation-duration:5.3s;animation-delay:-1.1s") },
+  { shape: "tall", c: 2, hat: "tophat", eyes: "sparkle", mouth: "cat", cheeks: false, motion: "sway", x: 80, y: 25, size: 156, time: T("animation-duration:4.3s;animation-delay:-2.2s", "3.4s", "animation-duration:4.9s;animation-delay:-2s", "animation-duration:9.1s;animation-delay:-.4s", "animation-duration:6.7s;animation-delay:-3s") },
+  { shape: "wisp", c: 4, hat: "none", eyes: "dots", mouth: "tongue", cheeks: true, motion: "float", arms: "cheer", x: 82, y: 71, size: 136, time: T("animation-duration:5.2s;animation-delay:-1.4s", "2.9s", "animation-duration:2.7s;animation-delay:-.3s", "animation-duration:3.1s;animation-delay:-1.7s", "animation-duration:4.1s;animation-delay:-2.4s") },
+  { shape: "sheet", c: 5, hat: "crown", eyes: "wink", mouth: "fangs", cheeks: false, motion: "sway", x: 18, y: 73, size: 118, time: T("animation-duration:3.1s;animation-delay:-.9s", "3.8s", "animation-duration:5.6s;animation-delay:-4s", "animation-duration:7.7s;animation-delay:-5.8s", "") },
+  { shape: "classic", c: 3, hat: "beanie", eyes: "big", mouth: "smile", cheeks: true, motion: "float", x: 50, y: 13, size: 104, time: T("animation-duration:3.9s;animation-delay:-3s", "2.3s", "animation-duration:4.2s;animation-delay:-2.7s", "animation-duration:11s;animation-delay:-7.5s", "animation-duration:7.3s;animation-delay:-5s") },
+];
+
+    const SCENE = {
+      welcome: [50, 47, 260, "awake"], create: [50, 42, 170, "awake"], installing: [50, 46, 240, "working"], ready: [50, 40, 190, "done"],
+      join: [50, 47, 190, "waiting"], waiting: [50, 47, 190, "waiting"], cloud: [50, 56, 170, "awake"], "cloud-progress": [50, 56, 240, "working"],
+      starting: [50, 46, 210, "awake"], unreachable: [50, 46, 190, "waiting"],
+    };
+    const PROGRESS = { welcome: 4, create: 12, installing: 22, ready: 36, cloud: 14, "cloud-progress": 34, starting: 40, join: 4, waiting: 4, unreachable: 4 };
+    const BOX = 300;
+    const stage = document.getElementById("stage");
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+    const WHITE = { shape: "classic", c: 0, hat: "none", eyes: "dots", mouth: "smile", cheeks: false, time: { right: "animation-duration:6.2s;animation-delay:-1.6s" } };
+
+    function svg(i, look, mood) {
+      const b = BODY[look.shape], c = COLORS[look.c], rig = RIG[look.shape], t = look.time || {};
+      const ink = "#1d1d1f";
+      const e = eyesFor(mood === "done" ? "happy" : look.eyes, b.ex, b.ey), m = mouthFor(mood === "done" ? "open" : mood === "working" ? "flat" : look.mouth, b.my);
+      const rip = `<animate attributeName="d" dur="${t.ripple || "2.6s"}" repeatCount="indefinite" values="${b.d};${ALT[look.shape](b.d)};${b.d}" calcMode="spline" keySplines="0.45 0 0.55 1;0.45 0 0.55 1"/>`;
+      const armC = { awake: ["ga ga-awake ga-breathe", "ga ga-awake ga-wave"], done: ["ga ga-cheer", "ga ga-cheer"], waiting: ["ga ga-awake ga-breathe", "ga ga-signarm"], working: ["ga ga-tap", "ga ga-tap"], cheer: ["ga ga-cheer", "ga ga-cheer"] }[look.arms || mood];
+      const armStyle = (side, extra) => `transform:${armFrame(look.shape, side)};${extra || ""}`;
+      const LIMB = "M0 -3.6 H10.6 A3.6 3.6 0 0 1 10.6 3.6 H0 A3.6 3.6 0 0 1 0 -3.6 Z";
+      const lap = mood === "working" ? laptop(look.shape, b.bottom) : null;
+      const motion = { working: "", done: "mo-hop", waiting: "mo-wait" }[mood] ?? "mo-" + (look.motion || "float");
+      const hats = {
+        tophat: '<rect x="-13" y="-25" width="26" height="25" rx="3" fill="#2b2735"/><rect x="-13" y="-9" width="26" height="5" fill="#e5484d"/><rect x="-21" y="-2" width="42" height="5.5" rx="2.75" fill="#2b2735"/>',
+        crown: '<path d="M-15 3 L-15 -12 L-7.5 -4.5 L0 -17 L7.5 -4.5 L15 -12 L15 3 Z" fill="#ffcf3f" stroke="#e0a800" stroke-width="1.5" stroke-linejoin="round"/><circle cx="0" cy="-4" r="2.4" fill="#ff5d73"/><circle cx="-9" cy="-1.5" r="1.7" fill="#4dabf7"/><circle cx="9" cy="-1.5" r="1.7" fill="#4dabf7"/>',
+        beanie: '<path d="M-21 6 Q-21 -16 0 -16 Q21 -16 21 6 Z" fill="#5b8def"/><rect x="-22.5" y="0" width="45" height="8" rx="4" fill="#3f6fd8"/><circle cx="0" cy="-17" r="5" fill="#f8fafc"/>',
+      };
+      return `<svg viewBox="-8 -18 136 140" aria-hidden="true"><defs>
+        <linearGradient id="g${i}" gradientUnits="userSpaceOnUse" x1="0" y1="${b.top}" x2="0" y2="${b.bottom}"><stop offset="0.08" stop-color="${c[1]}"/><stop offset="0.95" stop-color="${c[2]}"/></linearGradient>
+        <radialGradient id="l${i}" cx="0.5" cy="0.42" r="0.6"><stop offset="0" stop-color="white" stop-opacity="0.24"/><stop offset="0.65" stop-color="white" stop-opacity="0.06"/><stop offset="1" stop-color="white" stop-opacity="0"/></radialGradient>
+        <clipPath id="c${i}"><path d="${b.d}">${rip}</path></clipPath>
+        <clipPath id="k${i}"><path class="${armC[0]}" style="${armStyle(0, t.left)}" d="${LIMB}"/><path class="${armC[1]}" style="${armStyle(1, t.right)}" d="${LIMB}"/></clipPath>
+        <clipPath id="o${i}"><path d="${LIMB}"/></clipPath>
+        <radialGradient id="f${i}" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="4.2"><stop offset="1" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.1"/></radialGradient>
+      </defs>
+      <ellipse class="ground" style="${t.ground || ""}" cx="60" cy="${b.ground}" rx="24" ry="3.4" fill="black" opacity="0.28"/>
+      <g class="tilt"><g class="mo ${motion}" style="${t.motion || ""}">
+        <path d="${b.d}" fill="url(#g${i})">${rip}</path><path d="${b.d}" fill="url(#l${i})">${rip}</path>
+        <path d="${b.d}" fill="none" stroke="black" stroke-opacity="0.1" stroke-width="7" clip-path="url(#c${i})">${rip}</path>
+        ${lap ? `<path d="${lap.deck}" fill="#4a4760" stroke="#4a4760" stroke-width="1.6" stroke-linejoin="round"/><path d="${lap.keys}" class="keys" stroke="#a6e8d4" stroke-opacity="0.7" stroke-width="1.1" stroke-linecap="round"/>` : ""}
+        ${mood === "waiting" ? `<g class="${armC[1]}" style="${armStyle(1)}"><g transform="translate(10.6 0) rotate(30)"><path d="M0 7.5 V-19" stroke="#8d8291" stroke-width="2.6" stroke-linecap="round"/><rect x="-9.5" y="-37" width="19" height="19" rx="5" fill="#f5c542"/><path d="M-3.4 -30.4 C-3.4 -35 3.7 -35 3.7 -30.7 C3.7 -28.4 0.2 -28.3 0.2 -25.4" stroke="#343244" stroke-width="2.6" fill="none" stroke-linecap="round"/><circle cx="0.2" cy="-21.7" r="1.5" fill="#343244"/></g></g>` : ""}
+        <rect x="-10" y="-10" width="140" height="140" fill="url(#g${i})" clip-path="url(#k${i})"/>
+        <path class="${armC[0]}" style="${armStyle(0, t.left)}" d="${LIMB}" fill="none" stroke="url(#f${i})" stroke-width="${r2(3.4 / rig.s)}" clip-path="url(#o${i})"/>
+        <path class="${armC[1]}" style="${armStyle(1, t.right)}" d="${LIMB}" fill="none" stroke="url(#f${i})" stroke-width="${r2(3.4 / rig.s)}" clip-path="url(#o${i})"/>
+        ${lap ? `<path d="${lap.lid2}" fill="#343244"/><path d="${lap.lidline}" stroke="#a6e8d4" stroke-opacity="0.75" stroke-width="1.1" stroke-linecap="round"/>` : ""}
+        <g class="face" transform="${mood === "working" ? "translate(0 3)" : ""}">
+          <ellipse cx="${b.ex[0] - 4}" cy="${b.ey + 8}" rx="4.5" ry="2.6" fill="#ff8fab" opacity="${look.cheeks ? 0.5 : 0.18}"/><ellipse cx="${b.ex[1] + 4}" cy="${b.ey + 8}" rx="4.5" ry="2.6" fill="#ff8fab" opacity="${look.cheeks ? 0.5 : 0.18}"/>
+          <g class="${mood === "done" || look.eyes === "wink" ? "" : "blink"}" style="${t.blink || ""}">
+            <path d="${e.whites}" fill="white"/><g class="pupils"><path d="${e.pupils}" fill="${e.pupilDark ? "#2a2340" : ink}"/><path d="${e.shine}" fill="white" opacity="0.95"/></g>
+            <path d="${e.arcs}" fill="none" stroke="${ink}" stroke-width="2.6" stroke-linecap="round"/>
+          </g>
+          <path d="${m.mouthS}" fill="none" stroke="${ink}" stroke-width="2.1" stroke-linecap="round"/><path d="${m.mouthF}" fill="${ink}"/><path d="${m.mouthP}" fill="#ff7a93"/><path d="${m.mouthW}" fill="white" stroke="${ink}" stroke-width="0.6" stroke-linejoin="round"/>
+        </g>
+        ${hats[look.hat] ? `<g transform="translate(60 ${b.top + 2.5}) scale(${b.hs})">${hats[look.hat]}</g>` : ""}
+      </g></g></svg>`;
+    }
+
+    function place(el, x, y, size) {
+      Object.assign(el.style, { left: `${x}%`, top: `${y}%`, transform: `translate(-50%, -50%) scale(calc(${size / BOX} * var(--k)))` });
+      el.dataset.size = size;
+    }
+    const make = (i, look, mood) => {
+      const el = document.createElement("div");
+      el.className = "w";
+      el.innerHTML = svg(i, look, mood);
+      el.value = [0, 0, 0, 0, 0];
+      stage.append(el);
+      return el;
+    };
+    const crew = CREW.map((c, i) => { const el = make(i + 1, c, "awake"); place(el, c.x, c.y, c.size); el.style.opacity = 0; return el; });
+    const main = make(0, WHITE, "awake");
+    let mood = "awake";
+    const LAPTOP = '<svg class="prop" style="left:calc(50% - 90px);top:60%" width="180" height="120" viewBox="0 0 90 60" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="6" width="62" height="40" rx="3"/><path d="M4 54h82M14 46l-10 8M76 46l10 8"/></svg>';
+    const CLOUD = '<svg class="prop" style="left:calc(50% - 110px);top:18%" width="220" height="150" viewBox="0 0 24 18" fill="none" stroke="currentColor" stroke-width=".5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 7.5a4.25 4.25 0 0 1-.5 8.5Z"/></svg>';
+    const spark = (x, y, size, delay) => `<svg class="spark" style="left:${x}%;top:${y}%;animation-delay:${delay}s" width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2Q13 11 22 12Q13 13 12 22Q11 13 2 12Q11 11 12 2Z"/></svg>`;
+    const props = document.createElement("div");
+    stage.prepend(props);
+    let last = "";
+
+    function update() {
+      const m = document.querySelector("main");
+      let id = m.getAttribute("data-screen") || "welcome";
+      if (id === "cloud" && !document.getElementById("cloud-progress").hidden) id = "cloud-progress";
+      const s = SCENE[id] || SCENE.welcome;
+      document.getElementById("fill").style.width = (PROGRESS[id] ?? 4) + "%";
+      if (id === last) return;
+      last = id;
+      place(main, s[0], s[1], s[2]);
+      if (s[3] !== mood) { mood = s[3]; main.innerHTML = svg(0, WHITE, mood); }
+      const shown = id === "welcome" ? 1 : id === "join" || id === "waiting" ? 0.32 : 0;
+      crew.forEach((el) => (el.style.opacity = shown));
+      props.innerHTML = (id === "create" || id === "ready" ? LAPTOP : "") + (id === "cloud" || id === "cloud-progress" ? CLOUD : "") + (id === "ready" ? spark(30, 24, 26, 0) + spark(68, 20, 34, 0.35) + spark(74, 50, 20, 0.7) + spark(24, 54, 22, 0.2) : "");
+    }
+    new MutationObserver(update).observe(document.querySelector("main"), { attributes: true, attributeFilter: ["data-screen", "hidden"], subtree: true });
+    update();
+
+    // the approval code, as tiles that come in one after another
+    const code = document.getElementById("join-code");
+    new MutationObserver(() => {
+      if (code.querySelector(".digit")) return;
+      const text = code.textContent;
+      code.replaceChildren(...[...text].map((c, i) => Object.assign(document.createElement("span"), { className: c === " " ? "digit gap" : "digit", textContent: c, style: `animation-delay:${i * 0.07}s` })));
+    }).observe(code, { childList: true });
+
+    // Every wisp watches the pointer from where it stands, the way the app's ghosts do (ghostGaze.ts)
+    const clamp = (n, l) => Math.max(-l, Math.min(l, n));
+    let pointer = null, frame = 0;
+    function tick() {
+      frame = 0;
+      let moving = false;
+      for (const el of [main, ...crew]) {
+        const box = el.getBoundingClientRect();
+        let target = [0, 0, 0, 0, 0];
+        if (pointer && !reduced.matches) {
+          const dx = pointer.x - box.left - box.width / 2, dy = pointer.y - box.top - box.height / 2;
+          target = [clamp(dx / 65, 4.5), clamp(dy / 91, 3), clamp(dx / 45.5, 2.2), clamp(dy / 45.5, 2.2), Math.hypot(dx, dy) < box.width * 1.5 ? clamp((dx / Math.max(box.width, 1)) * 5, 6) : 0];
+        }
+        el.value = el.value.map((n, i) => {
+          if (Math.abs(target[i] - n) < 0.015) return target[i];
+          moving = true;
+          return n + (target[i] - n) * 0.18;
+        });
+        const [x, y, px, py, tilt] = el.value;
+        const face = el.querySelector(".face");
+        if (face) face.setAttribute("transform", `translate(${x} ${y + (el === main && mood === "working" ? 3 : 0)})`);
+        el.querySelector(".pupils")?.setAttribute("transform", `translate(${px} ${py})`);
+        el.querySelector(".tilt")?.setAttribute("transform", `rotate(${tilt} 60 85)`);
+      }
+      if (moving) frame = requestAnimationFrame(tick);
+    }
+    const wake = () => { if (!frame) frame = requestAnimationFrame(tick); };
+    addEventListener("pointermove", (e) => { pointer = { x: e.clientX, y: e.clientY }; wake(); });
+    document.documentElement.addEventListener("pointerleave", () => { pointer = null; wake(); });
+  })();
 </script>
 </body>
 </html>

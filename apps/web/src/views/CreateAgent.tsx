@@ -382,14 +382,14 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
           });
         }
         setCreated(a);
-        // apps and skills picked under More options; an app already on for every agent needs nothing
+        // apps and skills picked under More options; ones on for all agents already include it
         const agentId = a.id;
         await Promise.all([
           ...pickedApps.flatMap((id) => {
             const c = connectors?.find((x) => x.id === id);
-            return c && c.agentIds.length ? [api("PATCH", `/api/connectors/${id}`, { agentIds: [...c.agentIds, agentId] }).catch(() => {})] : [];
+            return c && !c.allAgents ? [api("PUT", `/api/connectors/${id}/agents/${agentId}`).catch(() => {})] : [];
           }),
-          ...pickedSkills.map((id) => api("PUT", `/api/skills/${id}/agents/${agentId}`).catch(() => {})),
+          ...pickedSkills.flatMap((id) => (skills?.find((x) => x.id === id)?.allAgents ? [] : [api("PUT", `/api/skills/${id}/agents/${agentId}`).catch(() => {})])),
         ]);
       }
       await Promise.all([refreshAgents(), useStore.getState().refreshComputers()]);
@@ -686,8 +686,8 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                         <div className="flex flex-wrap gap-1.5">
                           {connectors === null && <span className="text-xs text-muted">Loading…</span>}
                           {connectors?.map((c) =>
-                            c.agentIds.length === 0 ? (
-                              <span key={c.id} className="h-8 px-2.5 rounded-lg bg-chip text-[13px] font-medium inline-flex items-center gap-1" title="On for every agent">
+                            c.allAgents ? (
+                              <span key={c.id} className="h-8 px-2.5 rounded-lg bg-chip text-[13px] font-medium inline-flex items-center gap-1" title="On for all agents">
                                 <Check size={13} /> {c.name}
                               </span>
                             ) : (
@@ -704,11 +704,17 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                         <span className="block text-[13px] font-medium text-muted">Skills</span>
                         <div className="flex flex-wrap gap-1.5">
                           {skills === null && <span className="text-xs text-muted">Loading…</span>}
-                          {skills?.map((sk) => (
-                            <Chip key={sk.id} small on={pickedSkills.includes(sk.id)} onClick={() => setPickedSkills(togglePick(pickedSkills, sk.id))} title={sk.description}>
-                              {sk.name}
-                            </Chip>
-                          ))}
+                          {skills?.map((sk) =>
+                            sk.allAgents ? (
+                              <span key={sk.id} className="h-8 px-2.5 rounded-lg bg-chip text-[13px] font-medium inline-flex items-center gap-1" title="On for all agents">
+                                <Check size={13} /> {sk.name}
+                              </span>
+                            ) : (
+                              <Chip key={sk.id} small on={pickedSkills.includes(sk.id)} onClick={() => setPickedSkills(togglePick(pickedSkills, sk.id))} title={sk.description}>
+                                {sk.name}
+                              </Chip>
+                            ),
+                          )}
                           <AddChip onClick={() => (onClose(), go({ view: "skills" }))} />
                         </div>
                       </div>

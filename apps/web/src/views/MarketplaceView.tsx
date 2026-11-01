@@ -22,7 +22,6 @@ import {
   FileText,
   GitPullRequest,
   Wand2,
-  Bot,
   Puzzle,
   Package,
 
@@ -35,7 +34,6 @@ import {
   CONNECTOR_CATALOG,
   FEATURE_INFO,
   FEATURE_KEYS,
-  HARNESSES,
   POPULAR_APPS,
   SKILL_CATALOG,
   appCategory,
@@ -153,7 +151,7 @@ const readyAsIs = (i: ShelfItem) => i.kind === "mcp" && !(i.secrets ?? []).lengt
 const needsSignIn = (c: Connector) => !!c.auth?.required && !c.auth.signedIn;
 const CONNECTING = "wisp.connecting";
 
-const SECTION_LABEL: Record<MarketSection, string> = { all: "All", apps: "Apps", skills: "Skills", agents: "Agents", mods: "Mods", devices: "On your devices", installed: "Installed" };
+const SECTION_LABEL: Record<MarketSection, string> = { all: "All", apps: "Apps", skills: "Skills", mods: "Mods", devices: "On your devices", installed: "Installed" };
 
 /**
  * The marketplace: apps (MCP servers from the MCP Registry and Wisp's own list), skills (Wisp's
@@ -361,7 +359,6 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
     { id: "all", label: "All", icon: <LayoutGrid size={18} /> },
     { id: "apps", label: "Apps", icon: <Plug size={18} /> },
     { id: "skills", label: "Skills", icon: <Wand2 size={18} /> },
-    { id: "agents", label: "Agents", icon: <Bot size={18} /> },
     { id: "mods", label: "Mods", icon: <Puzzle size={18} /> },
     ...(shelves.length ? [{ id: "devices" as const, label: "On your devices", count: pending.length || undefined, icon: <Laptop size={18} /> }] : []),
     { id: "installed", label: "Installed", count: installedCount || undefined, icon: <Package size={18} /> },
@@ -416,15 +413,6 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
         })}
       </Grid>
     );
-  const agentCards = (limit?: number) => (
-    <Grid>
-      {HARNESSES.filter((h) => h.protocol !== "mcp")
-        .slice(0, limit)
-        .map((h) => (
-          <Entry key={h.id} tile={<Tile size={40}><Bot size={20} strokeWidth={1.7} /></Tile>} title={h.label} badge={<Badge>{h.protocol === "native" ? "Built in" : "Open source"}</Badge>} sub={h.note} onOpen={() => (location.hash = href({ view: "agents", agentId: null }))} action={canEdit && <Add onClick={() => (location.hash = href({ view: "agents", agentId: null }))} aria-label={`Add an agent with ${h.label}`}>Add</Add>} />
-        ))}
-    </Grid>
-  );
   const modCards = (limit?: number) => (
     <Grid>
       {FEATURE_KEYS.slice(0, limit).map((k) => (
@@ -477,7 +465,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
         <>
           {popularApps.length > 0 ? shelf("Popular apps", "apps", appCards(popularApps, 4)) : shelf("Apps", "apps", appCards(shelfApps, 4))}
           {shelf("Skills", "skills", skillCards(takeTurns(shownSkills), 4))}
-          {shelf("Agents and mods", "agents", <>{agentCards(2)}<div className="h-3" />{modCards(2)}</>)}
+          {shelf("Mods", "mods", modCards(2))}
           {makeYourOwn}
         </>
       )}
@@ -594,7 +582,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
                   key={s.id}
                   icon={<Tile size={40}>{catalogSkill(s.catalogId ?? "") ? <CatalogIcon name={catalogSkill(s.catalogId ?? "")!.icon} fallback={Wand2} size={20} /> : skillIcon(`${s.slug} ${s.name}`)}</Tile>}
                   title={s.name}
-                  sub={`${skillOrigin(s)} · ${s.agentIds.length ? `${s.agentIds.length} helper${s.agentIds.length === 1 ? "" : "s"}` : "no one yet"}`}
+                  sub={`${skillOrigin(s)} · ${s.allAgents ? "all agents" : s.agentIds.length ? `${s.agentIds.length} helper${s.agentIds.length === 1 ? "" : "s"}` : "no one yet"}`}
                   onClick={() => setDetail({ kind: "skill", open: { skill: s } })}
                 />
               ))}
@@ -615,12 +603,6 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
         return appsPage;
       case "skills":
         return skillsPage;
-      case "agents":
-        return (
-          <>
-            {agentCards()}
-          </>
-        );
       case "mods":
         return modCards();
       case "devices":
@@ -763,7 +745,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
           onClose={() => setConnectedId(null)}
           onPick={() => (setConnectedId(null), setManageId(connectedC.id))}
           onTry={() => {
-            const first = connectedC.agentIds[0];
+            const first = connectedC.allAgents ? agents[0]?.id : connectedC.agentIds[0];
             setConnectedId(null);
             if (first) void openDm(first, `Use ${connectedC.name} to help me. What can you do with it?`).catch((e) => setError((e as Error).message));
           }}

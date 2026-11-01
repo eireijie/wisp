@@ -11,89 +11,113 @@ private func signState(_ s: HarnessSettings) -> (text: String, badge: String?) {
 }
 
 /**
- * Each harness's own settings on one of your devices, read from and written to its config file
- * there: the account it's signed in as, the model, reasoning effort, plugins and skills. Agents can
- * change the same things when asked.
+ * Settings → Harnesses (h-DesktopHarnesses, laid out for a phone): what runs your agents on each
+ * computer, grouped by computer (each device, and each VM), with versions and the agents on each.
+ * A device's harness opens its own settings there; the model is picked separately (Settings → Models).
  */
 struct HarnessesView: View {
   @Environment(Store.self) private var store
-  @State private var deviceId: String?
-  @State private var data: HarnessesResponse?
-  @State private var open: HarnessKey?
-  @State private var loading = false
-  @State private var installing = false
+  @State private var computers: [HarnessComputer]?
   @State private var error: String?
+  @State private var installOn: String?
+  @State private var open: HarnessOpen?
 
-  private var mine: [AgentNode] { store.nodes.filter { $0.mine == true } }
-  private var device: AgentNode? { mine.first { $0.id == deviceId } ?? mine.first { $0.online } ?? mine.first }
+  private var devices: [AgentNode] { store.nodes.filter { $0.mine == true } }
 
   var body: some View {
-    MarketScreen(title: "Harnesses", screenId: "harnesses") {
-      if mine.isEmpty {
-        MarketNote(text: "No devices of yours yet. Connect one from Devices.")
+    SettingsPage("Harnesses", subtitle: "What runs your agents on each computer. Pick the model separately.", id: "harnesses") {
+      if let computers {
+        if computers.isEmpty { MarketNote(text: "No computers yet. Connect one from Devices.") }
+        ForEach(computers) { computer in
+          GroupCaption(title: computer.name, note: computer.isVM ? "VM on \(store.nodes.first { $0.id == computer.nodeId }?.name ?? "a device")" : (computer.online ? "Device" : "Device · offline"))
+          if computer.harnesses.isEmpty {
+            CardHint(computer.reported ? "No harnesses here yet." : "Not reported yet. Start \(computer.name) to see its harnesses.").padding(.top, 6)
+          } else {
+            CardGroup {
+              ForEach(computer.harnesses) { h in row(computer, h) }
+            }
+          }
+        }
+        if store.canManage && !devices.isEmpty {
+          AddRow(title: "Add a harness to a computer", id: "harness-install") {
+            installOn = (devices.first { $0.online } ?? devices.first)?.id
+          }
+        }
+      } else if let error {
+        InlineError(error: error)
       } else {
-        deviceCard
-        Text("A harness is the program an agent thinks with. Sign in once and every agent that uses it is ready.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+        ProgressView().frame(maxWidth: .infinity).padding(.top, 30)
+      }
+    }
+    .navigationDestination(item: $open) { HarnessSettingsScreen(deviceId: $0.nodeId, harness: $0.harness) }
+    .sheet(item: Binding(get: { installOn.map(HarnessOpen.device) }, set: { installOn = $0?.nodeId })) { InstallHarnessSheet(nodeId: $0.nodeId) }
+    .task { try? await store.refreshNodes() }
+    .task { await load() }
+    .refreshable { await load() }
+  }
+
+  private func row(_ computer: HarnessComputer, _ h: HarnessComputer.Harness) -> some View {
+    let settable = !computer.isVM && devices.contains { $0.id == computer.nodeId }
+    return HStack(spacing: 12) {
+      Image(systemName: ModelWords.harnessSymbol(h.id)).font(.system(size: 13)).foregroundStyle(Palette.muted).frame(width: 18)
+      Text(h.label).font(.system(size: 15)).lineLimit(1)
+      if let v = h.version { Text(v).font(.system(size: 12)).foregroundStyle(Palette.faint).monospacedDigit().lineLimit(1) }
+      Spacer(minLength: 8)
+      UsedByWisps(users: h.agents)
+      if settable {
+        Button("Settings") { open = HarnessOpen(nodeId: computer.nodeId, harness: h.id) }
+          .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.text)
+          .padding(.horizontal, 12).frame(height: 28).background(Capsule().fill(Palette.control))
+          .buttonStyle(.press).disabled(!computer.online).opacity(computer.online ? 1 : 0.4)
+          .accessibilityIdentifier("harness-\(h.id)")
+      }
+    }
+    .padding(.horizontal, 14).frame(minHeight: 48)
+  }
+
+  private func load() async {
+    do { computers = try await store.harnessComputers(); error = nil } catch { self.error = error.localizedDescription }
+  }
+}
+
+private struct HarnessOpen: Hashable, Identifiable {
+  var nodeId: String
+  var harness: String
+  var id: String { "\(nodeId)/\(harness)" }
+  static func device(_ id: String) -> HarnessOpen { HarnessOpen(nodeId: id, harness: "") }
+}
+
+/** One harness's own settings on one of your devices, read from and written to its config file there. */
+struct HarnessSettingsScreen: View {
+  @Environment(Store.self) private var store
+  var deviceId: String
+  var harness: String
+  @State private var data: HarnessesResponse?
+  @State private var error: String?
+
+  private var device: AgentNode? { store.nodes.first { $0.id == deviceId } }
+
+  var body: some View {
+    if let data, let index = data.harnesses.firstIndex(where: { $0.harness == harness }) {
+      HarnessDetailView(response: data, settings: Binding(get: { self.data?.harnesses[safe: index] ?? data.harnesses[index] }, set: { replace($0) }), onLoad: { account in try await load(account: account) })
+    } else {
+      MarketScreen(title: HarnessChoice.label(harness), screenId: "harness") {
         if let device, !device.online {
           MarketNote(text: "\(device.name) is offline. Its harness settings show up when it's back.")
         } else if let error {
           Text(error).font(.footnote).foregroundStyle(Palette.red).padding(.horizontal, 4)
-        } else if let data {
-          if data.harnesses.isEmpty {
-            MarketNote(text: "No harnesses on \(device?.name ?? "this device") yet.")
-          } else {
-            CardGroup {
-              ForEach(data.harnesses, id: \.harness) { h in
-                let state = signState(h)
-                Button { open = HarnessKey(id: h.harness) } label: {
-                  MarketRow(symbol: "terminal", title: HarnessChoice.label(h.harness), subtitle: state.text) {
-                    if let badge = state.badge { MarketPill(text: badge, tone: badge == "Signed in" ? .green : .grey) }
-                  }
-                }.buttonStyle(.plain).accessibilityIdentifier("harness-\(h.harness)")
-              }
-            }
-          }
-          if let device, device.mine == true, store.canManage {
-            MarketLabel("Not on this device")
-            CardGroup {
-              Button { installing = true } label: { MarketRow(symbol: "arrow.down.circle", title: "Install a harness") }.buttonStyle(.plain).accessibilityIdentifier("harness-install")
-            }
-          }
-        } else if loading {
-          HStack { ProgressView(); Text("Reading \(device?.name ?? "the device")'s harnesses…").foregroundStyle(Palette.muted) }
+        } else if data != nil {
+          MarketNote(text: "\(HarnessChoice.label(harness)) isn't on \(device?.name ?? "this device") anymore.")
+        } else {
+          HStack { ProgressView(); Text("Reading \(device?.name ?? "the device")'s settings…").foregroundStyle(Palette.muted) }
         }
       }
-    }
-    .navigationDestination(item: $open) { key in
-      let id = key.id
-      if let data, let index = data.harnesses.firstIndex(where: { $0.harness == id }) {
-        HarnessDetailView(response: data, settings: Binding(get: { self.data?.harnesses[safe: index] ?? data.harnesses[index] }, set: { replace($0) }), onLoad: { account in try await load(harness: id, account: account) })
-      }
-    }
-    .sheet(isPresented: $installing) { if let device { InstallHarnessSheet(nodeId: device.id) } }
-    .task { try? await store.refreshNodes() }
-    .task(id: "\(device?.id ?? "")\(device?.online == true)") { await first() }
-    .refreshable { await first() }
-  }
-
-  private var deviceCard: some View {
-    CardGroup {
-      MarketRow(symbol: "desktopcomputer", tile: 40, title: device?.name ?? "", subtitle: "On") {
-        if mine.count > 1 {
-          Menu {
-            ForEach(mine) { node in Button(node.name + (node.online ? "" : " (offline)")) { deviceId = node.id } }
-          } label: { Text("Change").font(.system(size: 15)).foregroundStyle(Palette.muted) }
-        }
-      }
+      .task { await first() }
     }
   }
 
   private func first() async {
-    data = nil; error = nil
-    guard let device, device.online else { return }
-    loading = true
-    defer { loading = false }
-    do { data = try await store.harnessSettings(device: device.id) } catch { self.error = error.localizedDescription }
+    do { data = try await store.harnessSettings(device: deviceId) } catch { self.error = error.localizedDescription }
   }
 
   private func replace(_ settings: HarnessSettings) {
@@ -102,18 +126,15 @@ struct HarnessesView: View {
     data = current
   }
 
-  /** Show one harness as one of its accounts (or again, after a sign-in). */
-  private func load(harness: String, account: String) async throws {
-    guard let device else { return }
-    let response = try await store.harnessSettings(device: device.id, harness: harness, account: account)
+  /** Show the harness as one of its accounts (or again, after a sign-in). */
+  private func load(account: String) async throws {
+    let response = try await store.harnessSettings(device: deviceId, harness: harness, account: account)
     guard var current = data, let fresh = response.harnesses.first(where: { $0.harness == harness }), let i = current.harnesses.firstIndex(where: { $0.harness == harness }) else { return }
     current.harnesses[i] = fresh
     current = HarnessesResponse(device: current.device, harnesses: current.harnesses, agents: response.agents, catalog: current.catalog)
     data = current
   }
 }
-
-private struct HarnessKey: Hashable, Identifiable { var id: String }
 
 // MARK: - One harness
 
@@ -235,7 +256,7 @@ private struct HarnessDetailView: View {
         CardGroup {
           if !ids.isEmpty {
             ForEach(wisp) { connector in
-              MarketToggleRow(title: connector.name, subtitle: connector.auth?.required == true ? (connector.auth?.signedIn == true ? "Logged in through Wisp" : "Needs logging in, in Wisp") : "Set up in Wisp", isOn: Binding(get: { ids.allSatisfy { connector.agentIds?.contains($0) == true } }, set: { on in attach(connector, ids, on) })) { MarketTile(symbol: "powerplug") }
+              MarketToggleRow(title: connector.name, subtitle: connector.forAll ? "All agents" : connector.auth?.required == true ? (connector.auth?.signedIn == true ? "Logged in through Wisp" : "Needs logging in, in Wisp") : "Set up in Wisp", isOn: Binding(get: { ids.allSatisfy { connector.has($0) } }, set: { on in attach(connector, ids, on) }), disabled: connector.forAll) { MarketTile(symbol: "powerplug") }
             }
           }
           ForEach(settings.apps) { app in itemRow(app, note: app.canToggle ? "Set up on this device" : "Set up on this device · changed there", kind: "app") }
@@ -605,7 +626,7 @@ private struct ShareHarnessSkill: View {
 // MARK: - Install a harness
 
 /** Install a harness on a device through Wisp (npm ones), and see what's already there. */
-private struct InstallHarnessSheet: View {
+struct InstallHarnessSheet: View {
   @Environment(Store.self) private var store
   var nodeId: String
   @State private var installing: String?

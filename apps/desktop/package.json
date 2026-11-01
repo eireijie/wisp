@@ -34,8 +34,17 @@
         "dmg",
         "zip"
       ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Wisp uses your microphone when you call an agent."
+        "NSMicrophoneUsageDescription": "Wisp uses your microphone when you call an agent.",
+        "NSAppleEventsUsageDescription": "Wisp uses this to let your agents work on this Mac's screen when you lend it to them.",
+        "NSLocalNetworkUsageDescription": "Wisp finds and connects to Wisp on your other computers over your own network.",
+        "NSBonjourServices": [
+          "_wisp._tcp"
+        ]
       },
       "artifactName": "Wisp-mac-${arch}.${ext}"
     },

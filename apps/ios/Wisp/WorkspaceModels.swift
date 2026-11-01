@@ -26,6 +26,8 @@ struct AgentPolicy: Codable {
   var askBefore: [String]; var maxHops: Int; var maxRunsPerMinute: Int; var defaultAccess: String
   /** agents making agents (Settings → Agents); missing on older hubs */
   var leadsCreateAgents: Bool?; var subAgents: Bool?; var maxAgentMade: Int?
+  /** agents save how they did something as a skill (Settings → Skills); missing on older hubs, where it's on */
+  var learnSkills: Bool?
 }
 struct MemoryStorage: Decodable {
   struct Sync: Decodable { var allowed: Bool; var reason: String?; var urlPath: String?; var branch: String? }

@@ -75,6 +75,8 @@ struct Agent: Codable, Identifiable, Hashable {
     var respondPeople: [String]?
     /** the person who made it; they (or an owner) decide who it answers */
     var createdBy: String?
+    /** the model connection it runs on (Settings → Models); nil runs on its computer's own sign-in */
+    var connectionId: String?
   }
   enum Status: String, Codable { case online, busy, offline }
 
@@ -109,6 +111,8 @@ struct Channel: Codable, Identifiable, Hashable {
     var instructions: String?
     /** the channel's agent team, drawn as a flow chart; nil = no team (only @mentioned agents, or defaultAgentId, answer) */
     var team: ChannelTeam?
+    /** the image chosen as the team's icon; nil = its first two agents' ghosts */
+    var iconFileId: String?
   }
   var `private`: Bool?
   var archivedAt: String?
@@ -211,6 +215,8 @@ enum MessagePart: Codable, Hashable {
   case wrapup(WrapUp)
   /** the agent dropped what the chat was about after no answer */
   case closed
+  /** the agent saved a skill during this reply ("learned") or followed one ("used"): a quiet line under it */
+  case skill(action: String, skillId: String, slug: String)
   case other(String)
 
   /** what an agent saved about someone during a reply (the "Remembered" chip): the kind of note, its words, and the note it went to */
@@ -220,7 +226,7 @@ enum MessagePart: Codable, Hashable {
     var path: String?
   }
 
-  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage, input, output, replies, did, saved, next }
+  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage, input, output, replies, did, saved, next, action, skillId, slug }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: K.self)
@@ -250,6 +256,10 @@ enum MessagePart: Codable, Hashable {
       let line = { (k: K) in ((try? c.decode(String.self, forKey: k)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
       self = .wrapup(WrapUp(did: line(.did), saved: line(.saved), next: line(.next)))
     case "closed": self = .closed
+    case "skill":
+      let slug = (try? c.decode(String.self, forKey: .slug)) ?? ""
+      guard !slug.isEmpty else { self = .other(type); return }
+      self = .skill(action: (try? c.decode(String.self, forKey: .action)) ?? "used", skillId: (try? c.decode(String.self, forKey: .skillId)) ?? "", slug: slug)
     default: self = .other(type)
     }
   }

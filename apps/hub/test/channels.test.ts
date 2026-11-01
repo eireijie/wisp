@@ -320,4 +320,20 @@ describe("editing and deleting messages", () => {
     expect((await channelNamed("headcount")).memberCount).toBe(after.length);
     expect((hub.store.db.prepare("SELECT COUNT(*) AS n FROM channel_members WHERE channel_id = ? AND member_id = ?").get(ch.id, gone.id) as { n: number }).n).toBe(0);
   });
+
+  it("keeps an image shared in the team as its icon, and refuses any other file", async () => {
+    const upload = async (channelId: string | null, mime: string) => {
+      const res = await fetch(base + "/api/files", { method: "POST", headers: { authorization: `Bearer ${owner}`, "content-type": "application/octet-stream", "x-filename": "i", "x-mime-type": mime, ...(channelId ? { "x-channel-id": channelId } : {}) }, body: Buffer.from(mime + channelId) });
+      return ((await res.json()) as { id: string }).id;
+    };
+    const ch = (await api("POST", "/api/channels", { name: "icon-team" })).data;
+    const icon = await upload(ch.id, "image/png");
+    const set = await api("PATCH", `/api/channels/${ch.id}`, { settings: { iconFileId: icon } });
+    expect(set.status).toBe(200);
+    expect(set.data.settings.iconFileId).toBe(icon);
+    expect((await api("PATCH", `/api/channels/${ch.id}`, { settings: { iconFileId: await upload(ch.id, "text/plain") } })).status).toBe(400);
+    expect((await api("PATCH", `/api/channels/${ch.id}`, { settings: { iconFileId: await upload(null, "image/png") } })).status).toBe(400);
+    expect((await api("PATCH", `/api/channels/${ch.id}`, { settings: { iconFileId: "file_nope" } })).status).toBe(400);
+    expect((await api("PATCH", `/api/channels/${ch.id}`, { settings: { iconFileId: null } })).data.settings.iconFileId).toBeNull();
+  });
 });

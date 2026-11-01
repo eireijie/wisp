@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 import { useStore } from "./store.ts";
 import { useFeature } from "./features.ts";
 
+export interface DesktopUpdate {
+  state: "idle" | "checking" | "current" | "downloading" | "ready" | "unsupported" | "error" | "timed-out";
+  detail: string;
+  version: string | null;
+  current: string;
+}
+
 export interface BuddySettings {
   agentId: string | null;
 }
@@ -15,6 +22,13 @@ declare global {
       info(): Promise<{ version: string; platform: string; device: boolean }>;
       /** with a claim, this computer becomes that waiting device; without one, a new device */
       connectDevice(claim?: { token: string; name: string }): Promise<void>;
+      updates: {
+        status(): Promise<DesktopUpdate | null>;
+        /** look for a newer Wisp now; downloads it when there is one */
+        check(): Promise<DesktopUpdate | null>;
+        /** install the downloaded update and open Wisp again */
+        restart(): Promise<void>;
+      };
       buddy: {
         agents(agents: { id: string; name: string }[], leadId: string | null): void;
         settings(): Promise<BuddySettings>;

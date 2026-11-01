@@ -38,6 +38,7 @@ import {
   SquareKanban,
   Telescope,
   Trello,
+  Users,
   Wand2,
   Zap,
   type LucideIcon,
@@ -67,14 +68,22 @@ export function CatalogIcon({ name, size = 18, fallback = Plug }: { name?: strin
  * Pick which agents get something: a card with a switch per agent. `note` explains, per agent, a
  * caveat (e.g. its harness isn't wired yet); `unavailable` agents can't be added.
  */
-export function AgentPicker({ agents, value, onChange, note, disabled, unavailable }: { agents: Agent[]; value: string[]; onChange: (ids: string[]) => void; note?: (a: Agent) => string | null; disabled?: boolean; unavailable?: (a: Agent) => boolean }) {
-  if (!agents.length) return <p className="text-sm text-muted">No agents yet. Add one from the Agents page first.</p>;
+export function AgentPicker({ agents, value, onChange, note, disabled, unavailable, allAgents }: { agents: Agent[]; value: string[]; onChange: (ids: string[]) => void; note?: (a: Agent) => string | null; disabled?: boolean; unavailable?: (a: Agent) => boolean; allAgents?: { on: boolean; onChange: (on: boolean) => void } }) {
+  // "All agents" (every agent, and ones made later) replaces the per-agent switches while it's on
+  const allRow = allAgents && (
+    <Panel>
+      <Item icon={<span className="grid size-[30px] place-items-center text-muted"><Users size={18} strokeWidth={1.7} /></span>} title="All agents" right={<Switch on={allAgents.on} label="All agents" disabled={disabled} onChange={allAgents.onChange} />} />
+    </Panel>
+  );
+  if (allAgents?.on) return <div className="space-y-1.5">{allRow}</div>;
+  if (!agents.length) return allRow ? <div className="space-y-1.5">{allRow}</div> : <p className="text-sm text-muted">No agents yet. Add one from the Agents page first.</p>;
   // agents that can't take part can't be picked; "all" means all of the rest
   const pickable = unavailable ? agents.filter((a) => !unavailable(a)) : agents;
   const all = pickable.length > 0 && pickable.every((a) => value.includes(a.id));
   return (
     <div className="space-y-1.5">
-      {agents.length > 1 && (
+      {allRow}
+      {agents.length > 1 && !allRow && (
         <div className="flex justify-end px-1">
           <button type="button" className="text-[13px] text-muted hover:text-ink disabled:opacity-50" disabled={disabled || pickable.length === 0} onClick={() => onChange(all ? [] : pickable.map((a) => a.id))}>
             {all ? "Clear" : "Select all"}

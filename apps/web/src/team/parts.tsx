@@ -222,11 +222,11 @@ export function TeamGhosts({ agentIds, seed, size }: { agentIds: string[]; seed:
   return (
     <span className="relative inline-block shrink-0" style={{ width: members[1] ? size * 1.1 : size, height: size }} aria-hidden>
       <span className="absolute left-0 top-0">
-        <AgentAvatar agent={members[0]} size={members[1] ? small : size} interactive={false} />
+        <AgentAvatar agent={members[0]} size={members[1] ? small : size} live />
       </span>
       {members[1] && (
         <span className="absolute bottom-0 right-0 rounded-full" style={{ filter: "drop-shadow(1.5px 0 0 var(--panel)) drop-shadow(-1.5px 0 0 var(--panel)) drop-shadow(0 1.5px 0 var(--panel)) drop-shadow(0 -1.5px 0 var(--panel))" }}>
-          <AgentAvatar agent={members[1]} size={small} interactive={false} />
+          <AgentAvatar agent={members[1]} size={small} live />
         </span>
       )}
     </span>

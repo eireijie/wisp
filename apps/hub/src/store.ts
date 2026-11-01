@@ -245,6 +245,17 @@ export class Store {
     this.db.prepare("UPDATE nodes SET catalog_json = ? WHERE id = ?").run(JSON.stringify(catalog), nodeId);
   }
 
+  /** What a VM on a device has installed (each harness and its models), as the device reported it. */
+  setComputerCatalog(nodeId: string, computerId: string, catalog: HarnessCatalog[]) {
+    this.db.prepare("INSERT INTO computer_catalogs (node_id, computer_id, catalog_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT (node_id, computer_id) DO UPDATE SET catalog_json = excluded.catalog_json, updated_at = excluded.updated_at").run(nodeId, computerId, JSON.stringify(catalog), new Date().toISOString());
+  }
+
+  /** A VM's catalog, or null when its device hasn't reported one yet. */
+  computerCatalog(nodeId: string, computerId: string): HarnessCatalog[] | null {
+    const r = this.db.prepare("SELECT catalog_json FROM computer_catalogs WHERE node_id = ? AND computer_id = ?").get(nodeId, computerId) as { catalog_json: string } | undefined;
+    return r ? JSON.parse(r.catalog_json) : null;
+  }
+
   nodeCatalog(nodeId: string): HarnessCatalog[] {
     const r = this.db.prepare("SELECT catalog_json FROM nodes WHERE id = ?").get(nodeId) as { catalog_json: string } | undefined;
     return r ? JSON.parse(r.catalog_json) : [];
@@ -394,6 +405,7 @@ export class Store {
     this.db.transaction(() => {
       this.db.prepare("UPDATE agents SET computer_id = NULL WHERE computer_id = ?").run(computerId);
       this.db.prepare("DELETE FROM computers WHERE id = ?").run(computerId);
+      this.db.prepare("DELETE FROM computer_catalogs WHERE computer_id = ?").run(computerId);
     })();
   }
 
@@ -939,10 +951,10 @@ export class Store {
   run(runId: string) {
     return this.db
       .prepare(
-        "SELECT id, agent_id AS agentId, channel_id AS channelId, thread_id AS threadId, trigger_message_id AS triggerMessageId, status, hop, discussion_id AS discussionId, phase, requested_by AS requestedBy, kind FROM runs WHERE id = ?",
+        "SELECT id, agent_id AS agentId, channel_id AS channelId, thread_id AS threadId, trigger_message_id AS triggerMessageId, status, hop, discussion_id AS discussionId, phase, requested_by AS requestedBy, kind, created_at AS createdAt, finished_at AS finishedAt FROM runs WHERE id = ?",
       )
       .get(runId) as
-      | { id: string; agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; status: string; hop: number; discussionId: string | null; phase: string | null; requestedBy: string | null; kind: "background" | null }
+      | { id: string; agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; status: string; hop: number; discussionId: string | null; phase: string | null; requestedBy: string | null; kind: "background" | null; createdAt: string; finishedAt: string | null }
       | undefined;
   }
 
@@ -1205,7 +1217,7 @@ export class Store {
   // --- background work and follow-ups ---------------------------------------------------------
 
   private backgroundSql = `SELECT b.agent_id AS agentId, b.user_id AS userId, b.enabled, b.every_minutes AS everyMinutes, b.focus, b.quiet_start AS quietStart, b.quiet_end AS quietEnd,
-    b.next_at AS nextAt, b.next_reason AS nextReason, b.last_at AS lastAt, b.last_note AS lastNote, b.model, b.effort, b.daily_cap AS dailyCap,
+    b.next_at AS nextAt, b.next_reason AS nextReason, b.last_at AS lastAt, b.last_note AS lastNote, b.model, b.effort, b.daily_cap AS dailyCap, b.quiet_streak AS quietStreak,
     EXISTS (SELECT 1 FROM runs r WHERE r.agent_id = b.agent_id AND r.kind = 'background' AND r.requested_by = b.user_id AND r.status IN ('queued','running')) AS checking
     FROM background b`;
   private toBackground = (r: Record<string, unknown>): BackgroundWork => ({ ...(r as unknown as BackgroundWork), enabled: !!r.enabled, checking: !!r.checking });
@@ -1220,12 +1232,12 @@ export class Store {
     return (this.db.prepare(`${this.backgroundSql} WHERE b.enabled = 1`).all() as Record<string, unknown>[]).map(this.toBackground);
   }
 
-  setBackground(agentId: string, userId: string, patch: Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "focus" | "quietStart" | "quietEnd" | "nextAt" | "nextReason" | "lastAt" | "lastNote" | "model" | "effort" | "dailyCap">>): BackgroundWork {
+  setBackground(agentId: string, userId: string, patch: Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "focus" | "quietStart" | "quietEnd" | "nextAt" | "nextReason" | "lastAt" | "lastNote" | "model" | "effort" | "dailyCap" | "quietStreak">>): BackgroundWork {
     this.db.prepare("INSERT OR IGNORE INTO background (agent_id, user_id, created_at) VALUES (?, ?, ?)").run(agentId, userId, now());
     const v = { ...this.background(agentId, userId)!, ...patch };
     this.db
-      .prepare("UPDATE background SET enabled = ?, every_minutes = ?, focus = ?, quiet_start = ?, quiet_end = ?, next_at = ?, next_reason = ?, last_at = ?, last_note = ?, model = ?, effort = ?, daily_cap = ? WHERE agent_id = ? AND user_id = ?")
-      .run(v.enabled ? 1 : 0, v.everyMinutes, v.focus, v.quietStart, v.quietEnd, v.nextAt, v.nextReason, v.lastAt, v.lastNote, v.model, v.effort, v.dailyCap, agentId, userId);
+      .prepare("UPDATE background SET enabled = ?, every_minutes = ?, focus = ?, quiet_start = ?, quiet_end = ?, next_at = ?, next_reason = ?, last_at = ?, last_note = ?, model = ?, effort = ?, daily_cap = ?, quiet_streak = ? WHERE agent_id = ? AND user_id = ?")
+      .run(v.enabled ? 1 : 0, v.everyMinutes, v.focus, v.quietStart, v.quietEnd, v.nextAt, v.nextReason, v.lastAt, v.lastNote, v.model, v.effort, v.dailyCap, v.quietStreak ?? 0, agentId, userId);
     return this.background(agentId, userId)!;
   }
 

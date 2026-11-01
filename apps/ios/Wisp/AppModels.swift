@@ -12,7 +12,31 @@ struct HelperSkill: Decodable, Identifiable {
   var catalogId: String?
   var plain: Plain?
   var slug: String?
+  /** on for every agent, including ones made later (agentIds is then ignored); missing on older hubs */
+  var allAgents: Bool?
+  /** the agent that saved it, for source "learned" */
+  var learnedBy: String?
+  /** how many runs read it */
+  var uses: Int?
+  var lastUsedAt: String?
+  var createdAt: String?
+
+  var isLearned: Bool { source == "learned" }
+  var forAll: Bool { allAgents == true }
+  /** whether this agent can use it: on for everyone, or given to it */
+  func has(_ agentId: String) -> Bool { forAll || agentIds?.contains(agentId) == true }
 }
+
+/** A harness's own skill or command (GET /api/skills/built-in), for Settings → Skills → Built in. */
+struct BuiltInSkill: Decodable, Identifiable, Hashable {
+  var name: String
+  var description: String?
+  var harness: String
+  var harnessLabel: String
+  var agentIds: [String]
+  var id: String { harness + ":" + name }
+}
+struct BuiltInSkillList: Decodable { var skills: [BuiltInSkill] }
 struct AppConnector: Decodable, Identifiable {
   struct Auth: Decodable { var required: Bool?; var signedIn: Bool?; var error: String? }
   var id: String
@@ -28,6 +52,10 @@ struct AppConnector: Decodable, Identifiable {
   var env: [String: String]?
   var enabled: Bool?
   var agentIds: [String]?
+  /** on for every agent, including ones made later; missing on older hubs */
+  var allAgents: Bool?
+  var forAll: Bool { allAgents == true }
+  func has(_ agentId: String) -> Bool { forAll || agentIds?.contains(agentId) == true }
   var needsSignIn: Bool { auth?.required == true && auth?.signedIn != true }
   var auth: Auth?
   var warnings: [String]?

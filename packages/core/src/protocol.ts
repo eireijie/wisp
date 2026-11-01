@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ComputerAction, DeviceCapabilities } from "./computers.ts";
 import { ConnectorSpec } from "./connectors.ts";
 import { HarnessAccountOp, HarnessSettingsChange } from "./harness-settings.ts";
+import { ConnectionSecret, ModelProviderId, PlanUsage, RunCredential } from "./models.ts";
 import { ShelfItem } from "./shop.ts";
 
 /**
@@ -34,6 +35,8 @@ export const AgentEvent = z.discriminatedUnion("type", [
     outputTokens: z.number().int().nonnegative().optional(),
     /** the part of `inputTokens` that came from the harness's cache */
     cachedInputTokens: z.number().int().nonnegative().optional(),
+    /** how much of the subscription's limit is used, where the harness reports it (models.ts) */
+    plan: PlanUsage.optional(),
   }),
 ]);
 export type AgentEvent = z.infer<typeof AgentEvent>;
@@ -65,6 +68,7 @@ export const HarnessCatalogSchema = z.object({
         hint: z.string().max(120).optional(),
         kind: z.enum(["command", "skill"]),
         via: z.enum(["raw", "prompt"]),
+        builtIn: z.boolean().optional(),
       }),
     )
     .max(500)
@@ -131,8 +135,33 @@ export const RunRequest = z.object({
   inComputer: z.boolean().optional(),
   /** the agent's enabled connectors (MCP servers and secrets), resolved */
   connectors: z.array(ConnectorSpec).max(100).optional(),
+  /**
+   * The model connection the agent runs on (models.ts), when it has one its harness can use. The
+   * device puts it where the harness reads it, for this run only; without it the harness uses the
+   * device's (or VM's) own login, as before. Devices from before connections ignore it.
+   */
+  credential: RunCredential.optional(),
 });
 export type RunRequest = z.infer<typeof RunRequest>;
+
+/** A model sign-in running on a device (POST /api/model-connections/login), as people see it. */
+export const ModelLogin = z.object({
+  id: z.string().max(64),
+  provider: ModelProviderId,
+  harness: z.string().max(60),
+  status: z.enum(["running", "done", "failed"]),
+  /** the page to open */
+  url: z.string().max(2000).optional(),
+  /** the one-time code to enter there (device sign-ins); sign-ins that show a code on the page instead take it through input */
+  code: z.string().max(100).optional(),
+  /** whether it waits for a code pasted back from the page (Claude's sign-in) */
+  wantsInput: z.boolean().optional(),
+  output: z.string().max(4000),
+  error: z.string().max(1000).optional(),
+  /** the connection it made, once done */
+  connectionId: z.string().max(64).optional(),
+});
+export type ModelLogin = z.infer<typeof ModelLogin>;
 
 /** node -> hub */
 export const NodeToHub = z.discriminatedUnion("type", [
@@ -143,8 +172,20 @@ export const NodeToHub = z.discriminatedUnion("type", [
     /** the Wisp version this device runs (missing from devices older than updates) */
     version: z.object({ commit: z.string().nullable(), date: z.string().nullable() }).optional(),
   }),
-  /** models each installed harness offers on this device; sent after hello because it can take a few seconds */
-  z.object({ type: z.literal("catalog"), catalog: z.array(HarnessCatalogSchema).max(50) }),
+  /**
+   * Models each installed harness offers on this device; sent after hello because it can take a few
+   * seconds. With `computerId`, the harnesses installed inside that VM instead (what agents running in it use).
+   */
+  z.object({ type: z.literal("catalog"), catalog: z.array(HarnessCatalogSchema).max(50), computerId: z.string().max(100).optional() }),
+  /**
+   * A run's sign-in was renewed by its harness (Codex and Hermes rotate ChatGPT's refresh token):
+   * the hub keeps the new one, so the next run anywhere doesn't use the old, now dead one.
+   */
+  z.object({ type: z.literal("credential_refreshed"), connectionId: z.string().max(64), runId: z.string().max(64).optional(), secret: ConnectionSecret }),
+  /** how a model sign-in this device runs is going (the link and code to show); never the secret */
+  z.object({ type: z.literal("model_login"), login: ModelLogin }),
+  /** a model sign-in finished: on success, what the hub keeps as the new connection */
+  z.object({ type: z.literal("model_login_done"), loginId: z.string().max(64), ok: z.boolean(), secret: ConnectionSecret.optional(), account: z.string().max(200).nullable().optional(), plan: z.string().max(40).nullable().optional(), error: z.string().max(1000).optional() }),
   z.object({ type: z.literal("run_event"), runId: z.string(), event: AgentEvent }),
   z.object({ type: z.literal("run_done"), runId: z.string(), finalText: z.string() }),
   z.object({ type: z.literal("run_failed"), runId: z.string(), error: z.string() }),
@@ -209,6 +250,16 @@ export const HubToNode = z.discriminatedUnion("type", [
   z.object({ type: z.literal("harness_account"), requestId: z.string(), harness: z.string().max(60), action: HarnessAccountOp }),
   /** send one of a harness's skills (its SKILL.md) to share it; answered with a result (HarnessSkillFile) */
   z.object({ type: z.literal("harness_skill"), requestId: z.string(), harness: z.string().max(60), account: z.string().max(64).optional(), id: z.string().max(300) }),
+  /**
+   * Sign in to a model provider with a harness on this device, in a scratch folder, so the hub can
+   * keep the sign-in (models.ts). "start" answers with a result (ModelLogin); progress arrives as
+   * model_login messages and the end as model_login_done. "input" types a pasted code into it.
+   */
+  z.object({ type: z.literal("model_login"), requestId: z.string(), op: z.enum(["start", "input", "cancel"]), loginId: z.string().max(64), provider: ModelProviderId.optional(), harness: z.enum(["claude-code", "codex", "hermes"]).optional(), text: z.string().max(2000).optional() }),
+  /** report the harnesses (and their models) installed inside this VM; answered with a catalog message */
+  z.object({ type: z.literal("computer_catalog"), computer: ComputerSpec }),
+  /** the model connections this device may keep folders for; any other's sign-ins and keys are removed, here and in these VMs */
+  z.object({ type: z.literal("connections_keep"), connectionIds: z.array(z.string()), computers: z.array(ComputerSpec) }),
   /** open a harness's config file in the device's own editor; answered with a result ({ path }) */
   z.object({ type: z.literal("harness_open_config"), requestId: z.string(), harness: z.string().max(60), account: z.string().max(64).optional() }),
 ]);
@@ -248,6 +299,8 @@ export type ClientEvent =
   | { type: "computer_removed"; computerId: string }
   | { type: "approval"; approval: import("./types.ts").Approval }
   | { type: "routines_changed" }
+  /** skills or connectors were added, changed, removed, given to agents, learned or used; refetch GET /api/skills (and /api/connectors) */
+  | { type: "skills_changed" }
   | { type: "background_changed"; agentId: string }
   /** an agent changed a setting or mod for someone, or someone undid one */
   | { type: "changes_changed" }
@@ -256,6 +309,10 @@ export type ClientEvent =
   | { type: "flows_changed"; channelId: string }
   /** notes were changed outside Wisp (Obsidian, a git pull or push) */
   | { type: "memory_changed" }
+  /** someone's model connections changed (added, removed, renamed, plan usage); refetch GET /api/model-connections */
+  | { type: "model_connections_changed" }
+  /** a model sign-in moved on (sent to the person who started it only) */
+  | { type: "model_login"; login: ModelLogin }
   /** an owner switched optional features on or off (Settings → General → Mods) */
   | { type: "features"; features: import("./features.ts").Features };
 

@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS agent_connectors (
 CREATE TABLE IF NOT EXISTS skills (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL, slug TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
-  source TEXT NOT NULL CHECK (source IN ('catalog','custom','taught')), catalog_id TEXT, tags_json TEXT NOT NULL DEFAULT '[]',
+  source TEXT NOT NULL CHECK (source IN ('catalog','custom','taught','learned')), catalog_id TEXT, tags_json TEXT NOT NULL DEFAULT '[]',
   content TEXT NOT NULL, created_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
   UNIQUE (workspace_id, slug)
 );
@@ -248,6 +248,19 @@ CREATE TABLE IF NOT EXISTS changes (
   created_at TEXT NOT NULL, undone_at TEXT
 );
 CREATE INDEX IF NOT EXISTS changes_by_user ON changes(workspace_id, user_id, created_at);
+CREATE TABLE IF NOT EXISTS model_connections (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('oauth','key')), label TEXT NOT NULL,
+  account TEXT, plan TEXT, secret_json TEXT NOT NULL, usage_json TEXT,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_used_at TEXT, last_error TEXT
+);
+CREATE INDEX IF NOT EXISTS model_connections_by_user ON model_connections(workspace_id, user_id);
+CREATE TABLE IF NOT EXISTS computer_catalogs (
+  node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE, computer_id TEXT NOT NULL,
+  catalog_json TEXT NOT NULL, updated_at TEXT NOT NULL,
+  PRIMARY KEY (node_id, computer_id)
+);
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   keys_json TEXT NOT NULL, created_at TEXT NOT NULL
@@ -296,6 +309,7 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["background", "effort", "TEXT"],
   // NULL means no limit, so existing rows get the default of 24 from the column itself
   ["background", "daily_cap", "INTEGER DEFAULT 24"],
+  ["background", "quiet_streak", "INTEGER NOT NULL DEFAULT 0"],
   // from when agents could borrow a device's screen; only migrateLoans reads it now
   ["approvals", "loan_json", "TEXT"],
   ["approvals", "login_json", "TEXT"],
@@ -316,6 +330,13 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["followups", "channel_id", "TEXT"],
   ["followups", "message_id", "TEXT"],
   ["followups", "run_id", "TEXT"],
+  // on for every agent in the workspace, including ones made later
+  ["skills", "all_agents", "INTEGER NOT NULL DEFAULT 0"],
+  ["connectors", "all_agents", "INTEGER NOT NULL DEFAULT 0"],
+  // a skill an agent saved on its own: who, and how often runs read it
+  ["skills", "learned_by", "TEXT"],
+  ["skills", "uses", "INTEGER NOT NULL DEFAULT 0"],
+  ["skills", "last_used_at", "TEXT"],
 ];
 
 export function openDb(file: string): Database.Database {
@@ -334,6 +355,7 @@ export function openDb(file: string): Database.Database {
   migrateNodeOwners(db);
   if (added.has("nodes.role")) migrateNodeRoles(db);
   migrateTaskAssignee(db);
+  migrateSkillSources(db);
   migrateLoans(db);
   dropOrphanChannelMembers(db);
   return db;
@@ -386,6 +408,35 @@ function migrateTaskAssignee(db: Database.Database) {
     db.exec("ALTER TABLE tasks_new RENAME TO tasks");
   })();
   db.pragma("foreign_keys = ON");
+}
+
+/**
+ * Skills agents learn on their own are source 'learned', which the first CHECK on skills.source
+ * didn't allow. SQLite can't change a CHECK in place, so the table is rebuilt once; agent_skills
+ * points at it by id and keeps its rows (foreign keys are off while it's swapped).
+ */
+function migrateSkillSources(db: Database.Database) {
+  const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'skills'").get() as { sql: string } | undefined)?.sql ?? "";
+  if (sql.includes("'learned'")) return;
+  const columns = (db.prepare("PRAGMA table_info(skills)").all() as { name: string }[]).map((c) => c.name).join(", ");
+  db.pragma("foreign_keys = OFF");
+  try {
+    db.transaction(() => {
+      db.exec(`CREATE TABLE skills_new (
+        id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        name TEXT NOT NULL, slug TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL CHECK (source IN ('catalog','custom','taught','learned')), catalog_id TEXT, tags_json TEXT NOT NULL DEFAULT '[]',
+        content TEXT NOT NULL, created_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        all_agents INTEGER NOT NULL DEFAULT 0, learned_by TEXT, uses INTEGER NOT NULL DEFAULT 0, last_used_at TEXT,
+        UNIQUE (workspace_id, slug)
+      )`);
+      db.exec(`INSERT INTO skills_new (${columns}) SELECT ${columns} FROM skills`);
+      db.exec("DROP TABLE skills");
+      db.exec("ALTER TABLE skills_new RENAME TO skills");
+    })();
+  } finally {
+    db.pragma("foreign_keys = ON");
+  }
 }
 
 /** Devices from before they had a role: the ones already running agents' VMs do that. */

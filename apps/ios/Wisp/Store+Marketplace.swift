@@ -24,6 +24,38 @@ extension Store {
     if let i = skills.firstIndex(where: { $0.id == skill.id }) { skills[i] = skill } else { skills.append(skill) }
   }
 
+  /** The harnesses' own skills and commands, for Settings → Skills → Built in (empty on older hubs). */
+  func builtInSkills() async throws -> [BuiltInSkill] {
+    let list: BuiltInSkillList = try await fetch { try await $0.get("/api/skills/built-in") }
+    return list.skills
+  }
+
+  /** Who can use a skill: everyone (now and later), or only the agents given; `agentIds` nil keeps the list it has. */
+  func setSkillAccess(_ skillId: String, allAgents: Bool, agentIds: [String]? = nil) async throws {
+    var fields: Fields = ["allAgents": AnyEncodable(allAgents)]
+    if let agentIds { fields["agentIds"] = AnyEncodable(agentIds.sorted()) }
+    try await saveSkill(skillId, fields)
+  }
+
+  /** On for every agent, including ones made later, or back to the agents ticked. */
+  func setConnectorAllAgents(_ connectorId: String, _ on: Bool) async throws {
+    try await saveConnector(connectorId, ["allAgents": AnyEncodable(on)])
+  }
+
+  /** Settings → Skills → "Learn skills on their own" (kept with the agent policy). */
+  func setLearnSkills(_ on: Bool) async throws {
+    let previous = agentPolicy
+    agentPolicy?.learnSkills = on
+    do {
+      let data = try await fetch { try await $0.put("/api/settings/agents", ["learnSkills": on]) }
+      // an older hub drops the field: keep what was picked
+      if var policy = try? Wire.decoder.decode(AgentPolicy.self, from: data) { policy.learnSkills = policy.learnSkills ?? on; agentPolicy = policy }
+    } catch {
+      agentPolicy = previous
+      throw error
+    }
+  }
+
   /** A skill from a harness on one of your devices, for these helpers. */
   @discardableResult
   func bringInSkill(_ item: ShelfItem, from nodeId: String, agentIds: [String]) async throws -> HelperSkill {

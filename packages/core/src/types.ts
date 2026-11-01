@@ -48,6 +48,11 @@ export type AccessLevel = "read-only" | "edit" | "full";
 export interface AgentSettings {
   /** reasoning effort, e.g. "low" | "medium" | "high"; null = the harness default */
   effort?: string | null;
+  /**
+   * The model connection (models.ts) it runs on: a sign-in or API key kept on the hub and handed to
+   * its device or VM with each run. Unset (or null) = the harness's own login where it runs, as before.
+   */
+  connectionId?: string | null;
   access?: AccessLevel;
   /** when true the agent can't rewrite its own SOUL.md */
   soulLocked?: boolean;
@@ -136,6 +141,8 @@ export interface CommandOption {
   hint?: string;
   kind: "command" | "skill";
   via: "raw" | "prompt";
+  /** the harness ships it (not a file the person added) */
+  builtIn?: boolean;
 }
 
 /** The latest usage report for an agent in one conversation. */
@@ -149,6 +156,11 @@ export interface ContextUsage {
   outputTokens?: number;
   /** the part of `inputTokens` served from the harness's cache */
   cachedInputTokens?: number;
+  /** how much of the subscription's limit was used, where the harness reports it */
+  plan?: import("./models.ts").PlanUsage;
+  /** the harness and model connection the run used (null: the device's own login); missing on older runs */
+  harness?: string;
+  connectionId?: string | null;
   at: string;
 }
 
@@ -194,6 +206,8 @@ export interface ChannelSettings {
   instructions: string;
   /** the channel's agent team, drawn as a flow chart; null = no team (the older rules above apply) */
   team: ChannelTeam | null;
+  /** the image chosen as the team's icon (a file shared in this channel); unset = its first two agents' ghosts */
+  iconFileId?: string | null;
 }
 
 /**
@@ -317,6 +331,8 @@ export type MessagePart =
   | { type: "status"; text: string }
   /** a quiet line from Wisp, e.g. "Round 2 of 3" */
   | { type: "notice"; text: string }
+  /** the agent saved a new skill during this reply, or followed one */
+  | { type: "skill"; action: "learned" | "used"; skillId: string; slug: string }
   /** this message starts a discussion; its thread is where it happens */
   | { type: "discussion"; discussionId: string }
   /** an agent's computer: a live view, and what it asked a person to do there ("Sign in to Zendesk") */
@@ -418,6 +434,8 @@ export interface BackgroundWork {
   effort: string | null;
   /** most regular checks a day on the person's clock; null = no limit */
   dailyCap: number | null;
+  /** checks in a row that found nothing to say: each one doubles the wait, up to a day */
+  quietStreak: number;
 }
 
 /** How much of a person's AI usage background checks may use each day, across all their agents. */

@@ -121,10 +121,13 @@ function agentNote(kind: ConnectorKind, command: string, devices: DeviceInfo[] |
   };
 }
 
-/** True when there are agents but none that would get this connector could use it. */
-export function connectBlocked(agents: Pick<Agent, "id" | "harness">[], agentIds: string[], kind: ConnectorKind): boolean {
-  if (!agents.length) return false;
-  const chosen = agentIds.length ? agents.filter((a) => agentIds.includes(a.id)) : agents;
+/**
+ * True when agents would get this connector but none of them could use it. "All agents" means every
+ * agent; otherwise only the ones checked (none checked means nobody yet, which is allowed).
+ */
+export function connectBlocked(agents: Pick<Agent, "id" | "harness">[], agentIds: string[], kind: ConnectorKind, allAgents = false): boolean {
+  const chosen = allAgents ? agents : agents.filter((a) => agentIds.includes(a.id));
+  if (!chosen.length) return false;
   return !chosen.some((a) => harnessSupportsConnectors(a.harness, kind));
 }
 
@@ -162,6 +165,7 @@ export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved
     return all.length || entry ? all : [{ key: "", value: "" }];
   });
   const [agentIds, setAgentIds] = useState<string[]>(existing?.agentIds ?? presetAgents ?? (agents.length === 1 && harnessSupportsConnectors(agents[0].harness, existing?.kind ?? entry?.kind ?? "mcp-stdio") ? [agents[0].id] : []));
+  const [allAgents, setAllAgents] = useState(existing?.allAgents ?? false);
   // a different kind (custom form) can rule out agents that were ticked
   useEffect(() => {
     if (existing) return;
@@ -179,13 +183,13 @@ export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved
   const [showAdvanced, setShowAdvanced] = useState(custom);
   const devices = useDevices(10_000);
 
-  const blocked = !existing && connectBlocked(agents, agentIds, kind);
+  const blocked = !existing && connectBlocked(agents, agentIds, kind, allAgents);
   const nameTaken = taken.includes(name.trim().toLowerCase());
   const missing = rows.filter((r) => r.field && !r.field.optional && !r.value.trim() && !r.saved).map((r) => r.field!.label);
   // asked of each chosen agent's device before connecting, so a connector that can't start is caught here, not in a failed run
   const cantStart =
     kind === "mcp-stdio"
-      ? agentIds.flatMap((id) => {
+      ? (allAgents ? agents.map((a) => a.id) : agentIds).flatMap((id) => {
           const a = agents.find((x) => x.id === id);
           const d = a && missingOn(a, command, devices);
           return a && d ? [`${a.name}'s device ${d.name} doesn't have "${command.trim().split(/\s+/)[0]}". ${entry?.needs ? `Needs: ${entry.needs}.` : "Install it there first."}`] : [];
@@ -207,7 +211,7 @@ export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved
         return i < 0 ? [l, ""] : [l.slice(0, i).trim(), l.slice(i + 1).trim()];
       }),
     );
-    const body: Record<string, unknown> = { name: name.trim(), env, agentIds };
+    const body: Record<string, unknown> = { name: name.trim(), env, agentIds, allAgents };
     if (kind === "mcp-stdio") Object.assign(body, { command: command.trim(), args: lines(args) });
     if (kind === "mcp-http") Object.assign(body, { url: url.trim(), headers: hdrs });
     setBusy(true);
@@ -324,7 +328,7 @@ export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved
 
         <div className="space-y-2">
           <Label>Which helpers get it</Label>
-          <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} note={agentNote(kind, command, devices)} unavailable={(a) => !harnessSupportsConnectors(a.harness, kind)} />
+          <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} note={agentNote(kind, command, devices)} unavailable={(a) => !harnessSupportsConnectors(a.harness, kind)} allAgents={{ on: allAgents, onChange: setAllAgents }} />
         </div>
         <MoreOptions about="what it works with">
           <p className="text-xs text-muted">{worksWith(kind)}</p>

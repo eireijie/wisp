@@ -224,7 +224,31 @@ describe("/ commands", () => {
     expect(parseCommand("@nova /review 42", "poopy")).toBeNull();
     expect(parseCommand("@poopyx /review", "poopy")).toBeNull();
     expect(parseCommand("look at /etc")).toBeNull();
-    expect(agentCommands([{ name: "context", kind: "command", via: "raw" }], [{ slug: "pdf", description: "PDFs" }]).map((c) => c.kind)).toEqual(["wisp", "wisp", "wisp-skill"]);
+    expect(agentCommands([{ name: "context", kind: "command", via: "raw" }], [{ slug: "pdf", description: "PDFs" }]).map((c) => c.kind)).toEqual(["wisp", "wisp", "wisp", "wisp", "wisp-skill"]);
+  });
+
+  it("groups the menu: learned skills, the harness's own, Wisp's, then other skills", async () => {
+    const { agentCommands } = await import("../src/commands.ts");
+    const now = Date.parse("2026-10-29T12:00:00Z");
+    const list = agentCommands(
+      [
+        { name: "review", description: "Harness review", kind: "command", via: "raw", builtIn: true },
+        { name: "pdf", description: "Harness PDFs", kind: "skill", via: "raw" },
+        { name: "model", kind: "command", via: "raw" },
+      ],
+      [
+        { slug: "pdf", description: "Wisp PDFs" },
+        { slug: "notes", description: "Take notes" },
+        { slug: "review", description: "My way", learnedBy: "Ghosty", createdAt: "2026-10-28T00:00:00Z" },
+        { slug: "pizza", description: "Order pizza", learnedBy: "Nova", createdAt: "2026-10-01T00:00:00Z" },
+        { slug: "context", description: "A learned name Wisp already uses", learnedBy: "Nova" },
+      ],
+      now,
+    );
+    expect(list.map((c) => `${c.name}:${c.group}`)).toEqual(["review:learned", "pizza:learned", "pdf:harness", "context:wisp", "model:wisp", "effort:wisp", "harness:wisp", "notes:skill"]);
+    expect(list[0]).toEqual({ name: "review", description: "My way", kind: "wisp-skill", via: "prompt", group: "learned", learnedBy: "Ghosty", isNew: true });
+    expect(list[1].isNew).toBeUndefined();
+    expect(list[2]).toEqual({ name: "pdf", description: "Harness PDFs", kind: "skill", via: "raw", group: "harness" });
   });
 
   it("reads front matter, block values included", async () => {

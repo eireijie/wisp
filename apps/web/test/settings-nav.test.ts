@@ -12,7 +12,7 @@ describe("settings navigation", () => {
     expect(ids(settingsNav(false, FEATURE_PRESETS.everything))).toEqual([
       ["You", ["profile", "notifications", "appearance", "preferences", "voice", "security"]],
       ["Workspace", ["general", "people", "usage"]],
-      ["Agents", ["agents", "agent-defaults", "harnesses", "runtimes", "logins", "apps", "connections", "memory"]],
+      ["Agents", ["agents", "agent-defaults", "models", "harnesses", "runtimes", "logins", "apps", "skills", "connections", "memory"]],
       ["Devices", ["devices", "computers", "access", "mobile"]],
       ["More", ["data", "updates"]],
     ]);
@@ -31,7 +31,7 @@ describe("settings navigation", () => {
 
   it("leaves out pages guests can't use", () => {
     const pages = settingsNav(true, FEATURE_PRESETS.everything).flatMap((s) => s.pages.map((p) => p.id));
-    for (const id of ["agents", "agent-defaults", "computers", "logins", "apps", "runtimes", "connections", "voice", "people", "general"]) expect(pages).not.toContain(id);
+    for (const id of ["agents", "agent-defaults", "computers", "logins", "apps", "skills", "runtimes", "connections", "voice", "people", "general"]) expect(pages).not.toContain(id);
   });
 
   it("hides pages for features that are off, and a section left empty", () => {

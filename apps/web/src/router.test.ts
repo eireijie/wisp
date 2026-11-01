@@ -105,4 +105,9 @@ describe("device pages", () => {
     expect(router.parseRoute("#/nodes/box")).toEqual({ view: "computers", computerId: null, deviceId: "box" });
     expect(router.parseRoute("#/nodes")).toEqual({ view: "computers", computerId: null });
   });
+
+  it("sends the old Marketplace Agents address to All", () => {
+    expect(router.parseRoute("#/marketplace/agents")).toEqual({ view: "marketplace", section: null });
+    expect(router.parseRoute("#/marketplace/mods")).toEqual({ view: "marketplace", section: "mods" });
+  });
 });

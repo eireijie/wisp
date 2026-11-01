@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { FlowStrip } from "../team/Runs.tsx";
-import { Archive, Bot, Clock, ChevronLeft, ChevronRight, Check, CircleDot, Eye, FileText, GitPullRequest, Brain, ArrowDown, ArrowUp, AtSign, Camera, Loader2, Mic, MessageSquare, MoreHorizontal, Monitor, Paperclip, Phone, Plus, RotateCcw, Shield, ShieldAlert, SquareTerminal, UserPlus, Users, X, Zap, ChevronDown, Hash, Info, AudioLines, CornerUpLeft, Pin, ListChecks, Square, ArrowRightLeft } from "lucide-react";
-import { parseMentions, SCHEDULE_MARK, type AccessLevel, type Agent, type ContextUsage, type HarnessCatalog, type Message, type MessagePart } from "@wisp/core";
+import { Archive, Book, Bot, Clock, ChevronLeft, ChevronRight, Check, CircleDot, Eye, FileText, GitPullRequest, Brain, ArrowDown, ArrowUp, AtSign, Camera, Loader2, Mic, MessageSquare, MoreHorizontal, Monitor, Paperclip, Phone, Plus, Shield, ShieldAlert, SquareTerminal, UserPlus, Users, X, Zap, ChevronDown, Hash, Info, AudioLines, CornerUpLeft, Pin, ListChecks, Square, ArrowRightLeft } from "lucide-react";
+import { parseMentions, SCHEDULE_MARK, type AccessLevel, type Agent, type ContextUsage, type Message, type MessagePart } from "@wisp/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { conversationKey, useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
@@ -9,7 +9,8 @@ import type { TaskRow } from "./TasksView.tsx";
 import { renderMarkdown } from "../markdown.ts";
 import { ChannelSettings, NOTIFY, landingChannel, setArchived, setChannelPrefs, type ChannelSettingsTab } from "../components/Channels.tsx";
 import { ChatAvatar } from "../components/ChatList.tsx";
-import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
+import { patchAgent, prettyModel, tokens, useAgentContext, type AgentContext } from "../models.ts";
+import { ModelLine, RunPanel } from "../components/RunPanel.tsx";
 import { DiscussionCard } from "../components/Discussion.tsx";
 import { ApprovalCard, ChangeCard, ChatCard, ComputerPart, RoutineChip } from "../components/AgentCards.tsx";
 import { AgentAvatar, Menu, Modal, Pill, Popover, StatusDot, UserAvatar, clockTime, cx, harnessLabel } from "../components/ui.tsx";
@@ -223,20 +224,16 @@ function TeamMore({ channel, onInfo, onSettings }: { channel: ChannelInfo; onInf
   );
 }
 
-/** The context ring in a DM's header (desktops): how full the conversation is. */
+/** The context ring in a DM's header, at every width: how full the conversation is. No circle behind it. */
 function DmContext({ agentId, channelId }: { agentId: string; channelId: string }) {
   const { ctx } = useAgentContext(agentId, channelId);
   if (!ctx) return null;
-  return (
-    <span className="max-md:hidden">
-      <ContextRing ctx={ctx} circle />
-    </span>
-  );
+  return <ContextRing ctx={ctx} header />;
 }
 
 /** The "…" of a DM: the agent's details, its computer, a call, its model and what it may do. */
 function DmMore({ agent, channelId, onDetails, onComputer, onCall }: { agent: Agent; channelId: string; onDetails: () => void; onComputer: () => void; onCall?: () => void }) {
-  const { ctx, catalog } = useAgentContext(agent.id, channelId);
+  const { ctx, models } = useAgentContext(agent.id, channelId);
   const canEdit = useStore((s) => s.me?.role !== "guest");
   const [dialog, setDialog] = useState<null | "model" | "access" | "context">(null);
   return (
@@ -252,12 +249,12 @@ function DmMore({ agent, channelId, onDetails, onComputer, onCall }: { agent: Ag
           { label: `About ${agent.name}`, icon: <Info size={17} />, onSelect: onDetails },
           ...(agent.computerId ? [{ label: `${agent.name}'s computer`, icon: <Monitor size={17} className="text-accent-computers" />, onSelect: onComputer }] : []),
           ...(onCall ? [{ label: `Call ${agent.name}`, icon: <Phone size={17} className="text-st-online" />, onSelect: onCall }] : []),
-          ...(ctx ? [...(canEdit ? [{ label: "Model and effort", icon: <Zap size={17} />, onSelect: () => setDialog("model") }] : []), { label: "What it can do", icon: <Shield size={17} />, onSelect: () => setDialog("access") }, { label: "Context window", icon: <AudioLines size={17} />, onSelect: () => setDialog("context") }] : []),
+          ...(ctx ? [...(canEdit ? [{ label: "Harness, model and effort", icon: <Zap size={17} />, onSelect: () => setDialog("model") }] : []), { label: "What it can do", icon: <Shield size={17} />, onSelect: () => setDialog("access") }, { label: "Context window", icon: <AudioLines size={17} />, onSelect: () => setDialog("context") }] : []),
         ]}
       />
       {dialog === "model" && ctx && (
-        <Modal title={`Model for ${agent.name}`} onClose={() => setDialog(null)}>
-          <ModelPanel agent={agent} ctx={ctx} catalog={catalog} close={() => setDialog(null)} />
+        <Modal title={`How ${agent.name} runs`} onClose={() => setDialog(null)}>
+          <RunPanel agent={agent} ctx={ctx} models={models} channelId={channelId} close={() => setDialog(null)} />
         </Modal>
       )}
       {dialog === "access" && ctx && (
@@ -279,7 +276,7 @@ function ArchivedBar({ channel }: { channel: ChannelInfo }) {
   const canManage = useStore((s) => s.me?.role !== "guest");
   const [error, setError] = useState<string | null>(null);
   return (
-    <div className="shrink-0 px-3 md:px-5 pb-3 pt-1 safe-bottom">
+    <div className="shrink-0 px-3 md:px-5 pt-1 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <div className="mx-auto max-w-2xl rounded-3xl bg-card px-4 py-3 flex items-center gap-3">
         <Archive size={18} className="text-muted shrink-0" />
         <span className="min-w-0 flex-1">
@@ -299,61 +296,11 @@ function ArchivedBar({ channel }: { channel: ChannelInfo }) {
 
 // --- who you're talking to ----------------------------------------------------------------------
 
-interface AgentContext {
-  harness: string;
-  harnessVersion: string | null;
-  model: string | null;
-  modelIsDefault: boolean;
-  effort: string | null;
-  effortIsDefault: boolean;
-  access: AccessLevel;
-  fast: boolean;
-  fastAvailable: boolean;
-  fastDescription: string | null;
-  contextUsed: number | null;
-  contextWindow: number | null;
-  lastRunAt: string | null;
-}
-
 const ACCESS: Record<AccessLevel, { label: string; body: string }> = {
   "read-only": { label: "Read only", body: "Reads files and answers; changes nothing." },
   edit: { label: "Can edit files", body: "Edits files in its own working folder." },
   full: { label: "Full access", body: "No sandbox. Needs a device started with --allow-full-access." },
 };
-
-function tokens(n: number) {
-  if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0)}M`;
-  if (n >= 10_000) return `${Math.round(n / 1000)}K`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return String(n);
-}
-
-/**
- * Everything the DM composer shows about its agent: settings, the device's model catalog, and
- * how full this conversation's context is. Refreshes after each reply and on settings changes.
- */
-function useAgentContext(agentId: string | undefined, channelId: string, threadId?: string) {
-  const agent = useStore((s) => (agentId ? s.agents.find((a) => a.id === agentId) : undefined));
-  const messages = useStore((s) => (threadId ? s.threads[threadId] : s.messages[channelId]));
-  const [ctx, setCtx] = useState<AgentContext | null>(null);
-  const [catalog, setCatalog] = useState<HarnessCatalog | null>(null);
-  const lastAgentMsg = [...(messages ?? [])].reverse().find((m) => m.author.kind === "agent")?.id;
-  const settingsKey = agent ? `${agent.model}|${agent.settings.effort}|${agent.settings.access}|${agent.settings.fast}|${agent.nodeId}` : "";
-  useEffect(() => {
-    if (!agentId) return;
-    api<AgentContext>("GET", `/api/agents/${agentId}/context?channel=${channelId}${threadId ? `&thread=${threadId}` : ""}`).then(setCtx, () => setCtx(null));
-  }, [agentId, channelId, threadId, lastAgentMsg, settingsKey]);
-  useEffect(() => {
-    if (!agentId) return;
-    api<{ catalog: HarnessCatalog | null }>("GET", `/api/agents/${agentId}/models`).then((r) => setCatalog(r.catalog), () => setCatalog(null));
-  }, [agentId, agent?.nodeId]);
-  return { agent, ctx, catalog };
-}
-
-async function patchAgent(agentId: string, body: unknown) {
-  await api("PATCH", `/api/agents/${agentId}`, body);
-  await useStore.getState().refreshAgents();
-}
 
 /** What an agent may do on its computer: read only, edit files, or everything. */
 function AccessList({ agent, ctx, canEdit, close }: { agent: Agent; ctx: AgentContext; canEdit: boolean; close: () => void }) {
@@ -386,162 +333,6 @@ function AccessList({ agent, ctx, canEdit, close }: { agent: Agent; ctx: AgentCo
         Permission settings →
       </a>
     </div>
-  );
-}
-
-/** Display names the way Codex shows them: "GPT-5.6-Sol" -> "GPT-5.6 Sol". */
-
-/**
- * "GPT-5.6 Sol Extra High ⌄", Codex style. Opens an effort panel (slider, fast mode, reset);
- * the model name in it opens the model list.
- */
-function ModelControl({ agent, ctx, catalog, canEdit }: { agent: Agent; ctx: AgentContext; catalog: HarnessCatalog | null; canEdit: boolean }) {
-  const current = catalog?.models.find((m) => m.id === ctx.model);
-  const label = prettyModel(current?.label ?? ctx.model ?? "Default model");
-  return (
-    <Popover
-      align="right"
-      className="w-60 max-w-[calc(100vw-2rem)]"
-      trigger={(open, toggle) => (
-        <button
-          type="button"
-          onClick={canEdit ? toggle : undefined}
-          title={`${harnessLabel(ctx.harness) ?? ctx.harness} · ${ctx.model ?? "default model"}${ctx.effort ? ` · ${ctx.effort} effort` : ""}${ctx.fast ? " · fast" : ""}`}
-          aria-label="Model"
-          className={cx("h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13px] min-w-0 text-muted", canEdit && "hover:bg-hover hover:text-ink", open && "bg-hover")}
-        >
-          {ctx.fast && ctx.fastAvailable && <Zap size={13} className="text-accent-text fill-accent shrink-0" />}
-          <span className="truncate max-w-32 @lg:max-w-48">{label}</span>
-          {ctx.effort && <span className="whitespace-nowrap">· {effortName(ctx.effort)}</span>}
-        </button>
-      )}
-    >
-      {(close) => <ModelPanel agent={agent} ctx={ctx} catalog={catalog} close={close} />}
-    </Popover>
-  );
-}
-
-function ModelPanel({ agent, ctx, catalog, close }: { agent: Agent; ctx: AgentContext; catalog: HarnessCatalog | null; close: () => void }) {
-  const [view, setView] = useState<"effort" | "models">("effort");
-  const models = catalog?.models ?? [];
-  const current = models.find((m) => m.id === ctx.model);
-  const levels = current?.efforts ?? catalog?.efforts ?? [];
-  // the hub knows what an unset effort resolves to (last run, then device config, then model default)
-  const defaultEffort = [ctx.effortIsDefault ? ctx.effort : null, catalog?.defaultEffort, current?.defaultEffort].find((e) => e && levels.includes(e)) ?? levels[Math.floor(levels.length / 2)] ?? "";
-  // move the thumb right away; the save follows
-  const [effort, setEffort] = useState(agent.settings.effort ?? null);
-  const [fast, setFast] = useState(!!agent.settings.fast);
-  const shown = effort ?? defaultEffort;
-  // the slider reports every level it lands on mid-drag; save once it settles
-  const pending = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const saveEffort = (level: string | null, delay = 350) => {
-    clearTimeout(pending.current);
-    setEffort(level);
-    pending.current = setTimeout(() => void patchAgent(agent.id, { settings: { effort: level } }), delay);
-  };
-
-  if (view === "models")
-    return (
-      <div className="p-1 max-h-[45vh] overflow-y-auto" role="menu">
-        <button onClick={() => setView("effort")} className="w-full px-2 pt-1 pb-1 flex items-center gap-1 text-[11px] text-muted hover:text-ink">
-          <ChevronLeft size={12} /> Select model
-        </button>
-        <ModelItem
-          label="Default"
-          sub={catalog?.defaultModel ? `Uses ${prettyModel(models.find((m) => m.id === catalog.defaultModel)?.label ?? catalog.defaultModel)}` : "The device's own setting"}
-          checked={!agent.model}
-          onClick={async () => {
-            setView("effort");
-            if (agent.model) await patchAgent(agent.id, { model: null });
-          }}
-        />
-        {models.map((m) => (
-          <ModelItem
-            key={m.id}
-            label={prettyModel(m.label)}
-            checked={agent.model === m.id}
-            onClick={async () => {
-              setView("effort");
-              if (agent.model === m.id) return;
-              // drop an effort the new model doesn't support
-              const keep = !agent.settings.effort || !m.efforts || m.efforts.includes(agent.settings.effort);
-              if (!keep) setEffort(null);
-              await patchAgent(agent.id, { model: m.id, ...(keep ? {} : { settings: { effort: null } }) });
-            }}
-          />
-        ))}
-        {agent.model && !models.some((m) => m.id === agent.model) && <ModelItem label={agent.model} sub="Custom model id" checked onClick={() => setView("effort")} />}
-        {!catalog && <p className="px-2.5 py-2 text-xs text-muted">Its device hasn't reported models yet. Start the device to see them.</p>}
-      </div>
-    );
-
-  return (
-    <div className="p-2.5 space-y-2">
-      <div className="flex items-start gap-1">
-        <button
-          type="button"
-          disabled={!ctx.fastAvailable}
-          onClick={async () => {
-            setFast(!fast);
-            await patchAgent(agent.id, { settings: { fast: !fast } });
-          }}
-          aria-pressed={fast}
-          title={ctx.fastAvailable ? `Fast mode${ctx.fastDescription ? `: ${ctx.fastDescription}` : ""}` : "This model has no fast mode"}
-          className={cx("size-6 rounded-full grid place-items-center transition-colors", fast && ctx.fastAvailable ? "bg-accent-soft text-accent-text" : "text-muted hover:text-ink hover:bg-hover", !ctx.fastAvailable && "opacity-40")}
-        >
-          <Zap size={13} className={cx(fast && ctx.fastAvailable && "fill-accent")} />
-        </button>
-        <div className="flex-1 min-w-0 text-center">
-          <div className="text-sm font-medium text-accent-text leading-tight">{shown ? effortName(shown) : "Default"}</div>
-          <button onClick={() => setView("models")} className="inline-flex items-center gap-0.5 text-[11px] text-muted hover:text-ink">
-            {prettyModel(current?.label ?? ctx.model ?? "Default model")}
-            <ChevronRight size={12} />
-          </button>
-          {(fast && ctx.fastAvailable) || !effort ? (
-            <div className="text-[10px] text-faint">
-              {!effort && "Default effort"}
-              {!effort && fast && ctx.fastAvailable && " · "}
-              {fast && ctx.fastAvailable && <span className="text-accent-text">Fast{ctx.fastDescription ? `: ${ctx.fastDescription}` : ""}</span>}
-            </div>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          disabled={!effort}
-          onClick={() => saveEffort(null, 0)}
-          title="Reset to the default effort"
-          aria-label="Reset effort"
-          className="size-6 rounded-full grid place-items-center text-muted hover:text-ink hover:bg-hover disabled:opacity-30"
-        >
-          <RotateCcw size={12} />
-        </button>
-      </div>
-      {levels.length > 0 ? (
-        <EffortSlider
-          size="sm"
-          levels={levels}
-          value={shown}
-          onChange={(l) => saveEffort(l)}
-        />
-      ) : (
-        <p className="text-xs text-muted text-center">This model doesn't offer effort levels.</p>
-      )}
-      <a href={`#/agents/${agent.id}/model`} onClick={close} className="block text-center text-[11px] text-faint hover:text-ink">
-        Model settings
-      </a>
-    </div>
-  );
-}
-
-function ModelItem({ label, sub, checked, onClick }: { label: string; sub?: string; checked: boolean; onClick: () => void }) {
-  return (
-    <button role="menuitemradio" aria-checked={checked} onClick={onClick} className={cx("w-full text-left rounded-md px-2 py-1 flex items-center gap-2", checked ? "bg-hover" : "hover:bg-hover")}>
-      <span className="min-w-0 flex-1">
-        <span className="block text-xs truncate">{label}</span>
-        {sub && <span className="block text-[10px] text-muted truncate">{sub}</span>}
-      </span>
-      {checked && <Check size={12} className="shrink-0" />}
-    </button>
   );
 }
 
@@ -581,7 +372,7 @@ function ContextBody({ ctx }: { ctx: AgentContext }) {
 }
 
 /** Claude-style context ring: how full this conversation's context window is. */
-function ContextRing({ ctx, circle }: { ctx: AgentContext; circle?: boolean }) {
+function ContextRing({ ctx, header }: { ctx: AgentContext; header?: boolean }) {
   const pct = ctx.contextUsed !== null && ctx.contextWindow ? Math.min(100, (ctx.contextUsed / ctx.contextWindow) * 100) : null;
   const color = pct === null ? "var(--faint)" : pct > 85 ? "var(--bad)" : pct > 60 ? "var(--warn)" : "var(--ok)";
   const r = 7;
@@ -590,10 +381,10 @@ function ContextRing({ ctx, circle }: { ctx: AgentContext; circle?: boolean }) {
   return (
     <Popover
       align="right"
-      up={!circle}
+      up={!header}
       className="w-72 p-3.5"
       trigger={(open, toggle) => (
-        <button type="button" onClick={toggle} title={summary} aria-label="Context" className={circle ? cx("circle", open && "bg-hover") : cx("size-8 rounded-lg grid place-items-center hover:bg-hover", open && "bg-hover")}>
+        <button type="button" onClick={toggle} title={summary} aria-label={summary} aria-expanded={open} className={cx("size-9 md:size-8 grid place-items-center transition-opacity", open ? "opacity-100" : "opacity-85 hover:opacity-100")}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
             <circle cx="9" cy="9" r={r} fill="none" stroke="var(--faint)" strokeOpacity="0.35" strokeWidth="2.6" />
             {pct !== null && <circle cx="9" cy="9" r={r} fill="none" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeDasharray={`${(Math.max(pct, 3) / 100) * c} ${c}`} transform="rotate(-90 9 9)" />}
@@ -1151,6 +942,7 @@ function Parts({ parts, body = "", agentName }: { parts: MessagePart[]; body?: s
       {parts.map((p, i) => p.type === "context" && <ContextCard key={`x${i}`} usage={p.usage} />)}
       {parts.map((p) => p.type === "change" && <ChangeCard key={p.changeId} id={p.changeId} fallback={body} />)}
       {parts.map((p, i) => p.type === "notice" && <div key={`n${i}`} className="mt-1 px-1 text-xs text-muted whitespace-pre-wrap">{p.text}</div>)}
+      <SkillLines parts={parts} />
       {files.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-2">
           {files.map((f) => f.type === "file" && <FileChip key={f.fileId} id={f.fileId} name={f.name} />)}
@@ -1185,6 +977,26 @@ function Parts({ parts, body = "", agentName }: { parts: MessagePart[]; body?: s
           )}
         </div>
       )}
+    </>
+  );
+}
+
+/** What the agent learned or followed in this reply: one quiet line each ("Learned: order-pizza", "Using order-pizza") that opens the skill. */
+export function SkillLines({ parts }: { parts: MessagePart[] }) {
+  const lines = parts.flatMap((p) => (p.type === "skill" ? [p] : [])).sort((a, b) => Number(a.action !== "learned") - Number(b.action !== "learned"));
+  if (!lines.length) return null;
+  return (
+    <>
+      {lines.map((p) => (
+        <a
+          key={`${p.action}:${p.skillId}`}
+          href={href({ view: "settings", page: "skills", item: p.skillId })}
+          className={cx("m-work mt-1 flex w-fit max-w-full items-center gap-1.5 px-1 text-xs hover:underline", p.action === "learned" ? "font-medium text-ink" : "text-muted")}
+        >
+          <Book size={12} strokeWidth={2} aria-hidden className={cx("shrink-0", p.action === "learned" ? "text-badge" : "text-muted")} />
+          <span className="truncate">{p.action === "learned" ? `Learned: ${p.slug}` : `Using ${p.slug}`}</span>
+        </a>
+      ))}
     </>
   );
 }
@@ -1659,7 +1471,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
   const { sendWith } = usePrefs();
   const agents = useStore((s) => s.agents);
   const canEdit = useStore((s) => s.me?.role !== "guest");
-  const { agent: dmAgent, ctx, catalog } = useAgentContext(agentId, channelId, threadId);
+  const { agent: dmAgent, ctx, models } = useAgentContext(agentId, channelId, threadId);
   const live = useStore((s) => s.live);
   const [{ text, files, pending, sending, error, replyTo }, updateDraft, getDraft] = useComposerDraft(channelId, threadId);
   const uploading = pending.length;
@@ -1842,7 +1654,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
   const swapped = useChangedSinceMount(hasContent);
   return (
     // @container: the toolbar fits itself to the composer's own width (a DM next to an open thread is narrow on a wide screen)
-    <div className="shrink-0 px-3 md:px-5 pb-3 pt-1 safe-bottom @container w-full max-w-3xl mx-auto flex flex-col">
+    <div className="shrink-0 px-3 md:px-5 pt-1 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-[max(1.5rem,env(safe-area-inset-bottom))] @container w-full max-w-3xl mx-auto flex flex-col">
       <input ref={fileInput} type="file" multiple hidden onChange={(e) => (attach(e.target.files), (e.target.value = ""))} />
       <input ref={photoInput} type="file" accept="image/*" multiple hidden onChange={(e) => (attach(e.target.files), (e.target.value = ""))} />
       {/* who's working here and on what; Stop and details are in its sheet */}
@@ -1889,6 +1701,11 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
               </span>
             ))}
           </div>
+        </div>
+      )}
+      {dmAgent && ctx && (
+        <div className="flex min-w-0 pb-1.5 pl-[58px] pr-2 md:hidden">
+          <ModelLine place="phone" agent={dmAgent} ctx={ctx} models={models} channelId={channelId} threadId={threadId} canEdit={canEdit} />
         </div>
       )}
       <div className="relative flex items-end gap-2.5 md:gap-2" onDragOver={(e) => e.preventDefault()} onDrop={(e) => (e.preventDefault(), attach(e.dataTransfer.files))}>
@@ -1976,8 +1793,8 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
             className="block min-w-0 flex-1 resize-none bg-transparent py-[11px] md:py-[7px] text-[15px] md:text-[15px] outline-none placeholder:text-faint"
           />
           {dmAgent && ctx && (
-            <span className="self-center max-md:hidden">
-              <ModelControl agent={dmAgent} ctx={ctx} catalog={catalog} canEdit={canEdit} />
+            <span className="self-center min-w-0 max-w-[45%] shrink pr-1.5 max-md:hidden">
+              <ModelLine place="desktop" agent={dmAgent} ctx={ctx} models={models} channelId={channelId} threadId={threadId} canEdit={canEdit} />
             </span>
           )}
           {(!hasContent || dictation.on) && dictation.supported && (

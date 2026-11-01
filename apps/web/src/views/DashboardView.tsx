@@ -177,7 +177,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="shrink-0 px-[18px] md:px-7 pt-3 md:pt-[30px] pb-2 safe-top">
+      <header className="shrink-0 px-[18px] md:px-7 pt-[max(0.75rem,env(safe-area-inset-top))] md:pt-[max(30px,env(safe-area-inset-top))] pb-2">
         <div className="mx-auto max-w-[820px] flex items-center gap-3 justify-between">
           {onBack ? (
             <button className="md:hidden! circle" onClick={onBack} aria-label="Back">

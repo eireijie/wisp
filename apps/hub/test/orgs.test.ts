@@ -104,6 +104,8 @@ describe("features", () => {
 
     const me = (await api("GET", "/api/me")).data.user.id;
     for (const x of hub.store.activeRuns(agent.id)) hub.cancelRun(x.id);
+    // a task waiting on it, so a check has something to look at
+    hub.store.db.prepare("INSERT INTO tasks (id, workspace_id, from_kind, from_id, to_agent_id, title, brief, status, created_at, updated_at) VALUES ('t_sched', ?, 'user', ?, ?, 'Watch it', '', 'open', ?, ?)").run(agent.workspaceId, me, agent.id, new Date().toISOString(), new Date().toISOString());
     hub.store.setBackground(agent.id, me, { enabled: true });
     hub.background.tick(new Date("2026-10-14T12:00:00Z"));
     expect(hub.store.activeRuns(agent.id)).toHaveLength(0);

@@ -28,6 +28,8 @@ export interface Connector {
   /** remote servers people sign in to (OAuth): whether someone has; null when it doesn't ask */
   auth?: { required: boolean; signedIn: boolean; error: string | null } | null;
   agentIds: string[];
+  /** on for every agent in the workspace, including ones made later */
+  allAgents: boolean;
   createdBy: string | null;
   createdAt: string;
 }

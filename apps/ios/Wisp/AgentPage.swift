@@ -20,8 +20,8 @@ struct AgentPage: View {
   private var device: AgentNode? { store.nodes.first { $0.id == current.nodeId } }
   private var computer: Computer? { store.computers.first { $0.id == current.computerId } }
   private var routines: [Routine] { store.routines.filter { $0.agentId == current.id } }
-  private var skillCount: Int { store.skills.filter { $0.agentIds?.contains(current.id) == true }.count }
-  private var appCount: Int { store.connectors.filter { $0.agentIds?.contains(current.id) == true && $0.enabled != false }.count }
+  private var skillCount: Int { store.skills.filter { $0.has(current.id) }.count }
+  private var appCount: Int { store.connectors.filter { $0.has(current.id) && $0.enabled != false }.count }
   private var canAsk: Bool {
     ((store.isOwner || current.settings?.createdBy == store.me?.id) && (store.features.invite || store.members.count > 1)) ||
     (device != nil && store.harnessOnDevice(current))

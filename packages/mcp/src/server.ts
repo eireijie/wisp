@@ -395,7 +395,7 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     "next_check",
     {
       description:
-        "When you're working in the background: say when to look again (10 minutes to 24 hours) and why. Soon while something is moving (waiting on a reply, a deadline today); a few hours when it's calm. Call it at the end of every background check.",
+        "When you're working in the background: say when to look again (10 minutes to 24 hours) and why. Use it while something is moving (waiting on a reply, a deadline today); that time is kept. When it's calm, don't call it: checks slow down by themselves.",
       inputSchema: { minutes: z.number().describe("minutes from now"), reason: z.string().describe("why then, in a few words") },
     },
     safe(async ({ minutes, reason }) => {
@@ -496,6 +496,24 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     safe(async ({ routine_id, name, steps, schedule, timezone }) => {
       const r = await client.saveRoutine({ routineId: routine_id, name, steps, schedule, timezone });
       return text(`Saved "${r.name}" (${r.id}) to ${r.notePath}.${r.schedule ? ` It runs on schedule "${r.schedule}".` : ""}`);
+    }),
+  );
+
+  server.registerTool(
+    "skill_save",
+    {
+      description:
+        "Save how you did something as a skill, so you do it the same way next time: after a task you'd likely be asked to do again (several steps, a particular site or app, the person's preferences). Write short numbered steps with the specifics that mattered (names, labels, choices the person likes) and where to stop and ask a person. Save again under the same name to update it. Never put passwords, keys or card numbers in a skill.",
+      inputSchema: {
+        name: z.string().describe("short, like 'Order the usual pizza'"),
+        description: z.string().optional().describe("one line: when to use it"),
+        content: z.string().describe("markdown: numbered steps"),
+        slug: z.string().optional().describe("the /name of a skill you learned before, to update it"),
+      },
+    },
+    safe(async ({ name, description, content, slug }) => {
+      const { skill } = await client.saveSkill({ name, description, content, slug });
+      return text(`Saved as /${skill.slug}`);
     }),
   );
 

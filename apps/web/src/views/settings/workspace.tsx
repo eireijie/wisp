@@ -376,6 +376,8 @@ export interface AgentPolicy {
   leadsCreateAgents: boolean;
   subAgents: boolean;
   maxAgentMade: number;
+  /** agents save how they did something as a skill (Settings → Skills); older hubs don't send it, and it's on by default */
+  learnSkills?: boolean;
 }
 
 export const ASK: [string, string, string][] = [

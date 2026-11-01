@@ -682,7 +682,7 @@ function Editor({ path, draft, setDraft, saving, dirty, phone, where, onSave, on
   );
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className={cx("shrink-0 flex items-center gap-2", phone ? "px-4 pt-4 pb-2 safe-top" : "h-[72px] px-6")}>
+      <div className={cx("shrink-0 flex items-center gap-2", phone ? "px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2" : "h-[72px] px-6")}>
         {phone ? (
           <>
             <button className={pill} onClick={onCancel}>

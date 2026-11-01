@@ -173,21 +173,19 @@ struct SkillInstallSheet: View {
   var request: Fields
   var onDone: (HelperSkill) -> Void = { _ in }
   @State private var agents: Set<String> = []
+  @State private var allAgents = false
   @State private var action = FormAction()
   var body: some View {
     MarketSheet(title: title, busy: action.busy) {
-      CardGroup {
-        ForEach(store.agents) { agent in
-          MarketToggleRow(title: agent.name, subtitle: "@\(agent.handle)", isOn: Binding(get: { agents.contains(agent.id) }, set: { if $0 { agents.insert(agent.id) } else { agents.remove(agent.id) } })) { AgentAvatar(agent: agent, size: 30, showStatus: false) }
-        }
-        if store.agents.isEmpty { MarketRow(title: "No helpers yet", subtitle: "It goes to the organization, ready for the next one.") }
-      }
+      AgentAccessPicker(allAgents: $allAgents, isOn: { agent in Binding(get: { agents.contains(agent.id) }, set: { if $0 { agents.insert(agent.id) } else { agents.remove(agent.id) } }) },
+                        empty: "It goes to the organization, ready for the next one.")
       Text("You can change this any time from the skill.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       InlineError(error: action.error)
       MarketPrimaryButton(title: title, busy: action.busy) {
         action.run {
           var fields = request
           fields["agentIds"] = AnyEncodable(agents.sorted())
+          if allAgents { fields["allAgents"] = AnyEncodable(true) }
           let skill = try await store.saveSkill(nil, fields)
           dismiss(); onDone(skill)
         }

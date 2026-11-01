@@ -1,4 +1,4 @@
-import type { Agent, Allowance, Approval, Channel, ComputerAction, HarnessSettings, HarnessSettingsChange, Message, Routine, Followup, ChatLoop } from "@wisp/core";
+import type { Agent, Allowance, Approval, Channel, ComputerAction, ConnectionModel, HarnessSettings, HarnessSettingsChange, Message, ModelConnection, ModelLogin, ModelProvider, Routine, Followup, ChatLoop, Skill } from "@wisp/core";
 
 export interface WispClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
@@ -158,6 +158,32 @@ export class WispClient {
   changeHarnessSettings(changes: HarnessSettingsChange[], harness?: string, useAccount?: string) {
     return this.request<HarnessSettings & { device: string; changed: string[] }>("PATCH", "/api/agent/harness-settings", { changes, ...(harness ? { harness } : {}), ...(useAccount ? { useAccount } : {}) });
   }
+  // --- model connections (a person's token; see apps/hub/src/api-models.ts) ---
+
+  /** The caller's model connections: sign-ins and API keys, never their secrets. */
+  modelConnections() {
+    return this.request<{ connections: ModelConnection[] }>("GET", "/api/model-connections").then((r) => r.connections);
+  }
+  /** Connect an API key (the hub checks it with the provider first). */
+  connectModelKey(provider: ModelProvider, key: string, label?: string) {
+    return this.request<ModelConnection>("POST", "/api/model-connections", { provider, kind: "key", key, ...(label ? { label } : {}) });
+  }
+  /** Start signing in to a provider on one of the caller's devices; poll modelLogin for the link and code. */
+  startModelLogin(provider: ModelProvider, opts: { nodeId?: string; harness?: "claude-code" | "codex" | "hermes"; label?: string } = {}) {
+    return this.request<ModelLogin & { nodeId: string }>("POST", "/api/model-connections/login", { provider, ...opts });
+  }
+  modelLogin(loginId: string) {
+    return this.request<ModelLogin>("GET", `/api/model-connections/login/${loginId}`);
+  }
+  /** Type the code a sign-in page showed (Claude's) into the sign-in. */
+  modelLoginInput(loginId: string, text: string) {
+    return this.request<ModelLogin>("POST", `/api/model-connections/login/${loginId}/input`, { text });
+  }
+  /** What a connection offers, as `harness` runs it. */
+  connectionModels(connectionId: string, harness?: string) {
+    return this.request<{ connectionId: string; provider: ModelProvider; harness: string; models: ConnectionModel[]; efforts: string[] }>("GET", `/api/model-connections/${connectionId}/models${harness ? `?harness=${encodeURIComponent(harness)}` : ""}`);
+  }
+
   /** Ask a person's OK before doing something; the answer arrives as a message that wakes the agent. */
   requestApproval(summary: string, details = "") {
     return this.request<Approval>("POST", "/api/approvals", { summary, details });
@@ -202,6 +228,10 @@ export class WispClient {
   }
   saveRoutine(r: { routineId?: string; name?: string; steps: string; schedule?: string | null; timezone?: string }) {
     return this.request<Routine>("POST", "/api/routines/save", r);
+  }
+  /** Save how this agent did something as a skill (or update one it learned before, by name or slug). */
+  saveSkill(s: { name: string; description?: string; content: string; slug?: string }) {
+    return this.request<{ skill: Skill }>("POST", "/api/skills/learn", s);
   }
   runRoutine(routineId: string) {
     return this.request<{ ok: boolean }>("POST", `/api/routines/${routineId}/run`);

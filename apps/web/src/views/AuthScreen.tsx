@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { SetupStage } from "../components/SetupStage.tsx";
 import { Check } from "lucide-react";
 import { api } from "../api.ts";
 import { AuthButton, AuthError, AuthField, AuthHero, AuthInput, AuthLink, AuthPage } from "../components/auth.tsx";
@@ -163,8 +164,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
     );
   }
 
-  return (
-    <AuthPage>
+  const page = (
       <form onSubmit={submit} className="flex flex-col">
         {needsSetup ? (
           <div className="flex flex-col gap-2">
@@ -196,7 +196,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
           <AuthField label="Email">
             <AuthInput type="email" value={form.email} onChange={set("email")} autoComplete="email" placeholder="you@example.com" aria-label="Email" required />
           </AuthField>
-          <AuthField label="Password" hint={needsSetup || joining ? "At least 8 characters." : undefined}>
+          <AuthField label="Password" hint={joining ? "At least 8 characters." : undefined}>
             <AuthInput
               type="password"
               value={form.password}
@@ -211,7 +211,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
           <AuthError>{error}</AuthError>
         </div>
         <div className="mt-8 flex flex-col items-center gap-1.5">
-          <AuthButton className={needsSetup ? "h-[42px] rounded-lg" : undefined} disabled={busy || (joining && !invite)}>{needsSetup ? "Continue" : joining ? (invite ? `Join ${invite.workspace}` : "Join") : "Sign in"}</AuthButton>
+          <AuthButton className={needsSetup ? "setup-press h-[42px] rounded-lg" : undefined} disabled={busy || (joining && !invite)}>{needsSetup ? "Continue" : joining ? (invite ? `Join ${invite.workspace}` : "Join") : "Sign in"}</AuthButton>
           {joining && <AuthLink onClick={leaveInvite}>I already have an account</AuthLink>}
           {!needsSetup && !joining && (
             <AuthLink
@@ -225,6 +225,13 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
           )}
         </div>
       </form>
-    </AuthPage>
+  );
+  // the first run's account screen stands on the setup stage, with the wisp beside it
+  return needsSetup ? (
+    <SetupStage scene={{ name: "account" }}>
+      <div className="setup-rise">{page}</div>
+    </SetupStage>
+  ) : (
+    <AuthPage>{page}</AuthPage>
   );
 }

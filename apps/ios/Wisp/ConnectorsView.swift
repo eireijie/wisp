@@ -53,7 +53,7 @@ struct ConnectResultSheet: View {
   var onOpenChat: (ChatTarget) -> Void
   @State private var action = FormAction()
   private var connector: AppConnector? { store.connectors.first { $0.id == connectorId } }
-  private var helpers: [Agent] { store.agents.filter { connector?.agentIds?.contains($0.id) == true } }
+  private var helpers: [Agent] { store.agents.filter { connector?.has($0.id) == true } }
 
   var body: some View {
     if let connector {
@@ -82,15 +82,11 @@ struct ConnectResultSheet: View {
   }
 
   private func connected(_ c: AppConnector) -> some View {
-    MarketSheet(title: "\(c.name) is connected", subtitle: helpers.isEmpty ? "No helper can use it yet." : "\(ShelfLogic.sentence(helpers.map(\.name))) can use it now.") {
-      MarketLabel("Pick who can use it")
-      CardGroup {
-        ForEach(store.agents) { agent in
-          MarketToggleRow(title: agent.name, subtitle: "@\(agent.handle)", isOn: Binding(get: { c.agentIds?.contains(agent.id) == true }, set: { on in
-            action.run { try await store.attachConnector(c, agentIds: [agent.id], on: on) }
-          }), disabled: action.busy || !ConnectorSupport.allows(agent, kind: c.kind)) { AgentAvatar(agent: agent, size: 30, showStatus: false) }
-        }
-      }
+    MarketSheet(title: "\(c.name) is connected", subtitle: c.forAll ? "Every agent can use it now." : helpers.isEmpty ? "No helper can use it yet." : "\(ShelfLogic.sentence(helpers.map(\.name))) can use it now.") {
+      MarketLabel("Who can use it")
+      AgentAccessPicker(allAgents: Binding(get: { c.forAll }, set: { on in action.run { try await store.setConnectorAllAgents(c.id, on) } }),
+                        isOn: { agent in Binding(get: { c.agentIds?.contains(agent.id) == true }, set: { on in action.run { try await store.attachConnector(c, agentIds: [agent.id], on: on) } }) },
+                        agentDisabled: { !ConnectorSupport.allows($0, kind: c.kind) }, disabled: action.busy)
       if let first = helpers.first {
         CardGroup {
           Button {
@@ -130,15 +126,10 @@ struct ConnectorDetail: View {
       }
       InlineError(error: current.auth?.error)
       ForEach(current.warnings ?? [], id: \.self) { Text($0).font(.footnote).foregroundStyle(MarketColor.warn) }
-      MarketLabel("Helpers who can use it")
-      CardGroup {
-        ForEach(store.agents) { agent in
-          MarketToggleRow(title: agent.name, subtitle: "@\(agent.handle)", isOn: Binding(get: { current.agentIds?.contains(agent.id) == true }, set: { on in
-            action.run { try await store.attachConnector(current, agentIds: [agent.id], on: on) }
-          }), disabled: action.busy || !store.canManage || !ConnectorSupport.allows(agent, kind: current.kind)) { AgentAvatar(agent: agent, size: 30, showStatus: false) }
-        }
-        if store.agents.isEmpty { MarketRow(title: "No helpers yet", subtitle: "Add one from the Agents tab.") }
-      }
+      MarketLabel("Who can use it")
+      AgentAccessPicker(allAgents: Binding(get: { current.forAll }, set: { on in action.run { try await store.setConnectorAllAgents(current.id, on) } }),
+                        isOn: { agent in Binding(get: { current.agentIds?.contains(agent.id) == true }, set: { on in action.run { try await store.attachConnector(current, agentIds: [agent.id], on: on) } }) },
+                        agentDisabled: { !ConnectorSupport.allows($0, kind: current.kind) }, disabled: action.busy || !store.canManage, empty: "Add one from the Agents tab.")
       if store.canManage {
         MarketLabel("Account")
         CardGroup {

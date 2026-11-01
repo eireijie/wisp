@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import { channelTeams, type Agent, type AgentEvent, type Approval, type Channel, type ChannelNotify, type ClientEvent, type Computer, type Discussion, type Features, type Message, type LeadStatus, type Reaction, type Section, type Team, type User, type UserPrefs } from "@wisp/core";
+import { channelTeams, type Agent, type AgentEvent, type Approval, type Channel, type ChannelNotify, type ClientEvent, type Computer, type Discussion, type Features, type Message, type LeadStatus, type ModelLogin, type Reaction, type Section, type Team, type User, type UserPrefs } from "@wisp/core";
 import { api } from "./api.ts";
 import { notifyOn } from "./notifications.ts";
 import { agentColor } from "./components/ui.tsx";
@@ -116,6 +116,12 @@ interface State {
   flowsVersion: number;
   /** bumps when notes change outside Wisp, so Memory reloads */
   memoryVersion: number;
+  /** bumps when the person's model connections change (added, renamed, removed, renewed, new plan usage) */
+  modelsVersion: number;
+  /** bumped when skills or connectors change on the hub (an agent learned one, someone switched who has it) */
+  skillsVersion: number;
+  /** model sign-ins this person started, as the hub reports them on the socket */
+  modelLogins: Record<string, ModelLogin>;
   /** the New task dialog is open */
   newTaskOpen: boolean;
   /** the New chat picker (the + menu, ⌘K) is open */
@@ -190,6 +196,9 @@ export const useStore = create<State>((set, get) => ({
   tasksVersion: 0,
   flowsVersion: 0,
   memoryVersion: 0,
+  modelsVersion: 0,
+  skillsVersion: 0,
+  modelLogins: {},
   newTaskOpen: false,
   newChatOpen: false,
   lead: null,
@@ -330,7 +339,7 @@ export const useStore = create<State>((set, get) => ({
     // after a reconnect, catch up on anything missed
     if (connected && !wasConnected) {
       const { activeChannel, threadChannels } = get();
-      set((s) => ({ live: {}, routinesVersion: s.routinesVersion + 1, backgroundVersion: s.backgroundVersion + 1, changesVersion: s.changesVersion + 1, tasksVersion: s.tasksVersion + 1, flowsVersion: s.flowsVersion + 1, memoryVersion: s.memoryVersion + 1 }));
+      set((s) => ({ live: {}, routinesVersion: s.routinesVersion + 1, backgroundVersion: s.backgroundVersion + 1, changesVersion: s.changesVersion + 1, tasksVersion: s.tasksVersion + 1, flowsVersion: s.flowsVersion + 1, memoryVersion: s.memoryVersion + 1, modelsVersion: s.modelsVersion + 1, skillsVersion: s.skillsVersion + 1 }));
       if (activeChannel) get().loadChannel(activeChannel).catch(() => {});
       for (const [rootId, channelId] of Object.entries(threadChannels)) get().loadThread(channelId, rootId).catch(() => {});
       get().refreshAgents().catch(() => {});
@@ -444,6 +453,12 @@ export const useStore = create<State>((set, get) => ({
       set((s) => ({ flowsVersion: s.flowsVersion + 1 }));
     } else if (e.type === "memory_changed") {
       set((s) => ({ memoryVersion: s.memoryVersion + 1 }));
+    } else if (e.type === "skills_changed") {
+      set((s) => ({ skillsVersion: s.skillsVersion + 1 }));
+    } else if (e.type === "model_connections_changed") {
+      set((s) => ({ modelsVersion: s.modelsVersion + 1 }));
+    } else if (e.type === "model_login") {
+      set((s) => ({ modelLogins: { ...s.modelLogins, [e.login.id]: e.login } }));
     } else if (e.type === "run_event") {
       set((s) => {
         const cur = s.live[e.runId] ?? { runId: e.runId, agentId: e.agentId, channelId: e.channelId, threadId: e.threadId ?? null, threadPath: e.threadPath ?? [], text: "", tools: [], last: null, usedComputer: false };

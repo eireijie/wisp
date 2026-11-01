@@ -7,6 +7,11 @@ contextBridge.exposeInMainWorld("wispDesktop", {
   focus: () => ipcRenderer.send("desktop:focus"),
   info: () => ipcRenderer.invoke("desktop:info"),
   connectDevice: (claim) => ipcRenderer.invoke("desktop:connect-device", claim),
+  updates: {
+    status: () => ipcRenderer.invoke("updates:status"),
+    check: () => ipcRenderer.invoke("updates:check"),
+    restart: () => ipcRenderer.invoke("updates:restart"),
+  },
   buddy: {
     agents: (agents, leadId) => ipcRenderer.send("buddy:agents", agents, leadId),
     settings: () => ipcRenderer.invoke("buddy:settings"),

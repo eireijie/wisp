@@ -13,7 +13,7 @@ import { useMemo, useSyncExternalStore } from "react";
  *   #/computers/d/<nodeId>           one device's page (#/nodes[/<nodeId>] still lands here)
  *   #/marketplace[/<section>]        apps and skills to get, and what devices already have (MARKET_SECTIONS)
  *   #/connectors, #/skills           older addresses of the marketplace (installed apps, skills)
- *   #/settings[/<page>]              your settings and the organization's (see SETTINGS_PAGES); full window on desktops
+ *   #/settings[/<page>[/<item>]]     your settings and the organization's (see SETTINGS_PAGES); full window on desktops; <item> opens one thing in a page (a skill)
  *   #/join/<code>                    accept an invite (signed out)
  *   #/authorize/<requestId>          let an app (Grok, ChatGPT, Claude…) connect as an agent (the hub's /oauth/authorize sends people here)
  *   #/welcome[/intro]                first-run onboarding; /intro opens on "what Wisp is"
@@ -36,7 +36,7 @@ export type Route =
   | { view: "marketplace"; section?: MarketSection | null }
   | { view: "connectors" }
   | { view: "skills" }
-  | { view: "settings"; page?: SettingsPage | null }
+  | { view: "settings"; page?: SettingsPage | null; item?: string | null }
   | { view: "welcome"; intro?: boolean }
   | { view: "help" }
   | { view: "mods" }
@@ -45,9 +45,9 @@ export type Route =
 
 export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "access", "background", "routines", "memory", "skills", "apps", "permissions", "connect", "runs", "remove"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
-export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "usage", "voice", "appearance", "security", "devices", "mobile", "general", "access", "agent-defaults", "people", "agents", "runtimes", "harnesses", "memory", "computers", "logins", "apps", "connections", "data", "updates"] as const;
+export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "usage", "voice", "appearance", "security", "devices", "mobile", "general", "access", "agent-defaults", "people", "agents", "runtimes", "models", "harnesses", "memory", "computers", "logins", "apps", "skills", "connections", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
-export const MARKET_SECTIONS = ["all", "apps", "skills", "agents", "mods", "devices", "installed"] as const;
+export const MARKET_SECTIONS = ["all", "apps", "skills", "mods", "devices", "installed"] as const;
 export type MarketSection = (typeof MARKET_SECTIONS)[number];
 
 export function routeForRole(route: Route, role?: "owner" | "member" | "guest"): Route {
@@ -92,8 +92,11 @@ export function parseRoute(hash: string): Route {
     case "nodes":
       // devices live inside Computers now
       return { view: "computers", computerId: null, ...(parts[1] ? { deviceId: parts[1] } : {}) };
-    case "settings":
-      return { view: "settings", page: SETTINGS_PAGES.find((p) => p === parts[1]) ?? null };
+    case "settings": {
+      const page = SETTINGS_PAGES.find((p) => p === parts[1]) ?? null;
+      // one thing inside a page, e.g. a skill: #/settings/skills/<id>
+      return { view: "settings", page, ...(page && parts[2] ? { item: parts.slice(2).join("/") } : {}) };
+    }
     case "welcome":
       return { view: "welcome", ...(parts[1] === "intro" ? { intro: true } : {}) };
     case "help":
@@ -139,7 +142,7 @@ export function href(r: Route): string {
     case "computers":
       return "#/computers" + (r.deviceId ? `/d/${r.deviceId}` : r.computerId ? `/${r.computerId}${r.teach ? `/teach/${r.teach}` : ""}` : "");
     case "settings":
-      return "#/settings" + (r.page ? `/${r.page}` : "");
+      return "#/settings" + (r.page ? `/${r.page}${r.item ? `/${encodeURIComponent(r.item)}` : ""}` : "");
     case "welcome":
       return r.intro ? "#/welcome/intro" : "#/welcome";
     case "help":

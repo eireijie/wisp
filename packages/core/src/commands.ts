@@ -9,6 +9,8 @@ import type { CommandOption } from "./types.ts";
 export const WISP_COMMANDS: { name: string; description: string }[] = [
   { name: "context", description: "See how full this conversation is" },
   { name: "model", description: "See or change the model, like /model gpt-6.1-sol (or /model default)" },
+  { name: "effort", description: "See or change how hard it thinks, like /effort high (or /effort default)" },
+  { name: "harness", description: "See or change the harness it runs in, like /harness codex" },
 ];
 
 /** One entry in the "/" menu: where it comes from decides how it runs. */
@@ -19,15 +21,54 @@ export interface AgentCommand {
   /** "wisp": answered by Wisp; "command"/"skill": the harness's own; "wisp-skill": a skill installed through Wisp */
   kind: "wisp" | "command" | "skill" | "wisp-skill";
   via: "wisp" | "raw" | "prompt";
+  /** the menu's section: skills agents learned, the harness's own, Wisp's commands, other Wisp skills */
+  group: "learned" | "harness" | "wisp" | "skill";
+  /** learned in the last 7 days: the menu shows "new" */
+  isNew?: boolean;
+  /** for "learned": who learned it, e.g. "Ghosty" */
+  learnedBy?: string;
 }
 
-/** Everything an agent offers after "/", Wisp's own first; a harness's own entry wins over a same-named Wisp skill. */
-export function agentCommands(harness: CommandOption[] | undefined, wispSkills: { slug: string; description: string }[]): AgentCommand[] {
-  const out = new Map<string, AgentCommand>();
-  for (const c of WISP_COMMANDS) out.set(c.name, { ...c, kind: "wisp", via: "wisp" });
-  for (const c of harness ?? []) if (!out.has(c.name)) out.set(c.name, { ...c });
-  for (const s of wispSkills) if (!out.has(s.slug)) out.set(s.slug, { name: s.slug, description: s.description, kind: "wisp-skill", via: "prompt" });
-  return [...out.values()];
+/** A Wisp skill as the "/" menu needs it; `learnedBy` (the agent's name) marks one an agent learned. */
+export interface CommandSkill {
+  slug: string;
+  description: string;
+  learnedBy?: string;
+  /** when it was learned (ISO), for the "new" tag */
+  createdAt?: string;
+}
+
+const NEW_FOR_MS = 7 * 24 * 3600_000;
+
+/**
+ * Everything an agent offers after "/", in the menu's order: skills agents learned, the harness's
+ * own, Wisp's commands, then other Wisp skills. Wisp's commands keep their names; a learned skill
+ * wins over a same-named harness entry (it's the agent's own way), and a harness entry over a Wisp skill.
+ */
+export function agentCommands(harness: CommandOption[] | undefined, wispSkills: CommandSkill[], now = Date.now()): AgentCommand[] {
+  const taken = new Set(WISP_COMMANDS.map((c) => c.name));
+  const learned: AgentCommand[] = [];
+  for (const s of wispSkills) {
+    if (s.learnedBy === undefined || taken.has(s.slug)) continue;
+    taken.add(s.slug);
+    const isNew = !!s.createdAt && now - Date.parse(s.createdAt) < NEW_FOR_MS;
+    learned.push({ name: s.slug, description: s.description, kind: "wisp-skill", via: "prompt", group: "learned", learnedBy: s.learnedBy, ...(isNew ? { isNew } : {}) });
+  }
+  const own: AgentCommand[] = [];
+  for (const c of harness ?? []) {
+    if (taken.has(c.name)) continue;
+    taken.add(c.name);
+    const { builtIn: _b, ...rest } = c;
+    own.push({ ...rest, group: "harness" });
+  }
+  const wisp: AgentCommand[] = WISP_COMMANDS.map((c) => ({ ...c, kind: "wisp", via: "wisp", group: "wisp" }));
+  const skills: AgentCommand[] = [];
+  for (const s of wispSkills) {
+    if (s.learnedBy !== undefined || taken.has(s.slug)) continue;
+    taken.add(s.slug);
+    skills.push({ name: s.slug, description: s.description, kind: "wisp-skill", via: "prompt", group: "skill" });
+  }
+  return [...learned, ...own, ...wisp, ...skills];
 }
 
 /** "/name args" at the start of a message, after an optional @mention of the agent it's for. */

@@ -5,13 +5,14 @@ import { codex } from "./codex.ts";
 import type { HarnessAdapter } from "./types.ts";
 
 export * from "./types.ts";
-export { claudeCommands, codexCommands, commandsIn, skillsIn } from "./commands.ts";
+export { claudeCommands, claudeInitCommands, codexCommands, commandsIn, skillsIn } from "./commands.ts";
 export { scanShelf, serverItem } from "./shelf.ts";
-export { HarnessAccounts, loginCommand } from "./harness-accounts.ts";
+export { HarnessAccounts, loginCommand, modelLoginCommand, setupTokenFrom } from "./harness-accounts.ts";
 export { changeHarnessSettings, editClaude, editCodex, editHermes, HARNESS_SPECS, harnessConfigPath, harnessConfigured, harnessDir, parseToml, readHarnessSettings, readHarnessSkill, type HarnessHomes } from "./harness-config.ts";
 export { RunFiles, commandVersion, execCommand, runJsonl, spawnCommand, stopProcess } from "./process.ts";
-export { claudeCode, claudeArgs, claudeEnv, claudeMcpConfig, claudeUsage, parseClaudeLine } from "./claude-code.ts";
-export { codex, codexArgs, codexDefaults, codexEnv, codexMcpConfig, codexTokens, codexUsageFromRollout, parseCodexCatalog, parseCodexLine } from "./codex.ts";
+export { claudeCode, claudeArgs, claudeEnv, claudeMcpConfig, claudePlan, claudeUsage, parseClaudeLine } from "./claude-code.ts";
+export { codex, codexArgs, codexConnectionArgs, codexDefaults, codexEnv, codexMcpConfig, codexPlan, codexTokens, codexUsageFromRollout, parseCodexCatalog, parseCodexLine, runCodexHome } from "./codex.ts";
+export { codexAuthFromHermes, hermesEntryFromCodex, localCredentialFs, prepareCredential, type CredentialFs, type CredentialPlaces, type PreparedCredential } from "./credentials.ts";
 export { AcpConnection, acpAdapter, acpCommands, acpUsage, acpMcpServers, acpModels, parseAcpUpdate, permissionOutcome } from "./acp.ts";
 
 /**
