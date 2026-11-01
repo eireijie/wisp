@@ -37,6 +37,7 @@ if (location.protocol === "file:")
     check: () => ipcRenderer.invoke("setup:check"),
     create: (opts) => ipcRenderer.invoke("setup:create", opts),
     open: () => ipcRenderer.invoke("setup:open"),
+    returnToServer: () => ipcRenderer.invoke("setup:return"),
     discover: () => ipcRenderer.invoke("setup:discover"),
     requestJoin: (input) => ipcRenderer.invoke("setup:request-join", input),
     pollJoin: () => ipcRenderer.invoke("setup:poll-join"),

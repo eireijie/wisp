@@ -586,7 +586,7 @@ export function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAge
         <section aria-label="How the team works" className="space-y-3">
           <h3 className="text-sm font-semibold text-muted">How the team works</h3>
           <div className="rounded-3xl bg-card p-4">
-            {stepped ? <HowLines lines={lines} /> : <p className="text-sm text-muted">{`#${channel.name} has no team yet, so only agents someone @mentions (or the one under Agents) answer here. Draw the steps and say how each one works.`}</p>}
+            {stepped ? <HowLines lines={lines} /> : <p className="text-sm text-muted">{`#${channel.name} has no steps yet, so only agents someone @mentions (or the one under Agents) answer here. Draw the steps and say how each one works.`}</p>}
           </div>
           {canManage && (
             <div className="flex flex-wrap items-center gap-3">
@@ -606,7 +606,7 @@ export function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAge
           <p className="text-sm text-muted">
             {saved.nodes.length
               ? `The leads read every new message in #${channel.name} and hand out the work along the arrows.`
-              : `#${channel.name} has no team yet, so only agents someone @mentions (or the one under Agents) answer here. Drag agents onto the chart and make one of them a lead.`}{" "}
+              : `#${channel.name} has no steps yet, so only agents someone @mentions (or the one under Agents) answer here. Drag agents onto the chart and make one of them a lead.`}{" "}
             {canManage && (
               <button type="button" className="text-accent-text hover:underline" onClick={() => setBuilding(true)}>
                 Use steps instead

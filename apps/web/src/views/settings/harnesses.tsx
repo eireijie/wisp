@@ -571,9 +571,9 @@ function Accounts({ device, settings, users, onLoad }: { device: HarnessesRespon
               key={a.id}
               icon={<HarnessTile harness={settings.harness} />}
               title={a.who ?? a.label}
-              sub={who.length ? `Used by ${sentence(who)}` : a.signedIn === false ? "Not signed in" : shownNow && settings.accounts.length > 1 ? "Showing now" : a.who && a.who !== a.label ? a.label : "Not used yet"}
+              sub={who.length ? `Used by ${sentence(who)}` : a.signedIn === false ? "Not signed in" : a.signedIn === null ? "Can't tell if it's signed in" : shownNow && settings.accounts.length > 1 ? "Showing now" : a.who && a.who !== a.label ? a.label : "Not used yet"}
               right={a.signedIn === true ? <Badge tone="green">Signed in</Badge> : a.signedIn === false ? <Badge>Sign in</Badge> : undefined}
-              onClick={settings.accounts.length > 1 && !shownNow ? () => void run(() => onLoad(a.id)) : undefined}
+              onClick={settings.accounts.length > 1 && !shownNow ? () => void run(() => onLoad(a.id)) : a.signedIn === false && shownNow ? () => setSigningIn(true) : undefined}
               label={`${a.label}${shownNow ? ", showing" : ""}`}
             />
           );

@@ -44,6 +44,10 @@ final class AgentProfileTests: XCTestCase {
     XCTAssertEqual(AgentLine.computer(agent: try agent(computerId: "c1"), computer: stopped), "Stopped")
     XCTAssertEqual(AgentLine.computer(agent: try agent(status: "busy", computerId: "c1"), computer: ready), "Working")
     XCTAssertEqual(AgentLine.computer(agent: try agent(), computer: nil), "None yet")
+    let node = try decode(AgentNode.self, ##"{"id":"n1","name":"Audit Laptop","online":true,"mine":true}"##)
+    XCTAssertEqual(AgentLine.computer(agent: try agent(), computer: nil, device: node), "Audit Laptop")
+    XCTAssertEqual(AgentLine.respond(try agent(settings: ##"{"respondTo":"anyone"}"##), device: node), "Only me", "a private device answers only its owner until opened up")
+    XCTAssertEqual(AgentLine.respond(try agent(settings: ##"{"respondTo":"anyone","anyoneCanAsk":true}"##), device: node), "Anyone")
     XCTAssertEqual(AgentLine.computer(agent: try agent(settings: ##"{"headless":true}"##), computer: nil), "Headless")
   }
 

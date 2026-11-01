@@ -219,7 +219,7 @@ struct AgentWorkSheet: View {
   }
 
   private func answersLabel(_ agent: Agent) -> String {
-    switch agent.settings?.respondTo {
+    switch AgentLine.askMode(agent, device: store.nodes.first { $0.id == agent.nodeId }) {
     case "me": "Only you"
     case "people": "Picked people"
     default: "Anyone"

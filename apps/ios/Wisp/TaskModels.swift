@@ -19,6 +19,8 @@ struct WorkTask: Decodable, Identifiable {
   var updatedAt: String?
   var cancelled: Bool { status == "cancelled" || result?.hasPrefix("Cancelled") == true }
   var closed: Bool { status == "done" || status == "failed" || status == "cancelled" }
+  /** failed by itself; a cancelled task is stored as failed too, but someone stopped it on purpose */
+  var failedOnItsOwn: Bool { status == "failed" && !cancelled }
   var notificationInfo: [String: String] {
     var info = ["kind": "task"]
     if let channelId { info["channelId"] = channelId }

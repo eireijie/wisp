@@ -198,8 +198,13 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
     </nav>
   );
 
+  const offPage = page && !known && !guest ? page : null;
   const body = (id: SettingsPage) =>
-    id === "apps" ? (
+    offPage ? (
+      <div className="flex-1 grid place-items-center p-6 text-center text-sm text-muted">
+        <p>This page belongs to a mod that's off. <a className="text-accent-text hover:underline" href={href({ view: "mods" })}>Open Mods</a></p>
+      </div>
+    ) : id === "apps" ? (
       <MarketplaceView section="installed" embedded />
     ) : (
       <div className="flex-1 min-h-0 overflow-y-auto">

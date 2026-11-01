@@ -1191,6 +1191,28 @@ describe("runs that go wrong", () => {
     expect(runs[0]).toMatchObject({ status: "failed", error: expect.stringContaining("401"), hint: expect.stringContaining("isn't signed in") });
   });
 
+  it("offers the next step on a failed run, and trying again starts a new run", async () => {
+    const before = node.runs.length;
+    const ch = (await api("POST", "/api/channels", { name: "try-again" })).data.id;
+    await api("POST", `/api/channels/${ch}/messages`, { body: "@atlas expired token" });
+    const part = await waitFor(async () => (await channelMessagesIn(ch)).flatMap((m) => m.parts).find((p) => p.type === "run_failed"));
+    expect(part).toMatchObject({ retry: true, fix: "signin" });
+    const retried = await api<any>("POST", `/api/runs/${(part as { runId: string }).runId}/retry`);
+    expect(retried.status).toBe(200);
+    await waitFor(async () => node.runs.slice(before).filter((r) => r.type === "run" && r.run.agentId === atlas.id).length >= 2);
+  });
+
+  it("tries a failed task again: it reopens and its agent gets it once more", async () => {
+    const before = node.runs.length;
+    const task = (await api("POST", "/api/tasks", { to: "nova", title: "Crash retry", brief: "please crash" })).data;
+    await waitFor(async () => (await api<any[]>("GET", "/api/tasks")).data.find((t) => t.id === task.id && t.status === "failed"));
+    const again = await api<any>("POST", `/api/tasks/${task.id}/retry`);
+    expect(again.data.status).toBe("open");
+    expect(again.data.result).toBeFalsy();
+    await waitFor(async () => node.runs.slice(before).filter((r) => r.type === "run" && r.run.agentId === nova.id).length >= 2);
+    expect((await api<any>("POST", "/api/tasks/nope/retry")).status).toBe(404);
+  });
+
   it("says so when a prompt can't even be built", async () => {
     const ch = (await api("POST", "/api/channels", { name: "no-prompt" })).data.id;
     const original = hub.buildPrompt;

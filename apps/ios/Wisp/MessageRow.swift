@@ -75,7 +75,7 @@ struct MessageRow: View {
   private var plainSystemLine: some View {
     HStack(alignment: .firstTextBaseline, spacing: 6) {
       Image(systemName: "info.circle")
-      Text(message.parts.compactMap { if case .status(let t) = $0 { t } else if case .notice(let t) = $0 { t } else { nil } }.joined(separator: " ") + message.body)
+      Text(message.parts.compactMap { if case .status(let t) = $0 { t } else if case .notice(let t) = $0 { t } else { nil } }.joined(separator: " ") + message.body.replacingOccurrences(of: "**", with: ""))
     }
     .font(.caption)
     .foregroundStyle(Palette.faint)
@@ -302,6 +302,36 @@ struct ThreadWork: View {
   }
 }
 
+/** What to do about a failed run: sign in if that's the cause, then ask again. */
+private struct RunFailedActions: View {
+  @Environment(Store.self) private var store
+  var runId: String
+  var retry: Bool
+  var fix: String?
+  var agent: Agent?
+  @State private var action = FormAction()
+  @State private var sent = false
+
+  var body: some View {
+    if sent {
+      Text("Trying again…").font(.caption).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+    } else {
+      VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 8) {
+          if fix == "signin" { NavigationLink { HarnessesView() } label: { Text("Sign in") }.buttonStyle(CardPill(tone: .soft)).accessibilityIdentifier("run-sign-in") }
+          if fix == "connection" { NavigationLink { ModelsSettingsView() } label: { Text("Sign in") }.buttonStyle(CardPill(tone: .soft)).accessibilityIdentifier("run-sign-in") }
+          if fix == "computer", let agent { NavigationLink { AgentComputerView(agent: agent) } label: { Text("Sign in") }.buttonStyle(CardPill(tone: .soft)).accessibilityIdentifier("run-sign-in") }
+          if retry {
+            Button("Try again") { action.run { try await store.retryRun(runId); sent = true } }
+              .buttonStyle(CardPill(tone: .soft)).disabled(action.busy).accessibilityIdentifier("run-retry")
+          }
+        }
+        InlineError(error: action.error)
+      }.padding(.horizontal, 4)
+    }
+  }
+}
+
 struct PartView: View {
   @Environment(Store.self) private var store
   var part: MessagePart
@@ -309,8 +339,10 @@ struct PartView: View {
 
   var body: some View {
     switch part {
+    case .runFailed(let runId, let retry, let fix):
+      RunFailedActions(runId: runId, retry: retry, fix: fix, agent: store.agent(message.author.id))
     case .notice(let t), .status(let t):
-      Text(t).font(.caption).foregroundStyle(Palette.faint).italic().padding(.horizontal, 4)
+      Text(t.replacingOccurrences(of: "`", with: "")).font(.caption).foregroundStyle(Palette.faint).italic().padding(.horizontal, 4)
     case .file(let id, let name):
       FileChip(id: id, name: name)
     case .task(let id):

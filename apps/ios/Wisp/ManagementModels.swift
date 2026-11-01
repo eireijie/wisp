@@ -23,7 +23,15 @@ struct ChannelPin: Decodable, Identifiable {
 }
 
 struct AgentNode: Decodable, Identifiable, Hashable {
-  struct Harness: Decodable, Hashable { var id: String; var version: String? }
+  struct Harness: Decodable, Hashable {
+    var id: String
+    var version: String?
+    /** whether each of its accounts is signed in here (nil when it can't tell) */
+    var accounts: [String: Bool?]?
+    var agentAccounts: [String: String]?
+  }
+  /** what's signed in inside each of its VMs (computer id → harness → signed in) */
+  var vmSignIns: [String: [String: Bool?]]?
   var id: String
   var name: String
   var ownerId: String?

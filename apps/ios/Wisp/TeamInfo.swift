@@ -41,7 +41,10 @@ struct TeamInfoPage: View {
   }
 
   private var works: String {
-    guard let team, !team.nodes.isEmpty else { return "Nobody is on the team yet" }
+    guard let team, !team.nodes.isEmpty else {
+      let n = agentMembers.count
+      return n == 0 ? "No agents here yet" : "No steps yet. \(n == 1 ? "Its agent answers" : "Its \(n) agents answer") when someone @mentions them."
+    }
     let leads = team.leads.compactMap { store.agent($0)?.name }
     let others = team.nodes.filter { !$0.lead }.compactMap { store.agent($0.agentId)?.name }
     return [leads.isEmpty ? nil : "\(ChannelTeam.list(leads)) \(leads.count > 1 ? "lead" : "leads").", others.isEmpty ? nil : "\(others.joined(separator: ", ")) \(team.hasSteps ? "do the steps" : "help")."].compactMap { $0 }.joined(separator: " ")

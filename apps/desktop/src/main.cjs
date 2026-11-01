@@ -107,7 +107,8 @@ function showPairing() {
 app.on("second-instance", (_event, argv = []) => {
   if (!argv.some(openPairing) && startupComplete) showWindow();
 });
-app.on("open-url", (event, url) => { event.preventDefault(); openPairing(url); });
+// any other wisp:// link still brings Wisp to the front instead of doing nothing
+app.on("open-url", (event, url) => { event.preventDefault(); if (!openPairing(url) && startupComplete) showWindow(); });
 registerProtocols(app);
 
 app.setAboutPanelOptions?.({ applicationName: "Wisp", copyright: "Apache-2.0", website: GITHUB_URL });
@@ -197,6 +198,19 @@ function showSetup(state = {}) {
   showWindow();
 }
 
+// "Create or Join Another Server": the running server stays until a choice is made, so there's a way back
+let switchingFrom = null;
+function showAnotherServer() {
+  switchingFrom = hubOrigin;
+  showSetup(hubOrigin ? { canReturn: true } : {});
+}
+function returnToServer() {
+  const origin = switchingFrom;
+  switchingFrom = null;
+  if (origin) openHub(origin);
+  showWindow();
+}
+
 function showPendingCloud() {
   if (!config.cloudPending) return;
   showSetup({ step: "cloud", server: config.cloudPending.server });
@@ -213,6 +227,7 @@ function keepPendingCloud() {
 }
 
 function openHub(url, route = "") {
+  switchingFrom = null;
   pendingCloudOpen = false;
   hubOrigin = new URL(url).origin;
   buddy.connect(hubOrigin);
@@ -566,7 +581,7 @@ function trayMenu() {
     { label: hubLine(), enabled: false },
     { label: deviceLine(), enabled: false },
     { type: "separator" },
-    { label: "Open Wisp", click: () => showWindow() },
+    { label: "Open Wisp", click: () => (switchingFrom ? returnToServer() : showWindow()) },
     ...serverAddressItems(),
     buddy.menu(),
     { type: "separator" },
@@ -578,7 +593,7 @@ function trayMenu() {
     { label: "Pause Agents on This Computer", type: "checkbox", visible: isDevice, checked: !!n.paused, click: (i) => setDeviceFlag("paused", i.checked) },
     { type: "separator" },
     ...(config.cloudPending ? [{ label: "Unfinished Cloud Server…", click: () => showPendingCloud() }] : []),
-    { label: "Create or Join Another Server…", click: () => showSetup() },
+    { label: "Create or Join Another Server…", click: () => showAnotherServer() },
     ...updater.menu(),
     { label: "Update Automatically", type: "checkbox", checked: config.autoUpdate !== false, click: (i) => ((config.autoUpdate = i.checked), save()) },
     { label: "Show Logs", click: () => shell.openPath(logDir) },
@@ -599,7 +614,7 @@ function appMenu() {
     ...(mac
       ? [{ label: "Wisp", submenu: [{ role: "about" }, { label: "Check for Updates…", click: () => updater.check() }, { type: "separator" }, { label: "Settings…", accelerator: "Cmd+,", click: go("settings") }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit" }] }]
       : []),
-    { label: "File", submenu: [{ label: "Create or Join Another Server…", click: () => showSetup() }, { type: "separator" }, mac ? { role: "close" } : { role: "quit" }] },
+    { label: "File", submenu: [{ label: "Create or Join Another Server…", click: () => showAnotherServer() }, { type: "separator" }, mac ? { role: "close" } : { role: "quit" }] },
     { role: "editMenu" },
     {
       label: "View",
@@ -669,6 +684,7 @@ setup("setup:create", async ({ device: asDevice = true } = {}) => {
 });
 
 /** Open the server that's now running (the window makes the first account). */
+setup("setup:return", () => returnToServer());
 setup("setup:open", () => connect());
 
 setup("setup:discover", () => discovery.browse());

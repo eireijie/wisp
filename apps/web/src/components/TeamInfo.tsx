@@ -1,3 +1,4 @@
+import { noChartLine } from "./channel-rules.ts";
 import { useEffect, useState, type ReactNode } from "react";
 import { Archive, ArchiveRestore, Bell, Check, ChevronRight, Gauge, LogOut, Pencil, Pin, Plus, Trash2, Workflow, X } from "lucide-react";
 import { hasSteps, type AccessLevel, type Agent } from "@wisp/core";
@@ -213,7 +214,7 @@ function About({ channel, members, canManage, onSettings, onDialog }: { channel:
   const lines = useFlowLines(team ?? { nodes: [], edges: [] });
   const works = team?.nodes.length
     ? `${leads.length ? `${leads.map((a) => a.name).join(" and ")} ${leads.length > 1 ? "lead" : "leads"}.` : ""}${others.length ? ` ${others.map((a) => a.name).join(", ")} ${hasSteps(team) ? "do the steps" : "help"}.` : ""}`.trim()
-    : "Nobody is on the team yet";
+    : noChartLine((members ?? []).filter((m) => m.kind === "agent").length);
   return (
     <section aria-label="About">
       <SectionTitle>About</SectionTitle>

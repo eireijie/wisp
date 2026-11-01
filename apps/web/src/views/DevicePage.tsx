@@ -143,11 +143,13 @@ function RoleSection({ node: n, onChange }: { node: NodeInfo; onChange: () => vo
       <div role="radiogroup" aria-label={`What ${n.name} does for agents`} className="space-y-2">
         {ROLE_ROWS.map((r) => {
           const on = n.role === r.id;
+          // it can't be picked when the device can't do it; "on" stays so a device that lost it still says so
+          const vmNo = r.id === "vms" && !on && n.capabilities?.vm && !n.capabilities.vm.ok ? (n.capabilities.vm.detail || "This device can't run VMs yet.") : null;
           return (
-            <button key={r.id} type="button" role="radio" aria-checked={on} disabled={!n.mine} onClick={() => void patch({ role: r.id })} className={cx("w-full text-left rounded-2xl border px-4 py-3 flex items-center gap-3 disabled:cursor-default", on ? "border-accent bg-accent-soft" : "border-line bg-panel hover:bg-hover")}>
+            <button key={r.id} type="button" role="radio" aria-checked={on} disabled={!n.mine || !!vmNo} onClick={() => void patch({ role: r.id })} className={cx("w-full text-left rounded-2xl border px-4 py-3 flex items-center gap-3 disabled:cursor-default", on ? "border-accent bg-accent-soft" : "border-line bg-panel hover:bg-hover")}>
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-medium">{r.title}</span>
-                <span className="block text-xs text-muted">{r.body}</span>
+                <span className="block text-xs text-muted">{vmNo ?? r.body}</span>
               </span>
               {on && <Check size={18} className="text-accent-text shrink-0" />}
             </button>
@@ -339,7 +341,7 @@ function worksOnLabel(a: Agent, computers: ComputerInfo[]): string {
   const c = computers.find((x) => x.id === a.computerId);
   if (c?.kind === "device") return "This screen";
   if (c) return c.name;
-  return a.computerId ? "Its owner's screen" : "No computer";
+  return a.computerId ? "Its owner's screen" : "No screen";
 }
 
 /** "This screen", a VM here, a new VM, or no computer; the agent's current one shows first. */
@@ -371,7 +373,7 @@ function WorksOnPicker({ agent: a, node: n, screen, vms, busy, onPick }: { agent
       ))}
       {elsewhere && <option value={elsewhere.id}>{elsewhere.name}</option>}
       {caps?.vm.ok && <option value="new-vm">New VM</option>}
-      <option value="none">No computer</option>
+      <option value="none">No screen</option>
     </select>
   );
 }

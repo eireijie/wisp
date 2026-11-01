@@ -17,13 +17,15 @@ struct AgentWhoPage: View {
   private var current: Agent { store.agent(agent.id) ?? agent }
   private var device: AgentNode? { store.nodes.first { $0.id == current.nodeId } }
   private var canSet: Bool { (store.isOwner || current.settings?.createdBy == store.me?.id) && (store.features.invite || store.members.count > 1) }
-  private var saved: String { current.settings?.respondTo ?? "anyone" }
+  private var saved: String { AgentLine.askMode(current, device: device) }
+  /** on someone else's private device only they can open it up */
+  private var locked: Bool { device?.mine != true && device?.shared != true && current.settings?.anyoneCanAsk != true && saved == "me" && device != nil && store.harnessOnDevice(current) }
   private var savedPeople: Set<String> { Set(current.settings?.respondPeople ?? []) }
   private var dirty: Bool { mode != saved || (mode == "people" && people != savedPeople) }
 
   var body: some View {
     AgentFrame(title: "Who can ask it", subtitle: current.name) {
-      if canSet {
+      if canSet && !locked {
         CardGroup {
           ChoiceRow(title: "Only me", selected: mode == "me") { mode = "me" }
           ChoiceRow(title: "Anyone", subtitle: "Everyone in \(store.workspace?.name ?? "this organization")", selected: mode == "anyone") { mode = "anyone" }
@@ -49,32 +51,14 @@ struct AgentWhoPage: View {
           action.run { _ = try await store.updateAgent(current.id, ["settings": AnyEncodable(AskWho.settings(mode, people: people))]); dismiss() }
         }.disabled(!dirty || action.busy || (mode == "people" && people.isEmpty))
       }
-      if let device, store.harnessOnDevice(current) {
-        CardCaption("On its device")
-        AgentCard {
-          Text("@\(current.handle) runs directly on \(device.mine == true ? "your" : "\(device.ownerName ?? "someone")'s") device \"\(device.name)\", where it can reach files.")
-            .font(.system(size: 15)).foregroundStyle(Palette.muted)
-        }
-        if device.mine == true && device.shared != true && store.canManage {
-          CardGroup {
-            ChoiceRow(title: "Only me", subtitle: "Only you can ask it", selected: current.settings?.anyoneCanAsk != true) { setDeviceRule(false) }
-            ChoiceRow(title: "Anyone in the organization", selected: current.settings?.anyoneCanAsk == true) { setDeviceRule(true) }
-          }.disabled(action.busy)
-        } else {
-          CardCaption(device.shared == true || current.settings?.anyoneCanAsk == true ? "Anyone in the organization can ask it." : "Only \(device.ownerName ?? "its owner") can ask it.")
-        }
-        if !canSet { AgentError(text: action.error) }
+      if locked, let device {
+        AgentCard { Text("Only \(device.ownerName ?? "its owner") can ask it, because it runs on their device \"\(device.name)\". They can open it up here.").font(.system(size: 15)).foregroundStyle(Palette.muted) }
       }
     }
     .onAppear {
       guard !loaded else { return }
       mode = saved; people = savedPeople; loaded = true
     }
-  }
-
-  private func setDeviceRule(_ value: Bool) {
-    guard (current.settings?.anyoneCanAsk ?? false) != value else { return }
-    action.run { _ = try await store.updateAgent(current.id, ["settings": AnyEncodable(["anyoneCanAsk": value])]) }
   }
 
   private func initials(_ member: Member) -> some View {
@@ -189,7 +173,7 @@ struct AgentMemoryPage: View {
     AgentFrame(title: "Memory", subtitle: current.name) {
       CardGroup {
         NavigationLink { MemoryFolderView(folder: folder) } label: {
-          RowLabel(title: "\(current.name)'s notes", subtitle: folder, leading: { rowIcon("folder") })
+          RowLabel(title: "\(current.name)'s notes", leading: { rowIcon("folder") })
         }.buttonStyle(.plain).accessibilityIdentifier("memory-folder-row")
       }
       CardCaption("Recent notes")

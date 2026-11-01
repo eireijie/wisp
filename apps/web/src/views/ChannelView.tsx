@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { FlowStrip } from "../team/Runs.tsx";
-import { Archive, Book, Bot, Clock, ChevronLeft, ChevronRight, Check, CircleDot, Eye, FileText, GitPullRequest, Brain, ArrowDown, ArrowUp, AtSign, Camera, Loader2, Mic, MessageSquare, MoreHorizontal, Monitor, Paperclip, Phone, Plus, Shield, ShieldAlert, SquareTerminal, UserPlus, Users, X, Zap, ChevronDown, Hash, Info, AudioLines, CornerUpLeft, Pin, ListChecks, Square, ArrowRightLeft } from "lucide-react";
+import { LogIn, RotateCcw, Archive, Book, Bot, Clock, ChevronLeft, ChevronRight, Check, CircleDot, Eye, FileText, GitPullRequest, Brain, ArrowDown, ArrowUp, AtSign, Camera, Loader2, Mic, MessageSquare, MoreHorizontal, Monitor, Paperclip, Phone, Plus, Shield, ShieldAlert, SquareTerminal, UserPlus, Users, X, Zap, ChevronDown, Hash, Info, AudioLines, CornerUpLeft, Pin, ListChecks, Square, ArrowRightLeft } from "lucide-react";
 import { parseMentions, SCHEDULE_MARK, type AccessLevel, type Agent, type ContextUsage, type Message, type MessagePart } from "@wisp/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { conversationKey, useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
@@ -24,7 +24,7 @@ import { RightPane } from "../components/RightPane.tsx";
 import { workKind, workSummary } from "../components/agentActivity.ts";
 import { ActionSheet, ActionToolbar, DeleteMessageDialog, EditMessageDialog, useLongPress, useMessageActionList } from "../components/MessageActions.tsx";
 import { useChangedSinceMount, useFreshIds } from "../motion.ts";
-import { NotifyDialog, TeamInfo, type InfoTab } from "../components/TeamInfo.tsx";
+import { NotifyDialog, TeamInfo, useChannelMembers, type InfoTab } from "../components/TeamInfo.tsx";
 import { useFeature } from "../features.ts";
 import { useDevices } from "../devices.ts";
 import { isGrouped, needsStamp, snippetOf, stampLabel, toolLine } from "../chatFormat.ts";
@@ -35,6 +35,42 @@ import { CheckbackLabel, ClosedLine, LoopParts } from "../components/Loops.tsx";
 type Side = { kind: "agent"; agentId: string; tab: AgentPanelTab } | { kind: "info"; tab: InfoTab };
 
 /** The DM's own agent panel stays open across DMs once you open it. */
+/** What to do about a failed run: sign in if that's the cause, then ask again. */
+function RunFailedActions({ part, agentId }: { part: Extract<MessagePart, { type: "run_failed" }>; agentId?: string }) {
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const retry = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api("POST", `/api/runs/${part.runId}/retry`);
+      setSent(true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const to = part.fix === "computer" && agentId ? href({ view: "agents", agentId, tab: "computer" }) : part.fix === "connection" ? href({ view: "settings", page: "models" }) : part.fix === "signin" ? href({ view: "settings", page: "harnesses" }) : null;
+  if (sent) return <div className="mt-1 px-1 text-xs text-muted">Trying again…</div>;
+  return (
+    <div className="mt-1.5 px-1 flex flex-wrap items-center gap-2">
+      {to && (
+        <a href={to} className="h-8 px-3 rounded-full border border-control-line bg-control text-[13px] text-ink hover:bg-hover inline-flex items-center gap-1.5">
+          <LogIn size={13} /> Sign in
+        </a>
+      )}
+      {part.retry && (
+        <button type="button" disabled={busy} onClick={() => void retry()} className="h-8 px-3 rounded-full border border-control-line bg-control text-[13px] text-ink hover:bg-hover disabled:opacity-50 inline-flex items-center gap-1.5">
+          <RotateCcw size={13} /> Try again
+        </button>
+      )}
+      {error && <span className="text-xs text-bad">{error}</span>}
+    </div>
+  );
+}
+
 function storedDmPanel(): AgentPanelTab | null {
   try {
     return (localStorage.getItem("wisp.agentPanel") as AgentPanelTab | null) || null;
@@ -607,6 +643,7 @@ function ChannelIntro({ channel, onAddAgent, onMembers }: { channel: ChannelInfo
   const invite = useFeature("invite");
   const canManage = useStore((s) => s.me?.role !== "guest") && !channel.archivedAt;
   const nodes = useDevices();
+  const introMembers = useChannelMembers(channel);
   if (channel.kind === "dm") {
     const a = names.agent(channel.name.split(":").pop()!);
     const where = a?.nodeId ? nodes?.find((n) => n.id === a.nodeId)?.name : undefined;
@@ -636,7 +673,9 @@ function ChannelIntro({ channel, onAddAgent, onMembers }: { channel: ChannelInfo
           ? `${leads.map((a) => a.name).join(" and ")} ${leads.length > 1 ? "read" : "reads"} every new message here and hand${leads.length > 1 ? "" : "s"} out the work.`
           : answerer
             ? `${answerer.name} answers messages here. @mention another agent to ask them instead.`
-            : "Add the agents who will work here."}
+            : (introMembers ?? []).some((m) => m.kind === "agent")
+              ? "@mention an agent to ask them."
+              : "Add the agents who will work here."}
       </p>
       {cards.length > 0 && (
         <div className="mt-5 w-full max-w-sm overflow-hidden rounded-3xl bg-card divide-y divide-line text-left">
@@ -871,7 +910,7 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
           ))}
         {!m.deletedAt && (
           <CardAuthor.Provider value={m.author.kind === "agent" ? { agentId: m.author.id, channelId: m.channelId, threadId: m.threadId } : null}>
-            <Parts parts={m.parts} body={m.body} agentName={agent?.name} />
+            <Parts parts={m.parts} body={m.body} agentName={agent?.name} agentId={agent?.id} />
           </CardAuthor.Provider>
         )}
         {!m.deletedAt && <LoopParts m={m} arrived={arrived} />}
@@ -925,7 +964,7 @@ function linkCards(body: string) {
   return out.slice(0, 3);
 }
 
-function Parts({ parts, body = "", agentName }: { parts: MessagePart[]; body?: string; agentName?: string }) {
+function Parts({ parts, body = "", agentName, agentId }: { parts: MessagePart[]; body?: string; agentName?: string; agentId?: string }) {
   const tools = parts.filter((p) => p.type === "tool_call");
   const files = parts.filter((p) => p.type === "file");
   const status = parts.filter((p) => p.type === "status");
@@ -948,7 +987,8 @@ function Parts({ parts, body = "", agentName }: { parts: MessagePart[]; body?: s
           {files.map((f) => f.type === "file" && <FileChip key={f.fileId} id={f.fileId} name={f.name} />)}
         </div>
       )}
-      {status.map((s, i) => s.type === "status" && <div key={i} className={cx("mt-1 px-1", s.text === "Voice message" ? "text-[11px] text-faint inline-flex items-center gap-1" : "text-sm text-bad")}>{s.text === "Voice message" && <Mic size={11} />}{s.text}</div>)}
+      {status.map((s, i) => s.type === "status" && <div key={i} className={cx("mt-1 px-1", s.text === "Voice message" ? "text-[11px] text-faint inline-flex items-center gap-1" : "text-sm text-bad")}>{s.text === "Voice message" && <Mic size={11} />}{s.text.replace(/`/g, "")}</div>)}
+      {parts.map((p) => p.type === "run_failed" && <RunFailedActions key={p.runId} part={p} agentId={agentId} />)}
       <Remembered tools={tools} />
       {tools.length > 0 && toolCalls !== "hidden" && (
         <div className="mt-1 w-full max-w-md">
@@ -1279,7 +1319,7 @@ function ThreadRoot({ m }: { m: Message; composerThread?: string }) {
           <>
             {html && <div className="prose-w mt-2 text-body" dangerouslySetInnerHTML={{ __html: html }} />}
             <CardAuthor.Provider value={m.author.kind === "agent" ? { agentId: m.author.id, channelId: m.channelId, threadId: m.threadId } : null}>
-              <Parts parts={m.parts} body={m.body} agentName={agent?.name} />
+              <Parts parts={m.parts} body={m.body} agentName={agent?.name} agentId={agent?.id} />
             </CardAuthor.Provider>
           </>
         )}

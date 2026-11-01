@@ -26,6 +26,14 @@ extension Store {
     await refreshChannels()
     return task
   }
+  func retryTask(_ id: String) async throws {
+    let task: WorkTask = try await fetch { try await $0.post("/api/tasks/\(id)/retry", Empty()) }
+    upsertTask(task)
+  }
+  func retryRun(_ id: String) async throws {
+    struct Started: Decodable { var runId: String }
+    let _: Started = try await fetch { try await $0.post("/api/runs/\(id)/retry", Empty()) }
+  }
   func updateTask(_ id: String, status: String, result: String) async throws {
     let task: WorkTask = try await fetch { try await $0.patch("/api/tasks/\(id)", ["status": status, "result": result]) }
     upsertTask(task)

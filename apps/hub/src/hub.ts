@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential } from "@wisp/core";
+import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Logins } from "./logins.ts";
@@ -736,7 +736,8 @@ export class Hub {
       store.setRunStatus(run.id, "failed", result.error);
       const text = agent ? this.explainFailure(agent, result.error) : result.error;
       if (!gone) {
-        this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "status", text: `Run failed: ${text}` }], hop: run.hop + 1, route: false });
+        const fix = agent ? this.failureFix(agent, result.error) : undefined;
+        this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "status", text: `Run failed: ${text}` }, ...(result.error === "cancelled" ? [] : [{ type: "run_failed" as const, runId: run.id, retry: !!run.triggerMessageId && !run.discussionId, ...(fix ? { fix } : {}) }])], hop: run.hop + 1, route: false });
         failTaskOfRun(this, run, text);
       }
     }
@@ -763,12 +764,31 @@ export class Hub {
   /** A failure in plain words when it's a known one (a harness that needs signing in again), else as reported. */
   explainFailure(agent: Pick<Agent, "harness" | "nodeId"> & Partial<Pick<Agent, "workspaceId" | "settings">>, error: string): string {
     const problem = signInProblem(agent.harness, error);
-    if (!problem) return error;
+    if (!problem) return plainFailure(error);
     // on a connection, it's the connection that needs signing in again, not the device
     const conn = agent.settings?.connectionId ? this.models.row(agent.settings.connectionId) : undefined;
     if (conn && credentialSupport(agent.harness, conn.provider, conn.kind)) return `The ${providerLabel(conn.provider)} ${conn.kind === "oauth" ? "sign-in" : "key"} "${conn.label}" stopped working (${error.slice(0, 200)}). Connect it again in Settings → Models.`;
     const device = agent.nodeId ? this.store.node(agent.nodeId)?.name : undefined;
     return problem.explain(device ?? "its device");
+  }
+
+  /** What fixes a failed run, when a person has to sign something in first. */
+  private failureFix(agent: Pick<Agent, "harness" | "computerId" | "settings">, error: string): "signin" | "computer" | "connection" | undefined {
+    if (!signInProblem(agent.harness, error) && !/isn't signed in/i.test(error)) return undefined;
+    if (agent.settings.connectionId) return "connection";
+    return agent.settings.runIn === "computer" && agent.computerId ? "computer" : "signin";
+  }
+
+  /** Ask again after a failed run: a new run for the same request, for whoever is asking now. */
+  retryRun(run: NonNullable<ReturnType<Store["run"]>>, requestedBy: string): string {
+    const task = run.threadId ? this.store.taskByThread(run.threadId) : undefined;
+    if (task?.toAgentId === run.agentId && task.status === "failed" && !task.result?.startsWith("Cancelled")) {
+      this.store.reopenTask(task.id);
+      this.broadcast(task.workspaceId, { type: "tasks_changed" });
+    }
+    const runId = this.store.createRun({ agentId: run.agentId, channelId: run.channelId, threadId: run.threadId, triggerMessageId: run.triggerMessageId, hop: run.hop, requestedBy });
+    this.dispatchRun(runId);
+    return runId;
   }
 
   /**

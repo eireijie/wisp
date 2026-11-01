@@ -7,7 +7,7 @@ import { useStore } from "../store.ts";
 import { go, href, type AgentTab } from "../router.ts";
 import { effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { setChannelPrefs } from "../components/Channels.tsx";
-import { computerKindLabel, type DeviceInfo } from "../devices.ts";
+import { computerKindLabel, whoCanAsk, type DeviceInfo } from "../devices.ts";
 import { AgentAvatar, cx, harnessLabel, timeAgo } from "../components/ui.tsx";
 
 /** What each section is called, on the left list and at the top of its page. */
@@ -100,7 +100,7 @@ export function OverviewRows({ agent, nodes }: { agent: Agent; nodes: DeviceInfo
   const on = routines?.filter((r) => r.enabled).length ?? 0;
   const mine = skills?.filter((s) => s.allAgents || s.agentIds.includes(agent.id)).length ?? 0;
   const dm = channels.find((c) => c.kind === "dm" && c.name.endsWith(`:${agent.id}`));
-  const respond = agent.settings.respondTo ?? "anyone";
+  const respond = whoCanAsk(agent, device);
   return (
     <div className="space-y-3.5">
       <RowCard>
@@ -134,12 +134,14 @@ export function OverviewRows({ agent, nodes }: { agent: Agent; nodes: DeviceInfo
 
 // --- Who can ask it ---------------------------------------------------------------
 
-export function AccessPanel({ agent, device }: { agent: Agent; device: ReactNode }) {
+export function AccessPanel({ agent, device }: { agent: Agent; device: DeviceInfo | undefined }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const members = useStore((s) => s.members);
   const me = useStore((s) => s.me);
   const [error, setError] = useState<string | null>(null);
-  const respond = agent.settings.respondTo ?? "anyone";
+  const respond = whoCanAsk(agent, device);
+  // on someone else's private device only they can open it up, whatever was picked here
+  const locked = !!device && !device.mine && !device.shared && !agent.settings.anyoneCanAsk && respond === "me" && !(agent.settings.runIn === "computer" && agent.computerId);
   const picked = agent.settings.respondPeople ?? [];
   const save = async (settings: { respondTo?: "me" | "anyone" | "people"; respondPeople?: string[] }) => {
     setError(null);
@@ -153,6 +155,9 @@ export function AccessPanel({ agent, device }: { agent: Agent; device: ReactNode
   const others = members.filter((m) => m.id !== me?.user.id);
   return (
     <div className="space-y-5 max-w-xl">
+      {locked ? (
+        <p className="px-[18px] text-sm text-muted">Only {device?.ownerName ?? "its owner"} can ask it, because it runs on their device "{device?.name}". They can open it up here.</p>
+      ) : (
       <ChoiceRows
         value={respond}
         onChange={(v) => void save({ respondTo: v })}
@@ -162,6 +167,7 @@ export function AccessPanel({ agent, device }: { agent: Agent; device: ReactNode
           { value: "people", title: "Picked people", body: "Choose who can ask" },
         ]}
       />
+      )}
       {respond === "people" && (
         <section className="space-y-2">
           <h3 className="px-[18px] text-sm text-muted">Picked people</h3>
@@ -186,7 +192,6 @@ export function AccessPanel({ agent, device }: { agent: Agent; device: ReactNode
         </section>
       )}
       {error && <p className="px-[18px] text-sm text-bad">{error}</p>}
-      {device}
     </div>
   );
 }

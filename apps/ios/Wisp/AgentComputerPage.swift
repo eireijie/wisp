@@ -49,7 +49,7 @@ struct AgentComputerView: View {
           }
           .padding(.horizontal, 18).frame(minHeight: 60).contentShape(Rectangle())
         }.buttonStyle(.plain).disabled(!store.canManage || action.busy).accessibilityIdentifier("computer-other")
-        option("none", "No computer", "It can't answer @mentions until it has one", icon: "eye.slash", on: place == .none, disabled: !store.canManage) {
+        option("none", "No computer", device.map { "It runs on \($0.name) but can't use apps or a screen" } ?? "It can think and write, but can't use apps or a screen", icon: "eye.slash", on: place == .none, disabled: !store.canManage) {
           confirmingHeadless = true
         }
       }

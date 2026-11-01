@@ -10,6 +10,7 @@ struct InboxView: View {
   @State private var chat: ChatTarget?
   @State private var thread: ThreadRef?
   @State private var agentPage: Agent?
+  @State private var harnessesOpen = false
   @State private var showTasks = false
   @State private var computerId: String?
   @State private var addingAgent = false
@@ -56,6 +57,7 @@ struct InboxView: View {
     .navigationDestination(item: $chat) { ChannelView(channel: $0.channel, draft: $0.draft) }
     .navigationDestination(item: $thread) { ThreadView(ref: $0) }
     .navigationDestination(item: $agentPage) { AgentPage(agent: $0) }
+    .navigationDestination(isPresented: $harnessesOpen) { HarnessesView() }
     .navigationDestination(isPresented: $showTasks) { TasksView() }
     .navigationDestination(item: $computerId) { ComputerDetail(computerId: $0) }
     .sheet(isPresented: $addingAgent) { AddAgent { chat = nil; agentPage = $0 } }
@@ -125,6 +127,7 @@ struct InboxView: View {
     case .thread(let t): thread = t
     case .agent(let a): agentPage = a
     case .devices: store.route = .device(id: nil)
+    case .harnesses: harnessesOpen = true
     case .addAgent: addingAgent = true
     case .computer(let id): computerId = id
     case .tasks: showTasks = true

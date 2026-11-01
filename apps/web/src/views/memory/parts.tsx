@@ -131,11 +131,11 @@ export function useFolderLabel() {
     if (m) {
       if (m[1] === "agents") {
         const a = agents.find((x) => x.id === m[2]);
-        return a ? `${a.name}'s notes` : m[2]!;
+        return a ? `${a.name}'s notes` : "A removed agent's notes";
       }
       if (m[2] === meId) return "My notes";
       const p = members.find((x) => x.id === m[2]);
-      return p ? `${p.name}'s notes` : m[2]!;
+      return p ? `${p.name}'s notes` : "Someone's notes";
     }
     const top: Record<string, string> = { shared: "Shared", teams: "Teams", groups: "Groups", people: "People", agents: "Agents" };
     return top[seg] ?? seg;

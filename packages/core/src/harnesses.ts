@@ -84,6 +84,17 @@ export interface SignInProblem {
 }
 
 /**
+ * A run error fit to show a person: one line, no backticks, no file paths or system error codes.
+ * The original stays on the run for the logs.
+ */
+export function plainFailure(error: string): string {
+  const line = error.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  if (/\bE(NOENT|ACCES|PERM|CONNREFUSED|CONNRESET|PIPE|TIMEDOUT)\b|^\s*at\s|Traceback|TypeError|ReferenceError/.test(line)) return "Something went wrong on its device. Try again; if it keeps failing, check that device is running.";
+  const plain = line.replace(/`/g, "").replace(/(^|[\s("'=:])(~|\.{0,2})?\/(?:[\w.@+-]+\/)+[\w.@+-]*/g, "$1a file").replace(/\s+/g, " ").trim();
+  return plain.length > 300 ? `${plain.slice(0, 297).trimEnd()}…` : plain || "It stopped before it finished.";
+}
+
+/**
  * Is this run error the harness saying it needs a person to sign in on its device? Then what to
  * tell people, so "API Error: 401 OAuth access token has expired" becomes something they can act on.
  */

@@ -8,6 +8,7 @@ enum InboxTarget {
   case addAgent
   case agent(Agent)
   case devices
+  case harnesses
   case computer(String)
   case tasks
 }
@@ -460,6 +461,7 @@ struct ReadinessSection: View {
     case .makeHelper: if store.canManage { Button("Make a helper") { open(.addAgent) }.buttonStyle(CardPill(tone: .primary)) }
     case .chooseDevice(let id): if let a = store.agent(id) { Button("Choose a device") { open(.agent(a)) }.buttonStyle(CardPill(tone: .primary)) }
     case .chooseModel(let id): if let a = store.agent(id) { Button("Change its AI") { open(.agent(a)) }.buttonStyle(CardPill(tone: .primary)) }
+    case .signIn(let id): if let a = store.agent(id) { Button("Sign in") { open(a.settings?.runIn == "computer" && a.computerId != nil ? .agent(a) : .harnesses) }.buttonStyle(CardPill(tone: .primary)) }
     case .devices: Button("See devices") { open(.devices) }.buttonStyle(CardPill(tone: .primary))
     case nil: Button("Ask \(agent.name)") { open(.dm(agent)) }.buttonStyle(CardPill(tone: .primary))
     }

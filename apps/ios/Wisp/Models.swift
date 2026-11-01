@@ -198,6 +198,8 @@ enum MessagePart: Codable, Hashable {
   case toolCall(name: String, line: String = "", remembered: Remembered? = nil)
   case file(fileId: String, name: String)
   case status(String)
+  /** the run this message reports failed: try again, and what to sign in to first when that's the cause */
+  case runFailed(runId: String, retry: Bool, fix: String?)
   case notice(String)
   case computer(computerId: String, request: String?)
   case approval(approvalId: String)
@@ -226,7 +228,7 @@ enum MessagePart: Codable, Hashable {
     var path: String?
   }
 
-  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage, input, output, replies, did, saved, next, action, skillId, slug }
+  private enum K: String, CodingKey { case runId, retry, fix, type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage, input, output, replies, did, saved, next, action, skillId, slug }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: K.self)
@@ -239,6 +241,7 @@ enum MessagePart: Codable, Hashable {
       self = .toolCall(name: name, line: ToolLine.of(name, input: input), remembered: ToolLine.remembered(name, input: input, output: output))
     case "file": self = .file(fileId: (try? c.decode(String.self, forKey: .fileId)) ?? "", name: (try? c.decode(String.self, forKey: .name)) ?? "file")
     case "status": self = .status((try? c.decode(String.self, forKey: .text)) ?? "")
+    case "run_failed": self = .runFailed(runId: (try? c.decode(String.self, forKey: .runId)) ?? "", retry: (try? c.decode(Bool.self, forKey: .retry)) ?? false, fix: try? c.decode(String.self, forKey: .fix))
     case "notice": self = .notice((try? c.decode(String.self, forKey: .text)) ?? "")
     case "computer": self = .computer(computerId: (try? c.decode(String.self, forKey: .computerId)) ?? "", request: try? c.decode(String.self, forKey: .request))
     case "approval": self = .approval(approvalId: (try? c.decode(String.self, forKey: .approvalId)) ?? "")

@@ -1077,7 +1077,7 @@ export class Store {
 
   /** Runs that haven't ended yet (queued or running). */
   activeRuns(agentId: string) {
-    return this.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND status IN ('queued', 'running') ORDER BY created_at").all(agentId) as { id: string }[];
+    return this.db.prepare("SELECT id, trigger_message_id AS triggerMessageId FROM runs WHERE agent_id = ? AND status IN ('queued', 'running') ORDER BY created_at").all(agentId) as { id: string; triggerMessageId: string }[];
   }
 
   activeRunCount(agentId: string): number {
@@ -1137,6 +1137,12 @@ export class Store {
 
   updateTask(taskId: string, status: "open" | "in_progress" | "done" | "failed", result?: string) {
     this.db.prepare("UPDATE tasks SET status = ?, result = COALESCE(?, result), updated_at = ? WHERE id = ?").run(status, result ?? null, now(), taskId);
+    return this.task(taskId);
+  }
+
+  /** A failed task goes back to open; what went wrong last time no longer describes it. */
+  reopenTask(taskId: string) {
+    this.db.prepare("UPDATE tasks SET status = 'open', result = NULL, updated_at = ? WHERE id = ?").run(now(), taskId);
     return this.task(taskId);
   }
 

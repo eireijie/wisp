@@ -64,7 +64,9 @@ struct TasksView: View {
           taskGroup("Waiting on you", waiting)
           taskGroup("In progress", progress)
           taskGroup("To do", todo)
-          taskGroup("Done", Array(roots.filter(\.closed).prefix(20)))
+          // only there while something has failed; a cancelled task stays with the finished ones
+          taskGroup("Failed", Array(roots.filter(\.failedOnItsOwn).prefix(20)), retry: true)
+          taskGroup("Done", Array(roots.filter { $0.closed && !$0.failedOnItsOwn }.prefix(20)))
         }
         .padding(.horizontal, 18).padding(.top, 4).padding(.bottom, 24)
       }
@@ -102,15 +104,22 @@ struct TasksView: View {
     }
   }
 
-  @ViewBuilder private func taskGroup(_ title: String, _ tasks: [WorkTask]) -> some View {
+  @ViewBuilder private func taskGroup(_ title: String, _ tasks: [WorkTask], retry: Bool = false) -> some View {
     if !tasks.isEmpty {
       InboxHead(title: title, right: "\(tasks.count)")
       CardGroup {
         ForEach(tasks) { task in
           Button { open = TaskRef(id: task.id) } label: { TaskRow(task: task) }
             .buttonStyle(.plain).accessibilityIdentifier("task-row")
+          if retry && store.canManage {
+            Button("Try again") { action.run { try await store.retryTask(task.id) } }
+              .buttonStyle(CardPill(tone: .soft)).disabled(action.busy)
+              .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.top, 10).padding(.bottom, 12)
+              .accessibilityIdentifier("task-row-retry")
+          }
         }
       }
+      if retry { InlineError(error: action.error) }
     }
   }
 
@@ -163,6 +172,7 @@ struct TaskDetail: View {
   var taskId: String
   var root = false
   @State private var cancelling = false
+  @State private var retrying = FormAction()
   @State private var merging = false
   @State private var editing = false
   @State private var output: String?
@@ -258,6 +268,10 @@ struct TaskDetail: View {
         if let result = t.result, !result.isEmpty {
           InboxHead(title: t.cancelled ? "Cancelled" : t.status == "failed" ? "What happened" : "Result")
           note { NoteMarkdown(text: result) }
+        }
+        if state == "Failed" {
+          PillButton(title: "Try again", busy: retrying.busy, id: "task-retry") { retrying.run { try await store.retryTask(t.id) } }
+          InlineError(error: retrying.error)
         }
         if channel != nil, t.closed || store.taskWaiting(t) != nil || state == "Working" {
           if let channel {

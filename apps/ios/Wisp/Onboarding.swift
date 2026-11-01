@@ -29,13 +29,16 @@ struct ReadyDevice: Equatable {
   var paused: Bool
   /** the AI programs the device says it has; empty = it hasn't said yet */
   var harnesses: [String]
+  /** the device's harnesses in full, for who's signed in; empty until the live list has loaded */
+  var details: [AgentNode.Harness] = []
+  var vmSignIns: [String: [String: Bool?]] = [:]
 }
 
 /** "My helper isn't answering", as the web's Help page and Inbox card work it out (apps/web/src/onboarding.ts). */
 enum Readiness {
   struct Check: Equatable, Identifiable {
     enum Status { case ok, bad, unknown }
-    enum Fix: Equatable { case makeHelper, chooseDevice(agentId: String), devices, chooseModel(agentId: String) }
+    enum Fix: Equatable { case signIn(agentId: String), makeHelper, chooseDevice(agentId: String), devices, chooseModel(agentId: String) }
     var id: String
     var status: Status
     var label: String
@@ -47,6 +50,14 @@ enum Readiness {
   static func runsOutside(_ harness: String) -> Bool { HarnessChoice.all.first { $0.id == harness }?.protocolName == "mcp" }
   static func runsInVm(_ harness: String) -> Bool { ["claude-code", "codex", "hermes", "kimi"].contains(harness) }
 
+  /** Is the agent's harness signed in where it runs? nil when nobody can tell (the same rule as agentSignedIn on web). */
+  static func signedIn(_ agent: Agent, on device: ReadyDevice) -> Bool? {
+    if agent.settings?.connectionId != nil { return true }
+    if runsInVm(agent.harness), agent.settings?.runIn == "computer", let vm = agent.computerId { return device.vmSignIns[vm]?[agent.harness] ?? nil }
+    guard let h = device.details.first(where: { $0.id == agent.harness }) else { return nil }
+    return h.accounts?[h.agentAccounts?[agent.id] ?? "default"] ?? nil
+  }
+
   static func ready(_ agent: Agent, devices: [ReadyDevice]?) -> (ready: Bool, problem: String?) {
     if runsOutside(agent.harness) { return (true, nil) }
     guard agent.nodeId != nil else { return (false, "No device yet") }
@@ -57,6 +68,7 @@ enum Readiness {
     if !device.harnesses.isEmpty && !inComputer && !device.harnesses.contains(agent.harness) {
       return (false, "\(HarnessChoice.label(agent.harness)) isn't installed on \(device.name)")
     }
+    if signedIn(agent, on: device) == false { return (false, "\(HarnessChoice.label(agent.harness)) isn't signed in") }
     return (true, nil)
   }
 
@@ -106,6 +118,12 @@ enum Readiness {
     } else {
       out.append(Check(id: "harness", status: .bad, label: "\(label) is installed on \(device.name)",
                        fix: "Install \(label) on \(device.name), or pick an AI that's already there.", to: .chooseModel(agentId: agent.id)))
+      return out
+    }
+    switch signedIn(agent, on: device) {
+    case .some(true): out.append(Check(id: "signin", status: .ok, label: "\(label) is signed in"))
+    case .some(false): out.append(Check(id: "signin", status: .bad, label: "\(label) is signed in", fix: "Sign in to \(label) so \(agent.name) can answer.", to: .signIn(agentId: agent.id)))
+    case nil: out.append(unknown("signin", "\(label) is signed in"))
     }
     return out
   }
@@ -115,7 +133,7 @@ extension Store {
   /** Devices for the checks: the live list of your devices, falling back to the hub's setup list while that loads. */
   var readyDevices: [ReadyDevice]? {
     if !nodes.isEmpty {
-      return nodes.map { ReadyDevice(id: $0.id, name: $0.name, online: $0.online, paused: $0.paused == true, harnesses: ($0.harnesses ?? []).map(\.id)) }
+      return nodes.map { ReadyDevice(id: $0.id, name: $0.name, online: $0.online, paused: $0.paused == true, harnesses: ($0.harnesses ?? []).map(\.id), details: $0.harnesses ?? [], vmSignIns: $0.vmSignIns ?? [:]) }
     }
     guard let onboarding else { return nil }
     return onboarding.devices.map { ReadyDevice(id: $0.id, name: $0.name, online: $0.online, paused: false, harnesses: []) }

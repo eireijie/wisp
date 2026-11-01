@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check, Globe, Home, Loader2, ShieldCheck } from "lucide-react";
 import { api } from "../api.ts";
-import { onPublicAddress, skipAccess, useAccess, useAccessStore, type AccessInfo } from "../access.ts";
+import { accessSkipped, onPublicAddress, skipAccess, useAccess, useAccessStore, type AccessInfo } from "../access.ts";
 import { canApproveJoin, unavailable } from "../join.ts";
 import { useStore } from "../store.ts";
 import { Button, Input, cx } from "./ui.tsx";
@@ -58,7 +58,7 @@ export function AwayFromHome({ onDone }: { onDone?: () => void }) {
   const info = useAccess(3000);
   const failed = useAccessStore((s) => s.failed);
   const allowed = useStore((s) => canApproveJoin(s.me?.role));
-  const [choice, setChoice] = useState<"tailscale" | "cloudflare" | "home">("tailscale");
+  const [choice, setChoice] = useState<"tailscale" | "cloudflare" | "home">(() => (accessSkipped() ? "home" : "tailscale"));
   const [credential, setCredential] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
