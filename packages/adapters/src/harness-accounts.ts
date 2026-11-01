@@ -1,6 +1,7 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { ACCOUNT_ID, type HarnessAccount } from "@wisp/core";
+import { ACCOUNT_ID, harnessInfo, type HarnessAccount } from "@wisp/core";
 import { HARNESS_SPECS, harnessConfigPath, harnessDir, type HarnessHomes } from "./harness-config.ts";
 
 /**
@@ -19,12 +20,46 @@ export interface AccountsFile {
   agents: Record<string, string>;
 }
 
+const PROBE_MS = 10_000;
+
+/** Asks a harness whether an account is signed in: true, false, or null when it can't tell. */
+export type SignInProbe = (harness: string, binary: string, env: Record<string, string>) => Promise<boolean | null>;
+
+/** The harnesses' own read-only status commands, and how to read their answers. Exported for tests. */
+export const SIGN_IN_STATUS: Record<string, { binary: string; args: string[]; read: (stdout: string, code: number, stderr: string) => boolean | null }> = {
+  "claude-code": {
+    binary: "claude",
+    args: ["auth", "status", "--json"],
+    read: (stdout) => {
+      try {
+        const v = JSON.parse(stdout).loggedIn;
+        return typeof v === "boolean" ? v : null;
+      } catch {
+        return null; // a version with no such command
+      }
+    },
+  },
+  codex: { binary: "codex", args: ["login", "status"], read: (stdout, code, stderr) => (code === 0 ? true : /not logged in/i.test(`${stdout}\n${stderr}`) ? false : null) },
+};
+
+const askHarness: SignInProbe = (harness, binary, env) =>
+  new Promise((resolve) => {
+    const s = SIGN_IN_STATUS[harness];
+    execFile(binary, s.args, { env: { ...process.env, ...env }, timeout: 15_000 }, (err, stdout, stderr) => {
+      const code = err ? (err as { code?: unknown }).code : 0;
+      // it didn't run at all (not installed, timed out): that says nothing about the sign-in
+      resolve(typeof code === "number" ? s.read(stdout, code, stderr) : null);
+    });
+  });
+
 export class HarnessAccounts {
   constructor(
     /** Wisp's folder on the device (~/.wisp) */
     private wispDir: string,
     private h: HarnessHomes = {},
   ) {}
+
+  private probed = new Map<string, { at: number; signedIn: boolean | null }>();
 
   private get file() {
     return path.join(this.wispDir, "harness-accounts.json");
@@ -87,6 +122,32 @@ export class HarnessAccounts {
       }
     }
     return out;
+  }
+
+  /**
+   * The same list, after asking the harness itself about any account its files don't show a login
+   * for: macOS keeps Claude Code's in the Keychain and Codex can keep its there too, and either can
+   * run on a key from the environment. Answers are kept for a few seconds, since pages poll this.
+   */
+  async listChecked(harness: string, binary?: string, probe: SignInProbe = askHarness): Promise<HarnessAccount[]> {
+    return Promise.all(
+      this.list(harness).map(async (a) => {
+        if (a.signedIn === true || !SIGN_IN_STATUS[harness]) return a;
+        const key = `${harness}\n${a.id}`;
+        const known = this.probed.get(key);
+        if (known && Date.now() - known.at < PROBE_MS) return { ...a, signedIn: known.signedIn };
+        const answer = await probe(harness, binary ?? SIGN_IN_STATUS[harness].binary, this.env(harness, a.id));
+        // null: too old a harness to ask, or it wouldn't say; what the files show is all there is
+        const signedIn = answer ?? a.signedIn;
+        this.probed.set(key, { at: Date.now(), signedIn });
+        return { ...a, signedIn };
+      }),
+    );
+  }
+
+  /** A sign-in finished: ask again next time instead of repeating the old answer. */
+  forgetChecks() {
+    this.probed.clear();
   }
 
   /** The account an agent uses (the default one unless it was given another). */
@@ -171,6 +232,8 @@ export function loginCommand(harness: string, provider?: string): { command: str
   // their sign-in only runs inside their own screen: the command to run at the device
   if (harness === "gemini") return { manual: ["gemini"] };
   if (harness === "qwen") return { manual: ["qwen", "(then /auth)"] };
+  const login = harnessInfo(harness)?.login;
+  if (login) return { manual: [login] };
   throw new Error(`Wisp can't sign ${harness} in yet; sign in on the device`);
 }
 
@@ -253,7 +316,8 @@ function signedIn(harness: string, dir: string): { signedIn: boolean | null } {
   }
   if (harness === "kimi") return { signedIn: fs.existsSync(path.join(dir, "credentials", "kimi-code.json")) };
   if (harness === "gemini") return { signedIn: fs.existsSync(path.join(dir, "oauth_creds.json")) || /^GEMINI_API_KEY\s*=\s*\S+/m.test(readText(path.join(dir, ".env"))) };
-  if (harness === "qwen") return { signedIn: /^[A-Z_]*API_KEY\s*=\s*\S+/m.test(readText(path.join(dir, ".env"))) || null };
+  // what's left (a key in its settings, a provider it was pointed at) can't be read from outside, so it's unknown, never "no"
+  if (harness === "qwen") return { signedIn: fs.existsSync(path.join(dir, "oauth_creds.json")) || /^[A-Z_]*API_KEY\s*=\s*\S+/m.test(readText(path.join(dir, ".env"))) || null };
   return { signedIn: null };
 }
 

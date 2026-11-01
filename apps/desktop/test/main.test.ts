@@ -336,3 +336,21 @@ describe("desktop startup migration ordering", () => {
     expect(f.windows[0].loadURL).toHaveBeenLastCalledWith("https://hub/#/settings/mobile");
   });
 });
+
+describe("the window setup opens for a VM's sign-in", () => {
+  it("is allowed, so setup stays where it is, and only ever shows Wisp", async () => {
+    const f = fixture(false, { mode: "remote", hubUrl: "https://hub", device: false });
+    await f.ready();
+    const window = f.windows[0];
+    const open = window.webContents.setWindowOpenHandler.mock.calls[0][0];
+    expect(open({ url: "about:blank" })).toEqual({ action: "allow" });
+    const child = { webContents: Object.assign(new EventEmitter(), { setWindowOpenHandler: vi.fn() }) };
+    window.webContents.emit("did-create-window", child);
+    const away = { preventDefault: vi.fn() };
+    child.webContents.emit("will-navigate", away, "file:///etc/hosts");
+    expect(away.preventDefault).toHaveBeenCalled();
+    const hub = { preventDefault: vi.fn() };
+    child.webContents.emit("will-navigate", hub, "https://hub/#/computers/cmp_1");
+    expect(hub.preventDefault).not.toHaveBeenCalled();
+  });
+});

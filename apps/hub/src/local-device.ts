@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { envVar } from "@wisp/core";
 import { issueToken } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 
@@ -13,6 +14,9 @@ import type { Hub } from "./hub.ts";
 export const REQUEST_FILE = "local-device.request";
 export const GRANT_FILE = "local-device.json";
 
+/** Where those two files go: the hub's data, or $WISP_LOCAL_DEVICE_DIR for a device that mustn't see that data. */
+export const localDeviceDir = (dataDir: string) => envVar("LOCAL_DEVICE_DIR") ?? dataDir;
+
 export interface LocalDeviceGrant {
   hub: string;
   token: string;
@@ -24,8 +28,9 @@ export const localName = (host = os.hostname()) => host.replace(/\.(local|lan|ho
 
 /** Answer a waiting request, if there is one and an owner to give the device to. True when a device was made. */
 export function grantLocalDevice(hub: Hub, dataDir: string, port = Number(process.env.PORT ?? 4747)): boolean {
-  const request = path.join(dataDir, REQUEST_FILE);
-  const grant = path.join(dataDir, GRANT_FILE);
+  const dir = localDeviceDir(dataDir);
+  const request = path.join(dir, REQUEST_FILE);
+  const grant = path.join(dir, GRANT_FILE);
   if (!fs.existsSync(request) || fs.existsSync(grant)) return false;
   const ws = hub.store.firstWorkspace();
   const owner = ws ? hub.store.members(ws.id).find((m) => m.role === "owner") : undefined;
@@ -38,6 +43,11 @@ export function grantLocalDevice(hub: Hub, dataDir: string, port = Number(proces
   const node = hub.store.createNode(ws.id, name, owner.id);
   const body: LocalDeviceGrant = { hub: `http://127.0.0.1:${port}`, token: issueToken(hub.store.db, "node", node.id, ws.id, name), name };
   fs.writeFileSync(grant, JSON.stringify(body, null, 2), { mode: 0o600 });
+  // the device may run as another user (a Cloud server's container): it owns the folder they share
+  const { uid, gid } = fs.statSync(dir);
+  try {
+    fs.chownSync(grant, uid, gid);
+  } catch {}
   fs.rmSync(request, { force: true });
   return true;
 }

@@ -114,6 +114,8 @@ export async function readHarnessSettings(harness: string, h?: HarnessHomes): Pr
   try {
     return { ...empty, ...(await spec.read(d)) };
   } catch (err) {
+    // installed but never set up: nothing to show yet, which isn't an error
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return empty;
     return { ...empty, error: `Couldn't read ${file}: ${(err as Error).message}` };
   }
 }

@@ -93,5 +93,5 @@ export function signInProblem(harness: string, error: string): SignInProblem | n
   const pattern = SIGN_IN_ERRORS[harness] ?? SIGN_IN_ANY;
   if (!pattern.test(error)) return null;
   const { label, login } = info;
-  return { harness, label, login, explain: (device) => `${label} on ${device} needs to be signed in again. In a terminal there, run \`${login}\`; then ask again.` };
+  return { harness, label, login, explain: (device) => `${label} on ${device} isn't signed in. Open Settings → Harnesses, sign in to ${label} on ${device}, then ask again.` };
 }

@@ -32,25 +32,27 @@ Back up the whole folder, and the memory folder too if you moved it. The vault i
 
 ## Run Wisp in the cloud
 
-To keep Wisp running when your computers are off, put it on a server you rent. The Wisp project doesn't host anything or take payment for it. The server is in **your own** cloud account, and the provider bills you directly.
+To keep Wisp and your agents running when your computers are off, put it on a server you rent. Agents you make in setup live on that server. You sign in to their AI tools from Wisp, and those sign-ins stay on the server. The Wisp project doesn't host anything or take payment for it. The server is in **your own** cloud account, and the provider bills you directly.
 
 ### From the desktop app (Hetzner)
 
 On first run (or **Create or Join Another Server…** in the menu bar), choose **Create one in your cloud account**:
 
 1. In the [Hetzner Console](https://console.hetzner.com), open a project, go to **Security → API tokens → Generate API token**, choose **Read & Write**, and paste it into Wisp.
-2. Pick a location and a size. The prices come straight from Hetzner's API each time, per month, including the IPv4 address. Hetzner bills by the hour, up to that monthly price. Wisp suggests the cheapest size with 4 GB of memory, which fits the hub plus a couple of agent computers.
+2. Pick a location and a size. The prices come straight from Hetzner's API each time, per month, including the IPv4 address. Hetzner bills by the hour, up to that monthly price. Wisp suggests the cheapest size with 8 GB of memory. Wisp itself takes about 1 GB, and each agent with its own computer can use up to 4 GB more, so a 4 GB server fits one agent computer with little room to spare, and 2 GB only fits agents that don't have one.
 3. Enter your name, email and password for the new Wisp, then **Create server**.
 
 The app creates an Ubuntu 24.04 server named `wisp-xxxxxx` (labelled `managed-by=wisp`) with [`docker/cloud-init.yaml`](../docker/cloud-init.yaml) as its first-boot script. It waits until Wisp answers over HTTPS (usually 3–5 minutes), makes your account, and opens it, signed in. If the server doesn't come up in time, the app offers to delete it.
 
 **Where the token goes:** only to `api.hetzner.cloud`. It's held in the setup window's memory while the server is created and is never written to disk. It's gone once the window moves on to your Wisp. The app keeps only which server it made (id, name, IP) in its `desktop.json`. You can delete the token in Hetzner afterwards. Wisp doesn't need it again.
 
-**To stop paying,** delete the server in the Hetzner Console. Back up `/opt/wisp/data` first if you want to keep anything.
+**To stop paying,** delete the server in the Hetzner Console. Back up `/opt/wisp/data` and `/opt/wisp/device` first if you want to keep anything.
 
 ### What the server runs
 
-[`docker/cloud-init.yaml`](../docker/cloud-init.yaml) installs Docker and runs two containers from `/opt/wisp/compose.yaml`: the hub (`ghcr.io/eireijie/wisp`, data in `/opt/wisp/data`) and [Caddy](https://caddyserver.com) on ports 80 and 443. HTTPS works without a domain:
+[`docker/cloud-init.yaml`](../docker/cloud-init.yaml) installs Docker and runs three containers from `/opt/wisp/compose.yaml`: the hub (`ghcr.io/eireijie/wisp`, data in `/opt/wisp/data`), a device from the same image where agents run (their AI tools, sign-ins and files in `/opt/wisp/device`), and [Caddy](https://caddyserver.com) on ports 80 and 443.
+
+The device can use the server's Docker to start agents' computers, which gives agents running directly on it control of the server. Only you can put agents on it unless you share it. Some AI tools (Gemini CLI, Qwen Code and others) only sign in on their own screen: over SSH, run `cd /opt/wisp && docker compose exec device gemini`. To also run agents on your own computer, add it from **Settings → Devices**. HTTPS works without a domain:
 
 - `https://<server IP>`, with a Let's Encrypt certificate for the IP address itself. These come only on Let's Encrypt's six-day "shortlived" profile, and Caddy renews them automatically.
 - `https://<ip-with-dashes>.sslip.io` as a second address, for example `https://203-0-113-7.sslip.io`. [sslip.io](https://sslip.io) answers any such name with the IP inside it. All sslip.io names share Let's Encrypt's weekly limit, so it's only the fallback.

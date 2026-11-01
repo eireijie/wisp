@@ -122,6 +122,10 @@ export interface HarnessCatalog {
   models: ModelOption[];
   /** effort levels the harness accepts when a model doesn't list its own */
   efforts: string[];
+  /** whether each of its accounts is signed in where it runs (account id → true, false, or null when it can't tell) */
+  accounts?: Record<string, boolean | null>;
+  /** agents that use an account other than the default one (agent id → account id) */
+  agentAccounts?: Record<string, string>;
   /** what the harness uses when the agent doesn't pick (from the device's harness config) */
   defaultModel?: string;
   defaultEffort?: string;

@@ -407,6 +407,11 @@ function hubDataDir(): string {
   return path.resolve(envVar("DATA_DIR") ?? envVar("DEFAULT_DATA_DIR") ?? defaultHubDataDir(migration.dir));
 }
 
+/** Where the hub on this computer and its device leave each other notes (apps/hub/src/local-device.ts). */
+function localDeviceDir(): string {
+  return envVar("LOCAL_DEVICE_DIR") ?? hubDataDir();
+}
+
 /** A new Wisp's setup link (apps/hub/src/setup-code.ts), when nobody has made the first account yet. */
 function printSetupLink(): boolean {
   let code = "";
@@ -422,7 +427,7 @@ function printSetupLink(): boolean {
  * since the first account is made in the browser) for it to hand over the connection.
  */
 async function waitForLocalHub(cfg: NodeConfig): Promise<NodeConfig> {
-  const data = hubDataDir();
+  const data = localDeviceDir();
   const grant = path.join(data, "local-device.json");
   const request = path.join(data, "local-device.request");
   if (!fs.existsSync(grant)) {
@@ -480,7 +485,7 @@ async function service(action: string | undefined, kind: string | undefined) {
   const cfg = k === "node" ? saveNodeConfig() : undefined;
   if (cfg?.local && !cfg.token) {
     // a fresh request even if one is there, so the hub answers this install
-    const data = hubDataDir();
+    const data = localDeviceDir();
     fs.mkdirSync(data, { recursive: true });
     if (!fs.existsSync(path.join(data, "local-device.json"))) fs.writeFileSync(path.join(data, "local-device.request"), JSON.stringify({ name: cfg.name }), { mode: 0o600 });
   }

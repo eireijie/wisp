@@ -223,6 +223,8 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
   const [view, setView] = useState<"look" | "harness">("look");
   // signing in from the Make button: make the agent as soon as that's done
   const [makeAfterSignIn, setMakeAfterSignIn] = useState(false);
+  /** Wisp can't tell whether this AI is signed in, and the person says it is */
+  const [unknownOk, setUnknownOk] = useState(false);
   const [settings, setSettings] = useState<HarnessSettings[]>([]);
   const [signingIn, setSigningIn] = useState<HarnessSettings | null>(null);
   const [created, setCreated] = useState<Agent | null>(null);
@@ -260,6 +262,7 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
   const account = (s: HarnessSettings) => s.accounts.find((a) => a.isDefault) ?? s.accounts[0];
   const pick = (id: string) => {
     setHarness(id);
+    setUnknownOk(false);
     setError(null);
   };
   const create = async () => {
@@ -271,7 +274,7 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
       setCreated(agent);
       setLook(look);
       await Promise.allSettled([useStore.getState().refreshAgents(), useStore.getState().refreshComputers()]);
-      if (agent.settings.runIn !== "computer") {
+      if (agent.settings.runIn !== "computer" && !unknownOk) {
         // read what the device says now: an AI that was just installed isn't in the list from before
         const fresh = await loadSettings().catch(() => undefined);
         const s = signInFor(fresh ?? settings, selected);
@@ -312,7 +315,10 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
       />
     );
   }
-  if (created) return <AgentCreated agent={created} device={device?.name} onNext={onNext} />;
+  if (created) {
+    const settingsNow = settings.find((s) => s.harness === created.harness);
+    return <AgentCreated agent={created} device={device?.name} onSignIn={device?.mine && settingsNow && account(settingsNow) ? () => setSigningIn(settingsNow) : undefined} onNext={onNext} />;
+  }
   if (view === "look") {
     return (
       <>
@@ -335,7 +341,8 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
     );
   }
   const current = settings.find((s) => s.harness === selected);
-  const needsSignIn = !!device?.mine && !!current && account(current)?.signedIn === false;
+  const signedIn = current ? account(current)?.signedIn : undefined;
+  const needsSignIn = !!device?.mine && !!current && !!account(current) && signedIn !== true && !(signedIn === null && unknownOk);
   const noNode = !!error && NO_NODE.test(error);
   const notInstalled = HARNESSES.filter((h) => h.protocol !== "mcp" && (h.install?.npm || (runsInVm(h.id) && device?.capabilities?.vm.ok)) && !installed.some((i) => i.id === h.id));
   const isInstalled = installed.some((h) => h.id === selected);
@@ -357,8 +364,8 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
         <div role="radiogroup" aria-label="Agent app" className="grid grid-cols-2 gap-2">
           {installed.map((h) => {
             const s = settings.find((s) => s.harness === h.id);
-            const signedIn = s ? account(s)?.signedIn : null;
-            return <HarnessChoice key={h.id} title={harnessLabel(h.id)} body={signedIn === true ? "Signed in" : "On this computer"} selected={selected === h.id} onClick={() => pick(h.id)} icon={<HarnessLogo harness={h.id} size={24} />} />;
+            const state = s ? account(s)?.signedIn : undefined;
+            return <HarnessChoice key={h.id} title={harnessLabel(h.id)} body={state === true ? "Signed in" : state === false ? "Needs sign-in" : state === null ? "Sign-in unknown" : "On this computer"} selected={selected === h.id} onClick={() => pick(h.id)} icon={<HarnessLogo harness={h.id} size={24} />} />;
           })}
           {notInstalled.map((h) => (
             <HarnessChoice key={h.id} title={h.label} body="Wisp installs it" selected={selected === h.id} onClick={() => pick(h.id)} icon={<HarnessLogo harness={h.id} size={24} />} />
@@ -366,7 +373,7 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
         </div>
         {!device && (
           <p role="status" className="text-sm text-muted">
-            Waiting for this computer to connect; you can skip this for now.
+            Waiting for a computer to connect; you can skip this for now.
           </p>
         )}
         {noNode ? (
@@ -398,6 +405,11 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
             {busy && <Loader2 size={16} className="animate-spin" />}
             {busy ? "Getting ready…" : noNode ? "Try again" : isInstalled ? `Make ${displayName}` : `Install ${harnessLabel(selected)} and make ${displayName}`}
           </SetupButton>
+        )}
+        {needsSignIn && signedIn === null && (
+          <AuthLink onClick={() => setUnknownOk(true)} disabled={busy} className="self-center">
+            It's already signed in
+          </AuthLink>
         )}
         <AuthLink onClick={onNext} disabled={busy} className="self-center">
           Skip for now
@@ -626,17 +638,23 @@ function HarnessSignInChat({ device, settings, account, onClose, onDone }: { dev
   );
 }
 
-function AgentCreated({ agent, device, onNext }: { agent: Agent; device?: string; onNext: () => void }) {
+function AgentCreated({ agent, device, onSignIn, onNext }: { agent: Agent; device?: string; onSignIn?: () => void; onNext: () => void }) {
   const inVm = agent.settings.runIn === "computer";
+  const label = harnessLabel(agent.harness);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [checked, setChecked] = useState(false);
+  const [screen, setScreen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (!inVm) return;
     let alive = true;
     const check = () =>
       api<{ signedIn: boolean | null }>("GET", `/api/agents/${agent.id}/harness`).then(
-        (r) => alive && setSignedIn(r.signedIn),
+        (r) => {
+          if (!alive) return;
+          setSignedIn(r.signedIn);
+          setChecked(true);
+        },
         () => {},
       );
     void check();
@@ -645,19 +663,22 @@ function AgentCreated({ agent, device, onNext }: { agent: Agent; device?: string
       alive = false;
       clearInterval(t);
     };
-  }, [agent.id, inVm]);
+  }, [agent.id]);
+  const waiting = checked && signedIn !== true;
   return (
     <>
-      <Thread title={`${agent.name} is made`} sub={`Running on ${harnessLabel(agent.harness)}${device ? `, on ${device}` : ""}.`}>
-        {inVm && signedIn !== true && (
-          <Msg>
-            Sign in to {harnessLabel(agent.harness)} on {agent.name}'s computer.
-          </Msg>
-        )}
+      <Thread title={waiting ? `${agent.name} needs a sign-in` : `${agent.name} is made`} sub={`Running on ${label}${device ? `, on ${device}` : ""}.`}>
+        {waiting && <Msg>{signedIn === null && !inVm ? `Wisp can't tell if ${label} is signed in. If it isn't, ${agent.name} can't answer yet.` : `${agent.name} can't answer until you sign in to ${label}${inVm ? ` on ${agent.name}'s computer` : ""}.`}</Msg>}
+        {waiting && screen && <Msg>Finish signing in on the computer's screen, then come back here. This page updates by itself.</Msg>}
         <Problem>{error}</Problem>
       </Thread>
       <Actions>
-        {inVm && signedIn !== true && (
+        {waiting && screen && (
+          <a href={screen} target="_blank" rel="noreferrer" className="h-[42px] w-full inline-flex items-center justify-center gap-2.5 rounded-lg bg-control border border-control-line text-body font-medium hover:bg-hover">
+            <Monitor size={17} /> Open the computer's screen
+          </a>
+        )}
+        {waiting && !screen && inVm && (
           <SetupButton
             variant="secondary"
             disabled={busy}
@@ -668,10 +689,13 @@ function AgentCreated({ agent, device, onNext }: { agent: Agent; device?: string
               const tab = window.open("about:blank", "_blank");
               try {
                 const r = await api<{ computerId: string }>("POST", `/api/agents/${agent.id}/signin`);
+                const to = href({ view: "computers", computerId: r.computerId });
+                // setup stays open here; no window (a blocker, say) still leaves a link to open
+                setScreen(to);
                 if (tab) {
                   tab.opener = null;
-                  tab.location.href = href({ view: "computers", computerId: r.computerId });
-                } else go({ view: "computers", computerId: r.computerId });
+                  tab.location.href = to;
+                }
               } catch (e) {
                 tab?.close();
                 setError(unavailable(e, "Sign-in"));
@@ -683,7 +707,12 @@ function AgentCreated({ agent, device, onNext }: { agent: Agent; device?: string
             {busy ? <Loader2 size={16} className="animate-spin" /> : <Monitor size={17} />}Sign in
           </SetupButton>
         )}
-        <SetupButton onClick={onNext}>{inVm && signedIn !== true ? "Sign in later" : "Continue"}</SetupButton>
+        {waiting && !inVm && onSignIn && (
+          <SetupButton variant="secondary" onClick={onSignIn}>
+            Sign in
+          </SetupButton>
+        )}
+        <SetupButton onClick={onNext}>{waiting ? "Sign in later" : "Continue"}</SetupButton>
       </Actions>
     </>
   );

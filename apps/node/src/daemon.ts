@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
-import { HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
+import { HARNESS_SPECS, HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
 import { WispClient, WispError } from "@wisp/sdk";
 import { runUpdate, version } from "@wisp/update";
 import { ComputerHost, type Tunnel } from "./computers/index.ts";
@@ -23,6 +23,8 @@ import { discoverAgents, readDiscovered } from "./discover.ts";
 import { agentFolder } from "./agent-dir.ts";
 import { bringBack, mergeBranch, prepareCheckout, prepareClone } from "./git.ts";
 
+/** How often a device looks again at whether its harnesses are signed in (someone may do it in a terminal). */
+const SIGN_IN_CHECK_MS = 20_000;
 const MCP_BIN = fileURLToPath(new URL("../../../bin/wisp-mcp.mjs", import.meta.url));
 
 export interface NodeConfig {
@@ -105,6 +107,10 @@ export class NodeDaemon {
   private codeTunnels = new Set<string>();
   /** each harness's logins here, and which agent uses which */
   private accounts: HarnessAccounts;
+  /** whether each harness is signed in, where it runs ("<computer id or nothing>\\n<harness>") */
+  private signIns = new Map<string, { accounts: Record<string, boolean | null>; agentAccounts?: Record<string, string> }>();
+  private vmSpecs = new Map<string, ComputerSpec>();
+  private signInTimer: ReturnType<typeof setInterval> | null = null;
   /** sign-ins running for those accounts */
   private logins = new HarnessLogins();
   /** sign-ins to model providers this device runs for the hub (Settings → Models) */
@@ -264,6 +270,7 @@ export class NodeDaemon {
    */
   async stop(wait = 5000) {
     this.stopped = true;
+    if (this.signInTimer) clearInterval(this.signInTimer);
     fs.unwatchFile(this.configFile, this.onLocalChange);
     for (const a of this.aborts.values()) a.abort();
     this.computers.stopAll();
@@ -376,6 +383,8 @@ export class NodeDaemon {
       this.send({ type: "discovered", agents: discoverAgents(this.cfg.discoverHome) });
       await this.sendCatalog();
       void this.sendShelf();
+      this.signInTimer ??= setInterval(() => void this.refreshSignIns().catch(() => {}), SIGN_IN_CHECK_MS);
+      this.signInTimer.unref?.();
     } else if (msg.type === "computer") {
       if (this.local.paused) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name} is paused; someone at the device has to run \`wisp node resume\`` });
       if (msg.computer.kind === "device" && !this.local.shareScreen) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is off; only someone at the device can turn it on (\`wisp node screen on\`)` });
@@ -787,7 +796,7 @@ export class NodeDaemon {
       if (account !== "default" && !this.accounts.list(harness).some((a) => a.id === account)) throw new Error(`${harnessLabel(harness)} has no account "${account}" on ${this.cfg.name}`);
       return { ...base, dirs: { [harness]: this.accounts.dir(harness, account) } };
     };
-    const withAccounts = (s: HarnessSettings, account = "default"): HarnessSettings => ({ ...s, account, accounts: this.accounts.list(s.harness), multiAccount: HarnessAccounts.supports(s.harness), agentAccounts: this.accounts.agentAccounts() });
+    const withAccounts = async (s: HarnessSettings, account = "default"): Promise<HarnessSettings> => ({ ...s, account, accounts: await this.accounts.listChecked(s.harness, this.registry[s.harness]?.binary), multiAccount: HarnessAccounts.supports(s.harness), agentAccounts: this.accounts.agentAccounts() });
     if (msg.type === "harness_settings") {
       if (this.catalogIncomplete) {
         this.catalog = null;
@@ -812,7 +821,7 @@ export class NodeDaemon {
     if (msg.type === "harness_account") return this.harnessAccount(msg.harness, msg.action);
     if (this.local.paused) throw new Error(`${this.cfg.name} is paused`);
     this.log(`changing ${harnessLabel(msg.harness)}'s settings${msg.account && msg.account !== "default" ? ` (account ${msg.account})` : ""}`);
-    const settings = withAccounts(await changeHarnessSettings(msg.harness, msg.changes, homes(msg.harness, msg.account)), msg.account);
+    const settings = await withAccounts(await changeHarnessSettings(msg.harness, msg.changes, homes(msg.harness, msg.account)), msg.account);
     // a new default model shows up in the agent's model picker
     if (msg.changes.some((c) => c.op !== "toggle")) {
       this.catalog = null;
@@ -824,7 +833,14 @@ export class NodeDaemon {
   /** Accounts of a harness here, and signing them in (the harness's own sign-in, with the account's folder). */
   private async harnessAccount(harness: string, action: HarnessAccountOp): Promise<unknown> {
     const a = this.accounts;
-    if (action.op === "login_status") return this.logins.status(action.loginId);
+    if (action.op === "login_status") {
+      const status = this.logins.status(action.loginId);
+      if (status.status === "done") {
+        a.forgetChecks();
+        void this.refreshSignIns();
+      }
+      return status;
+    }
     if (action.op === "login_input") return this.logins.input(action.loginId, action.text);
     if (action.op === "login_cancel") return this.logins.cancel(action.loginId), { ok: true };
     if (this.local.paused) throw new Error(`${this.cfg.name} is paused`);
@@ -894,6 +910,8 @@ export class NodeDaemon {
       );
       const found = list.filter((c): c is HarnessCatalog => !!c && c.version !== null);
       this.vmLists.set(spec.id, found);
+      this.vmSpecs.set(spec.id, spec);
+      await this.readVmSignIns(spec.id, vm, found);
       this.send({ type: "catalog", computerId: spec.id, catalog: this.withRunCommands(found, spec.id) });
     })().catch(() => void this.vmCatalogs.delete(spec.id));
     this.vmCatalogs.set(spec.id, job);
@@ -904,19 +922,57 @@ export class NodeDaemon {
   forgetVm(computerId: string) {
     this.vmCatalogs.delete(computerId);
     this.vmLists.delete(computerId);
+    this.vmSpecs.delete(computerId);
+    for (const key of [...this.signIns.keys()]) if (key.startsWith(`${computerId}\n`)) this.signIns.delete(key);
     for (const key of [...this.runCommands.keys()]) if (key.startsWith(`${computerId}\n`)) this.runCommands.delete(key);
   }
 
   /** This device's harnesses, with what runs here learned about their "/" lists. */
   private async sendCatalog() {
-    this.send({ type: "catalog", catalog: this.withRunCommands(await this.harnessCatalog(), null) });
+    const list = await this.harnessCatalog();
+    await this.readSignIns(list);
+    this.send({ type: "catalog", catalog: this.withRunCommands(list, null) });
+  }
+
+  /** Whether each harness here is signed in, for the hub to show before anyone's first message fails. True when that changed. */
+  private async readSignIns(list: HarnessCatalog[]): Promise<boolean> {
+    const before = JSON.stringify(list.map((c) => this.signIns.get(`\n${c.harness}`)));
+    await Promise.all(
+      list.map(async (c) => {
+        if (!HARNESS_SPECS[c.harness]) return;
+        const accounts = await this.accounts.listChecked(c.harness, this.registry[c.harness]?.binary);
+        const agentAccounts = Object.fromEntries(Object.entries(this.accounts.agentAccounts()).filter(([, id]) => accounts.some((a) => a.id === id)));
+        this.signIns.set(`\n${c.harness}`, { accounts: Object.fromEntries(accounts.map((a) => [a.id, a.signedIn])), agentAccounts });
+      }),
+    );
+    return JSON.stringify(list.map((c) => this.signIns.get(`\n${c.harness}`))) !== before;
+  }
+
+  /** Look again (someone signed in or out, here or inside a VM), and tell the hub what changed. */
+  private async refreshSignIns() {
+    if (this.stopped) return;
+    const list = await this.harnessCatalog();
+    if (await this.readSignIns(list)) this.send({ type: "catalog", catalog: this.withRunCommands(list, null) });
+    for (const [id, found] of this.vmLists) {
+      const spec = this.vmSpecs.get(id);
+      const vm = spec && (await this.computers.vm(spec).catch(() => null));
+      if (!vm || !(await vm.isRunning().catch(() => false))) continue;
+      if (await this.readVmSignIns(id, vm, found)) this.send({ type: "catalog", computerId: id, catalog: this.withRunCommands(found, id) });
+    }
+  }
+
+  private async readVmSignIns(id: string, vm: DockerVm, list: HarnessCatalog[]): Promise<boolean> {
+    const before = JSON.stringify(list.map((c) => this.signIns.get(`${id}\n${c.harness}`)));
+    await Promise.all(list.map(async (c) => this.signIns.set(`${id}\n${c.harness}`, { accounts: { default: await vm.signedIn(c.harness).catch(() => null) } })));
+    return JSON.stringify(list.map((c) => this.signIns.get(`${id}\n${c.harness}`))) !== before;
   }
 
   /** The catalogs with each harness's "/" list replaced by the one its sessions reported there, if any. */
   private withRunCommands(list: HarnessCatalog[], computerId: string | null): HarnessCatalog[] {
     return list.map((c) => {
       const commands = this.runCommands.get(`${computerId ?? ""}\n${c.harness}`);
-      return commands ? { ...c, commands } : c;
+      const signIns = this.signIns.get(`${computerId ?? ""}\n${c.harness}`);
+      return { ...c, ...signIns, ...(commands ? { commands } : {}) };
     });
   }
 

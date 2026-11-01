@@ -150,7 +150,9 @@ export const claudeCode: HarnessAdapter = {
  */
 export function claudeUsage(lastAssistant: any, result: any): Extract<AgentEvent, { type: "usage" }> | null {
   const u = lastAssistant?.message?.usage;
-  const model: string | undefined = lastAssistant?.message?.model;
+  // an error Claude Code writes itself (not signed in, say) names "<synthetic>" as its model
+  const named: string | undefined = lastAssistant?.message?.model;
+  const model = named?.startsWith("<") ? undefined : named;
   const perModel = result?.modelUsage ?? {};
   const entry = (model && perModel[model]) ?? Object.values(perModel)[0];
   const total = result?.usage;

@@ -297,7 +297,7 @@ export function routineProblem(name: string, result: string): string | null {
 }
 
 /** What the agent's schedules are waiting for: its device's name (or "a device"), or null when the device is connected or unknown. */
-export function routinesWaitingFor(agent: Pick<Agent, "nodeId" | "harness" | "settings" | "computerId">, devices: DeviceInfo[] | null): string | null {
+export function routinesWaitingFor(agent: Pick<Agent, "id" | "nodeId" | "harness" | "settings" | "computerId">, devices: DeviceInfo[] | null): string | null {
   if (agentReadiness(agent, devices).ready) return null;
   if (!agent.nodeId) return "a device";
   const device = devices?.find((d) => d.id === agent.nodeId);

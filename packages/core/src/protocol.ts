@@ -58,6 +58,10 @@ export const HarnessCatalogSchema = z.object({
     )
     .max(200),
   efforts: z.array(z.string()),
+  /** whether each of its accounts is signed in where it runs (account id → true, false, or null when it can't tell) */
+  accounts: z.record(z.string().max(64), z.boolean().nullable()).optional(),
+  /** agents that use an account other than the default one (agent id → account id) */
+  agentAccounts: z.record(z.string().max(64), z.string().max(64)).optional(),
   defaultModel: z.string().max(MAX_MODEL_ID_LENGTH).optional(),
   defaultEffort: z.string().optional(),
   commands: z
