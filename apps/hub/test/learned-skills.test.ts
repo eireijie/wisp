@@ -164,14 +164,14 @@ describe("all agents", () => {
       sam = new WispClient({ url: owner.url, token: (await res.json()).token });
       const { node } = await sam.request("POST", "/api/nodes", { name: "sams-box" });
       samsAgent = (await sam.request("POST", "/api/agents", { handle: "samsbot", name: "Samsbot", harness: "custom", nodeId: node.id })).id;
+      // remote connectors get asked whether they want a sign-in; nothing here should leave the machine
+      hub.connectors.auth.fetchFn = (async () => new Response(null, { status: 200 })) as typeof fetch;
     });
 
     it("lets only the connector's creator or the owner switch All agents", async () => {
-      const mine = await owner.request("POST", "/api/connectors", { kind: "mcp-stdio", name: "Files", command: "echo" });
+      const mine = await owner.request("POST", "/api/connectors", { kind: "mcp-http", name: "Files", url: "https://93.184.216.34/mcp" });
       await expect(sam.request("PATCH", `/api/connectors/${mine.id}`, { allAgents: true })).rejects.toMatchObject({ status: 403 });
-      // other changes are still open to members, and sending what's already set is fine
-      expect((await sam.request("PATCH", `/api/connectors/${mine.id}`, { name: "Files 2", allAgents: false })).name).toBe("Files 2");
-      const theirs = await sam.request("POST", "/api/connectors", { kind: "mcp-stdio", name: "Sams files", command: "echo", allAgents: true });
+      const theirs = await sam.request("POST", "/api/connectors", { kind: "mcp-http", name: "Sams files", url: "https://93.184.216.34/mcp", allAgents: true });
       expect(theirs.allAgents).toBe(true);
       expect((await sam.request("PATCH", `/api/connectors/${theirs.id}`, { allAgents: false })).allAgents).toBe(false);
       // the workspace owner can, on anyone's
@@ -181,15 +181,17 @@ describe("all agents", () => {
 
     it("sends a connector's secrets to every agent only on its creator's devices", async () => {
       const secret = await owner.request("POST", "/api/connectors", { kind: "secret", name: "Weather", env: { WEATHER_KEY: "abc123" }, allAgents: true });
-      const plain = await owner.request("POST", "/api/connectors", { kind: "mcp-stdio", name: "Clock", command: "echo", allAgents: true });
+      const plain = await owner.request("POST", "/api/connectors", { kind: "mcp-http", name: "Clock", url: "https://93.184.216.34/mcp", allAgents: true });
       const names = (id: string) => hub.connectors.specsFor(id).map((x) => x.name);
       expect(names(agentId)).toEqual(["weather", "clock"]);
       // Sam's device, and an agent on no device, get only the one without secrets
       expect(names(samsAgent)).toEqual(["clock"]);
       expect(names(otherId)).toEqual(["clock"]);
-      // given to an agent by name, it goes as before
-      await owner.request("PUT", `/api/connectors/${secret.id}/agents/${samsAgent}`);
-      expect(names(samsAgent)).toEqual(["weather", "clock"]);
+      // given to an agent by name, it goes as before, except onto someone else's own device
+      await expect(owner.request("PUT", `/api/connectors/${secret.id}/agents/${samsAgent}`)).rejects.toMatchObject({ status: 403 });
+      await owner.request("PUT", `/api/connectors/${secret.id}/agents/${otherId}`);
+      expect(names(otherId)).toEqual(["weather", "clock"]);
+      await owner.request("DELETE", `/api/connectors/${secret.id}/agents/${otherId}`);
       // a sign-in counts as a secret too
       hub.store.db.prepare("INSERT INTO connector_auth (connector_id, tokens_json, updated_at) VALUES (?, '{}', 'now')").run(plain.id);
       expect(names(otherId)).toEqual([]);

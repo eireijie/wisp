@@ -339,6 +339,9 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["skills", "last_used_at", "TEXT"],
 ];
 
+/** How long a connection token for an agent lasts (POST /api/agents/:id/token). */
+export const AGENT_TOKEN_TTL_MS = 90 * 86_400_000;
+
 export function openDb(file: string): Database.Database {
   const db = new Database(file);
   db.exec(SCHEMA);
@@ -358,7 +361,13 @@ export function openDb(file: string): Database.Database {
   migrateSkillSources(db);
   migrateLoans(db);
   dropOrphanChannelMembers(db);
+  expireOldAgentTokens(db);
   return db;
+}
+
+/** Connection tokens for agents used to last forever; ones from then get the same limit as new ones. */
+function expireOldAgentTokens(db: Database.Database) {
+  db.prepare("UPDATE tokens SET expires_at = ? WHERE kind = 'agent' AND label = 'mcp' AND expires_at IS NULL").run(new Date(Date.now() + AGENT_TOKEN_TTL_MS).toISOString());
 }
 
 /** Deleted agents and removed people used to stay in channel_members, inflating member counts. */

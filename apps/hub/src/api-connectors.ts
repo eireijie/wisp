@@ -1,9 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { SETTINGS_HARNESSES, WISP_COMMANDS, agentSkillPath, catalogSkill, harnessLabel, skillBody, skillFile, skillSlug, skillTitle, type HarnessSkillFile, type Skill } from "@wisp/core";
+import { type Connector, SETTINGS_HARNESSES, WISP_COMMANDS, agentSkillPath, catalogSkill, fillTemplate, harnessLabel, skillBody, skillFile, skillSlug, skillTitle, type HarnessSkillFile, type Skill } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import type { Hub } from "./hub.ts";
-import { CALLBACK_PATH } from "./connector-auth.ts";
+import { CALLBACK_PATH, isPublicUrl } from "./connector-auth.ts";
 import { registerShopApi } from "./api-shop.ts";
 import { ComputerError } from "./computers.ts";
 import { holdsSecret } from "./connectors.ts";
@@ -13,6 +13,7 @@ interface Helpers {
   need(req: FastifyRequest, reply: FastifyReply, opts?: { owner?: boolean; user?: boolean; member?: boolean }): Caller | null;
   parse<S extends z.ZodTypeAny>(schema: S, data: unknown, reply: FastifyReply): z.output<S> | null;
   commitAuthor(c: Caller): { name: string; email: string };
+  deviceOwnerOf(agent: NonNullable<ReturnType<Hub["store"]["agent"]>>): string | null;
 }
 
 const ENV = z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,63}$/, "names are letters, digits and _"), z.string().max(8000)).refine((o) => Object.keys(o).length <= 50, "at most 50 values");
@@ -47,7 +48,7 @@ const LEARNED = z.object({ name: NAME, description: z.string().trim().max(200).d
  */
 export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers) {
   const { store, connectors, skills } = hub;
-  const { need, parse, commitAuthor } = h;
+  const { need, parse, commitAuthor, deviceOwnerOf } = h;
   registerShopApi(app, hub, h);
 
   /** Agents in the caller's workspace, or a 400 naming the ones that aren't. */
@@ -77,6 +78,42 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     return out;
   }
   const withWarnings = (connectorId: string) => ({ ...connectors.get(connectorId)!, warnings: warnings(connectorId) });
+  /** Guests see that a connector exists, not how it's set up (arguments and addresses can hold secrets). */
+  const guestView = <T extends Connector>(conn: T): T => ({ ...conn, command: null, args: [], url: null, headers: {}, env: {}, ...("warnings" in conn ? { warnings: [] } : {}) });
+  const isOwner = (c: Caller) => c.viewer.role === "owner";
+
+  /** An agent on someone's own device takes connectors only from them: what it's given runs there. Sends a 403 otherwise. */
+  function deviceAllows(c: Caller, agentIds: string[], reply: FastifyReply): boolean {
+    for (const agentId of agentIds) {
+      const agent = store.agent(agentId);
+      const owner = agent && deviceOwnerOf(agent);
+      if (owner && owner !== c.actor.id) {
+        reply.code(403).send({ error: `@${agent!.handle} runs directly on ${store.user(owner)?.name ?? "someone"}'s device, so only they can change its connectors` });
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Changing a connector changes what runs for everyone who has it, so it's for an owner or the
+   * person who added it, and for them only while it isn't on an agent on someone else's device.
+   */
+  function canChange(c: Caller, conn: Connector, reply: FastifyReply): boolean {
+    if (isOwner(c)) return true;
+    if (conn.createdBy !== c.actor.id) {
+      reply.code(403).send({ error: "Only the person who added this connector, or an owner, can change it" });
+      return false;
+    }
+    return deviceAllows(c, conn.agentIds, reply);
+  }
+
+  /** Whether the hub may call this address for the caller: only owners can point it at their own network. */
+  async function addressAllowed(c: Caller, url: string, env: Record<string, string>, reply: FastifyReply): Promise<boolean> {
+    if (isOwner(c) || (await isPublicUrl(fillTemplate(url, env)))) return true;
+    reply.code(400).send({ error: "Connectors can only reach public addresses. Ask an owner to add one on a private network." });
+    return false;
+  }
   const changed = (c: Caller) => hub.broadcast(c.workspaceId, { type: "skills_changed" });
 
   // --- connectors -------------------------------------------------------------------------------
@@ -84,7 +121,8 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
   app.get("/api/connectors", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    return connectors.list(c.workspaceId).map((conn) => withWarnings(conn.id));
+    const list = connectors.list(c.workspaceId).map((conn) => withWarnings(conn.id));
+    return c.viewer.role === "guest" ? list.map(guestView) : list;
   });
 
   app.post("/api/connectors", async (req, reply) => {
@@ -92,9 +130,11 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!c) return;
     const body = parse(CONNECTOR, req.body, reply);
     if (!body) return;
+    if (body.kind === "mcp-stdio" && !isOwner(c)) return reply.code(403).send({ error: "Only an owner can add a connector that runs a command" });
+    if (body.kind === "mcp-http" && !(await addressAllowed(c, body.url, body.env, reply))) return;
     if (connectors.byName(c.workspaceId, body.name)) return reply.code(409).send({ error: `there's already a connector named "${body.name}"` });
     const agentIds = agentsIn(c, body.agentIds ?? [], reply);
-    if (!agentIds) return;
+    if (!agentIds || !deviceAllows(c, agentIds, reply)) return;
     const conn = connectors.create(c.workspaceId, c.actor.id, body);
     if (agentIds.length) connectors.setAgents(conn.id, agentIds);
     changed(c);
@@ -120,11 +160,12 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     const c = need(req, reply, { member: true });
     if (!c) return;
     const conn = ownConnector(c, req, reply);
-    if (!conn) return;
+    if (!conn || !canChange(c, conn, reply)) return;
     const body = parse(z.object({ origin: URL_ }), req.body, reply);
     if (!body) return;
     const url = connectors.serverUrl(conn.id);
     if (!url) return reply.code(400).send({ error: "only remote MCP servers can be signed in to" });
+    if (!(await addressAllowed(c, url, {}, reply))) return;
     try {
       const to = await connectors.auth.start(conn.id, url, new URL(body.origin).origin, c.actor.id);
       return to ? { url: to } : { signedIn: true };
@@ -151,7 +192,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     const c = need(req, reply, { member: true });
     if (!c) return;
     const conn = ownConnector(c, req, reply);
-    if (!conn) return;
+    if (!conn || !canChange(c, conn, reply)) return;
     connectors.auth.signOut(conn.id);
     return connectors.get(conn.id);
   });
@@ -168,7 +209,9 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
   app.get("/api/connectors/:id", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    return ownConnector(c, req, reply) ?? undefined;
+    const conn = ownConnector(c, req, reply);
+    if (!conn) return;
+    return c.viewer.role === "guest" ? guestView(conn) : conn;
   });
 
   app.patch("/api/connectors/:id", async (req, reply) => {
@@ -176,8 +219,11 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!c) return;
     const conn = ownConnector(c, req, reply);
     if (!conn) return;
+    if (conn.kind === "mcp-stdio" && !isOwner(c)) return reply.code(403).send({ error: "Only an owner can change a connector that runs a command" });
+    if (!canChange(c, conn, reply)) return;
     const body = parse(CONNECTOR_PATCH, req.body, reply);
     if (!body) return;
+    if (conn.kind === "mcp-http" && (body.url || body.env) && !(await addressAllowed(c, body.url ?? conn.url ?? "", body.env ?? {}, reply))) return;
     if (body.allAgents !== undefined && body.allAgents !== conn.allAgents && conn.createdBy !== c.actor.id && store.role(c.workspaceId, c.actor.id) !== "owner")
       return reply.code(403).send({ error: "Only the person who added this connector, or the workspace owner, can turn All agents on or off" });
     if (body.name) {
@@ -187,10 +233,15 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (body.agentIds) {
       const ids = agentsIn(c, body.agentIds, reply);
       if (!ids) return;
+      if (!deviceAllows(c, [...ids.filter((a) => !conn.agentIds.includes(a)), ...conn.agentIds.filter((a) => !ids.includes(a))], reply)) return;
       connectors.setAgents(conn.id, ids);
     }
+    const addressBefore = connectors.serverUrl(conn.id);
     connectors.update(conn.id, body);
     changed(c);
+    // a new address may want its own sign-in
+    const address = connectors.serverUrl(conn.id);
+    if (address && address !== addressBefore) await connectors.auth.probe(conn.id, address, connectors.serverHeaders(conn.id));
     return withWarnings(conn.id);
   });
 
@@ -199,6 +250,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!c) return;
     const conn = ownConnector(c, req, reply);
     if (!conn) return;
+    if (!isOwner(c) && conn.createdBy !== c.actor.id) return reply.code(403).send({ error: "Only the person who added this connector, or an owner, can remove it" });
     connectors.remove(conn.id);
     changed(c);
     return { ok: true };
@@ -215,6 +267,13 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
         if (!conn) return;
         const ids = agentsIn(c, [(req.params as { agentId: string }).agentId], reply);
         if (!ids) return;
+        // whoever added a connector can always take it back off
+        if ((method === "PUT" || conn.createdBy !== c.actor.id) && !deviceAllows(c, ids, reply)) return;
+        if (method === "PUT" && !isOwner(c) && conn.createdBy !== c.actor.id) {
+          if (conn.kind === "mcp-stdio") return reply.code(403).send({ error: "Only an owner can give an agent a connector that runs a command" });
+          // its values go to the agent's device in the clear, and that could be the caller's own
+          if (connectors.holdsSecrets(conn.id)) return reply.code(403).send({ error: `${conn.name} holds someone's keys, so only they or an owner can give it to agents` });
+        }
         connectors.attach(conn.id, ids[0], method === "PUT");
         changed(c);
         return withWarnings(conn.id);
@@ -341,7 +400,8 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     );
     if (!body) return;
     const agentIds = agentsIn(c, body.agentIds, reply);
-    if (!agentIds) return;
+    if (!agentIds || !deviceAllows(c, agentIds, reply)) return;
+    if (body.allAgents && !isOwner(c)) return reply.code(403).send({ error: "Only an owner can give a skill to every agent" });
     let skill: Skill;
     if ("storeId" in body) {
       let found;
@@ -410,6 +470,9 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!s) return;
     const body = parse(SKILL_BODY.partial().extend({ agentIds: AGENT_IDS.optional(), allAgents: z.boolean().optional() }).strict(), req.body, reply);
     if (!body) return;
+    if (body.allAgents !== undefined && body.allAgents !== s.allAgents && !isOwner(c)) return reply.code(403).send({ error: "Only an owner can give a skill to every agent" });
+    // its text goes into the prompt of every agent that has it
+    if (!deviceAllows(c, [...holders(s), ...(body.agentIds ?? [])], reply)) return;
     const { agentIds, ...patch } = body;
     const ids = agentIds && agentsIn(c, agentIds, reply);
     if (agentIds && !ids) return;
@@ -433,7 +496,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     const c = need(req, reply, { member: true });
     if (!c) return;
     const s = ownSkill(c, req, reply);
-    if (!s) return;
+    if (!s || !deviceAllows(c, holders(s), reply)) return;
     await syncFiles(c, s, holders(s), false);
     skills.remove(s.id);
     changed(c);
@@ -450,7 +513,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
         const s = ownSkill(c, req, reply);
         if (!s) return;
         const ids = agentsIn(c, [(req.params as { agentId: string }).agentId], reply);
-        if (!ids) return;
+        if (!ids || !deviceAllows(c, ids, reply)) return;
         skills.attach(s.id, ids[0], method === "PUT");
         // with "All agents" on, the agent keeps it (and its file) either way
         await syncFiles(c, s, ids, method === "PUT" || s.allAgents);

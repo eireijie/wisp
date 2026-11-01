@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { lookup } from "node:dns/promises";
+import { BlockList, isIP } from "node:net";
 import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { now } from "./auth.ts";
@@ -33,6 +35,42 @@ export interface ConnectorAuthStatus {
 }
 
 export const CALLBACK_PATH = "/api/connectors/oauth/callback";
+
+const notPublic = new BlockList();
+for (const [ip, bits] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 4], ["240.0.0.0", 4]] as const) notPublic.addSubnet(ip, bits, "ipv4");
+for (const [ip, bits] of [["::", 128], ["::1", 128], ["fc00::", 7], ["fe80::", 10], ["fec0::", 10], ["ff00::", 8], ["64:ff9b::", 96], ["2002::", 16], ["2001::", 32]] as const) notPublic.addSubnet(ip, bits, "ipv6");
+
+/** Whether every address a URL's host names is on the public internet, not this machine or its networks. */
+export async function isPublicUrl(url: string | URL): Promise<boolean> {
+  try {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol)) return false;
+    const host = u.hostname.replace(/^\[|\]$/g, "");
+    const addresses = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address);
+    return addresses.length > 0 && addresses.every((a) => {
+      // BlockList applies IPv4 rules to mapped addresses (::ffff:127.0.0.1) too
+      return !notPublic.check(a, isIP(a) === 6 ? "ipv6" : "ipv4");
+    });
+  } catch {
+    return false;
+  }
+}
+
+/** Fetch that only calls public addresses, checking each redirect itself so one can't lead back inside. */
+function publicOnly(fetchFn: typeof fetch): typeof fetch {
+  return (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    let url = input instanceof Request ? input.url : String(input);
+    for (let hop = 0; hop < 5; hop++) {
+      if (!(await isPublicUrl(url))) throw new Error("connectors can only reach public addresses");
+      const res = await fetchFn(hop === 0 ? input : url, { ...init, redirect: "manual" });
+      const to = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+      if (!to) return res;
+      await res.body?.cancel().catch(() => {});
+      url = new URL(to, url).href;
+    }
+    throw new Error("too many redirects");
+  }) as typeof fetch;
+}
 
 /** One sign-in flow for one connector, kept in the database between the redirect and the callback. */
 class Provider implements OAuthClientProvider {
@@ -119,6 +157,12 @@ export class ConnectorAuth {
     return this.db.prepare("SELECT * FROM connector_auth WHERE connector_id = ?").get(connectorId) as Row | undefined;
   }
 
+  /** How the hub calls this connector's server. Only one an owner added may reach private addresses. */
+  private fetchFor(connectorId: string): typeof fetch {
+    const added = this.db.prepare("SELECT m.role FROM connectors c JOIN memberships m ON m.workspace_id = c.workspace_id AND m.user_id = c.created_by WHERE c.id = ?").get(connectorId) as { role: string } | undefined;
+    return added?.role === "owner" ? this.fetchFn : publicOnly(this.fetchFn);
+  }
+
   status(connectorId: string): ConnectorAuthStatus | null {
     const r = this.row(connectorId);
     if (!r || !r.required) return null;
@@ -132,7 +176,7 @@ export class ConnectorAuth {
   async probe(connectorId: string, url: string, headers: Record<string, string> = {}): Promise<boolean> {
     let required = false;
     try {
-      const res = await this.fetchFn(url, {
+      const res = await this.fetchFor(connectorId)(url, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "wisp", version: "0.1" } } }),
@@ -154,7 +198,7 @@ export class ConnectorAuth {
     const state = crypto.randomBytes(24).toString("base64url");
     this.db.prepare("INSERT INTO connector_auth (connector_id, required, updated_at) VALUES (?, 1, ?) ON CONFLICT(connector_id) DO UPDATE SET required = 1").run(connectorId, now());
     this.db.prepare("UPDATE connector_auth SET state = ?, signed_in_by = ?, error = NULL, tokens_json = NULL, expires_at = NULL WHERE connector_id = ?").run(state, userId, connectorId);
-    const result = await auth(provider, { serverUrl, fetchFn: this.fetchFn });
+    const result = await auth(provider, { serverUrl, fetchFn: this.fetchFor(connectorId) });
     return result === "REDIRECT" ? provider.authorizationUrl!.href : null;
   }
 
@@ -166,7 +210,7 @@ export class ConnectorAuth {
     if (!serverUrl) throw new Error("That connector was removed.");
     const provider = new Provider(this.db, r.connector_id, r.redirect_url);
     try {
-      await auth(provider, { serverUrl, authorizationCode: code, fetchFn: this.fetchFn });
+      await auth(provider, { serverUrl, authorizationCode: code, fetchFn: this.fetchFor(r.connector_id) });
     } catch (e) {
       this.db.prepare("UPDATE connector_auth SET error = ? WHERE connector_id = ?").run((e as Error).message.slice(0, 500), r.connector_id);
       throw e;
@@ -185,7 +229,7 @@ export class ConnectorAuth {
     if (!tokens.refresh_token) return;
     const provider = new Provider(this.db, connectorId, r.redirect_url);
     try {
-      const result = await auth(provider, { serverUrl, fetchFn: this.fetchFn });
+      const result = await auth(provider, { serverUrl, fetchFn: this.fetchFor(connectorId) });
       if (result === "REDIRECT") throw new Error("the sign-in expired; sign in again");
     } catch (e) {
       this.db.prepare("UPDATE connector_auth SET error = ?, tokens_json = NULL, expires_at = NULL WHERE connector_id = ?").run(`Signed out: ${(e as Error).message}`.slice(0, 500), connectorId);
@@ -196,6 +240,11 @@ export class ConnectorAuth {
   accessToken(connectorId: string): string | null {
     const r = this.row(connectorId);
     return r?.tokens_json ? ((JSON.parse(r.tokens_json) as OAuthTokens).access_token ?? null) : null;
+  }
+
+  /** Drop everything about signing in: tokens, the client registered, and any sign-in under way. */
+  forget(connectorId: string) {
+    this.db.prepare("DELETE FROM connector_auth WHERE connector_id = ?").run(connectorId);
   }
 
   signOut(connectorId: string) {

@@ -925,7 +925,8 @@ export class Hub {
     for (const agentId of targets) {
       const agent = this.store.agent(agentId)!;
       // an agent that only answers certain people stays quiet for everyone else
-      if (!this.answers(agent, msg.author.kind === "user" ? msg.author.id : requestedBy)) continue;
+      // (a routine or team step posts as the system, on someone's behalf: it's them who's asking)
+      if (!this.answers(agent, msg.author.kind === "user" && msg.author.id !== "system" ? msg.author.id : requestedBy)) continue;
       const notAllowed = this.whyNotAllowed(agent, requestedBy);
       if (notAllowed) {
         this.postSystem(msg, `Not waking ${this.handleOf(agentId)}: ${notAllowed}.`);

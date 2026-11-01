@@ -21,7 +21,8 @@ import { SetupCode } from "./setup-code.ts";
 export interface HubOptions {
   dataDir: string;
   webDir?: string;
-  logger?: boolean;
+  /** true logs to stdout; tests pass a stream to read what gets logged */
+  logger?: boolean | { stream: { write(line: string): void } };
   /** what making the first account needs: by default a code saved in <data>/setup-code; false for none (tests) */
   setupCode?: string | false;
 }
@@ -38,9 +39,35 @@ export function adoptWarrenDb(dataDir: string) {
   return true;
 }
 
+/**
+ * The data folder holds secrets in the clear (connector values, sign-ins), so only this account
+ * reads it. Also tightens folders made before this; one on a filesystem without modes stays as it is.
+ */
+export function lockDataDir(dataDir: string) {
+  const chmod = (p: string, mode: number) => {
+    try {
+      fs.chmodSync(p, mode);
+    } catch (e) {
+      console.warn(`[wisp] couldn't limit access to ${p}: ${(e as Error).message}`);
+    }
+  };
+  chmod(dataDir, 0o700);
+  // SQLite gives -wal and -shm the database's own mode, so a new one needs it from the start
+  fs.closeSync(fs.openSync(path.join(dataDir, "wisp.db"), "a", 0o600));
+  for (const f of ["wisp.db", "wisp.db-wal", "wisp.db-shm"]) if (fs.existsSync(path.join(dataDir, f))) chmod(path.join(dataDir, f), 0o600);
+}
+
+/** Query values that are secrets, and paths that carry one, kept out of the log. */
+export function redactUrl(url: string): string {
+  return url
+    .replace(/^\/join\/[^/?#]+/, "/join/[invite]")
+    .replace(/([?&](?:code|invite|token|state|secret)=)[^&#]*/gi, "$1[hidden]");
+}
+
 export async function buildHub(opts: HubOptions) {
-  fs.mkdirSync(opts.dataDir, { recursive: true });
+  fs.mkdirSync(opts.dataDir, { recursive: true, mode: 0o700 });
   adoptWarrenDb(opts.dataDir);
+  lockDataDir(opts.dataDir);
   const db = openDb(path.join(opts.dataDir, "wisp.db"));
   // memory lives in <data>/vault unless the owner pointed it at another folder (maybe an Obsidian vault)
   const location = resolveVaultLocation(opts.dataDir);
@@ -72,9 +99,7 @@ export async function buildHub(opts: HubOptions) {
     },
   });
 
-  // invite links carry their secret in the path; keep it out of the log
-  const redact = (url: string) => url.replace(/^\/join\/[^/?#]+/, "/join/[invite]");
-  const logger = opts.logger ? { serializers: { req: (req: { method: string; url: string; hostname?: string; ip?: string }) => ({ method: req.method, url: redact(req.url), host: req.hostname, remoteAddress: req.ip }) } } : false;
+  const logger = opts.logger ? { ...(opts.logger === true ? {} : opts.logger), serializers: { req: (req: { method: string; url: string; hostname?: string; ip?: string }) => ({ method: req.method, url: redactUrl(req.url), host: req.hostname, remoteAddress: req.ip }) } } : false;
   const app = Fastify({ logger, bodyLimit: 5 * 1024 * 1024 });
   const setupCode = new SetupCode(path.resolve(opts.dataDir), store.userCount() === 0, opts.setupCode ?? (envVar("SETUP_CODE") || undefined));
   // the consent and approve screens can't be framed by another site and clicked through
