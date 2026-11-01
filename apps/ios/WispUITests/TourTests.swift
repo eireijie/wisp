@@ -15,18 +15,14 @@ final class TourTests: XCTestCase {
     app.launchEnvironment["WISP_TOKEN"] = token
     app.launch()
     XCTAssertTrue(app.tabBars.buttons["Chats"].waitForExistence(timeout: 30), "The test session must reach Wisp.")
-    XCTAssertEqual(app.tabBars.buttons.count, 4, "Inbox, Chats, Agents and Computers")
-    // your avatar opens the settings sheet, which holds what the You tab used to
-    app.buttons["profile-button"].firstMatch.tap()
+    XCTAssertEqual(app.tabBars.buttons.count, 5, "Inbox, Chats, Agents, Computers and More")
+    app.tabBars.buttons["More"].tap()
 
     open("you-tasks")
     shot("tasks")
     if let task = first("task-row") { task.tap(); shot("task-detail"); back() }
     else { shot("task-detail", note: "No tasks; detail is unavailable in this workspace.") }
     back()
-    if first("you-new-task") != nil {
-      open("you-new-task"); shot("new-task"); app.buttons["Cancel"].tap()
-    } else { shot("new-task", note: "Guests cannot create tasks.") }
 
     open("you-memory"); shot("memory")
     // Folders are native navigation rows; descend until a note is available.
@@ -46,7 +42,9 @@ final class TourTests: XCTestCase {
     }
     for _ in 0...depth { back() }
 
-    for (id, name) in [("you-about", "about"), ("you-skills", "skills"), ("you-connectors", "connectors")] {
+    // your avatar opens what's about you
+    app.buttons["profile-button"].firstMatch.tap()
+    for (id, name) in [("you-about", "about")] {
       if reveal(id) { open(id); shot(name); back() }
       else { shot(name, note: "Not available in this workspace.") }
     }

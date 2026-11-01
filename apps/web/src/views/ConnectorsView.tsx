@@ -228,7 +228,7 @@ export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved
   const setRow = (i: number, patch: Partial<Row>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const title = titleOverride ?? (existing ? `Edit ${existing.name}` : entry ? `Connect ${entry.name}` : "Add your own app");
   const sub = custom && !existing ? "Connect any MCP server" : undefined;
-  const saveLabel = existing ? "Save" : custom ? "Save app" : "Connect";
+  const saveLabel = existing ? "Save" : custom ? "Save app" : "Add";
 
   return (
     <Dlg title={title} sub={sub} onClose={onClose} wide>

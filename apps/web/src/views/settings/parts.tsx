@@ -6,7 +6,7 @@ import { cx } from "../../components/ui.tsx";
 export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="mb-6">
-      <h2 className="t-title">{title}</h2>
+      <h2 className="t-title max-md:hidden">{title}</h2>
       {children && <p className="mt-1.5 text-body leading-snug text-muted max-w-xl">{children}</p>}
     </div>
   );

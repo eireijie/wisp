@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Brain, Building2, LifeBuoy, ListTodo, SquarePen, ChevronRight, LogOut, Moon, Settings, Sparkles, Store, Sun, SunMoon, Blocks, X } from "lucide-react";
+import { BookOpen, Brain, Building2, ChevronLeft, Ellipsis, LifeBuoy, ListTodo, SquarePen, ChevronRight, LogOut, Moon, Settings, Sparkles, Store, Sun, SunMoon, Blocks, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useChatsUnread, useInboxCount, useStore } from "./store.ts";
 import { go, href, routeForRole, useRoute, type Route } from "./router.ts";
 import { useAppearance, type ModeChoice } from "./theme.ts";
 import { ChatList, NewChatPicker } from "./components/ChatList.tsx";
-import { Rail, chatsTarget, rememberChat, initialsOf } from "./components/Rail.tsx";
+import { MORE_VIEWS, Rail, chatsTarget, rememberChat, initialsOf } from "./components/Rail.tsx";
+import { MorePage } from "./views/MorePage.tsx";
 import { AgentsIcon, ChatsIcon, ComputersIcon, InboxIcon } from "./components/icons.tsx";
 import { OfflineBanner, UpdatedBanner } from "./components/Banners.tsx";
 import { OrgList, useOrgs } from "./components/OrgSwitcher.tsx";
@@ -105,6 +106,8 @@ function tabGroup(route: Route): string {
       return "2";
     case "computers":
       return "3";
+    case "more":
+      return "4";
     default:
       return route.view;
   }
@@ -197,6 +200,7 @@ function Workspace() {
       else if (id) location.replace(href({ view: "chat", channelId: id, threadId: null }));
     }
     if (!phone && route.view === "you") go({ view: "settings" });
+    if (!phone && route.view === "more") go({ view: "dashboard" });
     if (phone && route.view === "chat" && !route.channelId) go({ view: "chats" });
   }, [phone, route, loaded]);
 
@@ -215,6 +219,7 @@ function Workspace() {
 
   const toChats = () => go({ view: "chats" });
   const toYou = () => go({ view: "you" });
+  const toMore = () => go({ view: "more" });
   const page = (() => {
     switch (route.view) {
       case "chat":
@@ -225,15 +230,17 @@ function Workspace() {
         return phone ? <ChatsPage route={route} /> : <EmptyChat />;
       case "you":
         return <YouPage />;
+      case "more":
+        return <MorePage />;
       case "dashboard":
         return <DashboardView />;
       case "marketplace":
-        return <MarketplaceView section={route.section ?? "all"} onBack={phone ? toYou : undefined} />;
+        return <MarketplaceView section={route.section ?? "all"} onBack={phone ? toMore : undefined} />;
       // older addresses: a sign-in coming back lands on what's installed
       case "connectors":
-        return <MarketplaceView section={new URLSearchParams(location.search).has("signin") ? "installed" : "apps"} onBack={phone ? toYou : undefined} />;
+        return <MarketplaceView section={new URLSearchParams(location.search).has("signin") ? "installed" : "apps"} onBack={phone ? toMore : undefined} />;
       case "skills":
-        return <MarketplaceView section="skills" onBack={phone ? toYou : undefined} />;
+        return <MarketplaceView section="skills" onBack={phone ? toMore : undefined} />;
       case "vault":
         return <VaultView path={route.path} />;
       case "agents":
@@ -241,7 +248,7 @@ function Workspace() {
       case "about":
         return <AboutView onBack={phone ? toYou : undefined} />;
       case "tasks":
-        return <TasksView onBack={phone ? () => go({ view: "dashboard" }) : undefined} />;
+        return <TasksView onBack={phone ? toMore : undefined} />;
       case "computers":
         return <ComputersView computerId={route.computerId} teach={route.teach ?? null} deviceId={route.deviceId ?? null} />;
       case "settings":
@@ -249,11 +256,19 @@ function Workspace() {
       case "welcome":
         return <WelcomeView intro={route.intro} />;
       case "help":
-        return <HelpView onBack={phone ? toYou : undefined} />;
+        return <HelpView onBack={phone ? toMore : undefined} />;
       case "mods":
         return (
           <div className="flex-1 overflow-y-auto">
-            <div className="max-w-4xl mx-auto px-4 md:px-8 pt-10 pb-8">
+            {phone && (
+              <header className="px-[18px] pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center gap-3">
+                <button className="circle shrink-0" onClick={toMore} aria-label="Back">
+                  <ChevronLeft size={22} aria-hidden />
+                </button>
+                <h1 className="t-title truncate">Mods</h1>
+              </header>
+            )}
+            <div className="max-w-4xl mx-auto px-4 md:px-8 pt-4 md:pt-10 pb-8">
               <ModsPage />
             </div>
           </div>
@@ -334,7 +349,7 @@ function Tab({ active, label, icon, target, badge, dot, accent }: { active: bool
   const iconRef = useRef<HTMLSpanElement>(null);
   useBounce(iconRef, active);
   return (
-    <a href={target} aria-current={active ? "page" : undefined} className={cx("relative z-[1] flex-1 flex flex-col items-center justify-center gap-[2px] h-[48px] rounded-full text-xs", active ? "text-ink font-medium" : "text-muted font-normal")}>
+    <a href={target} aria-current={active ? "page" : undefined} className={cx("relative z-[1] flex-1 flex flex-col items-center justify-center gap-[2px] h-[48px] rounded-full text-[11px]", active ? "text-ink font-medium" : "text-muted font-normal")}>
       <span ref={iconRef} className="m-tab-icon" style={active ? { color: `var(--accent-${accent})` } : undefined}>{icon}</span>
       {label}
       {badge !== undefined && <PopBadge count={badge} label={badge > 99 ? "99+" : String(badge)} className="absolute top-1 left-[calc(50%+8px)] min-w-[18px] h-[18px] px-1 rounded-full text-[11px] font-semibold text-black grid place-items-center tabular-nums" style={{ background: `var(--accent-${accent})` }} />}
@@ -343,24 +358,27 @@ function Tab({ active, label, icon, target, badge, dot, accent }: { active: bool
   );
 }
 
-/** Phones: the floating glass bar with the four places. `away` slips it down while a chat is open. */
+/** Phones: the floating glass bar with the five places, the same as the rail on desktops. `away` slips it down while a chat is open. */
 function TabBar({ route, away }: { route: Route; away: boolean }) {
   const isGuest = useStore((s) => s.me?.role === "guest");
   const computers = useStore((s) => s.computers);
   const inbox = useInboxCount();
   const unreadChats = useChatsUnread();
   const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
-  const count = isGuest ? 3 : 4;
-  const index = route.view === "dashboard" ? 0 : route.view === "chats" || route.view === "chat" ? 1 : route.view === "agents" ? 2 : route.view === "computers" && !isGuest ? 3 : -1;
+  const count = isGuest ? 4 : 5;
+  const accents = ["inbox", "chats", "agents", ...(isGuest ? [] : ["computers"]), "more"];
+  const moreIndex = count - 1;
+  const index = route.view === "dashboard" ? 0 : route.view === "chats" || route.view === "chat" ? 1 : route.view === "agents" ? 2 : route.view === "computers" && !isGuest ? 3 : MORE_VIEWS.includes(route.view) ? moreIndex : -1;
   return (
-    <div data-away={away} inert={away} className="m-tabs absolute inset-x-0 bottom-0 z-30 px-6 pb-6 pointer-events-none safe-bottom">
+    <div data-away={away} inert={away} className="m-tabs absolute inset-x-0 bottom-0 z-30 px-4 pb-6 pointer-events-none safe-bottom">
       <nav className="glass pointer-events-auto relative mx-auto max-w-md h-[60px] flex items-center justify-between p-1.5 rounded-[30px]" aria-label="Main">
         {/* the selection slides from tab to tab with a little overshoot */}
-        <span aria-hidden className="m-ind left-1.5 top-[5px] h-12 rounded-full" style={{ background: `color-mix(in srgb, var(--accent-${["inbox", "chats", "agents", "computers"][Math.max(index, 0)]}) 16%, transparent)`, width: `calc((100% - 12px) / ${count})`, transform: `translateX(${Math.max(index, 0) * 100}%)`, opacity: index < 0 ? 0 : 1 }} />
+        <span aria-hidden className="m-ind left-1.5 top-[5px] h-12 rounded-full" style={{ background: `color-mix(in srgb, var(--accent-${accents[Math.max(index, 0)]}) 16%, transparent)`, width: `calc((100% - 12px) / ${count})`, transform: `translateX(${Math.max(index, 0) * 100}%)`, opacity: index < 0 ? 0 : 1 }} />
         <Tab active={index === 0} label="Inbox" icon={<InboxIcon size={22} />} accent="inbox" target={href({ view: "dashboard" })} badge={inbox} />
         <Tab active={index === 1} label="Chats" icon={<ChatsIcon size={22} />} accent="chats" target={href({ view: "chats" })} badge={unreadChats} />
         <Tab active={index === 2} label="Agents" icon={<AgentsIcon size={22} />} accent="agents" target={href({ view: "agents", agentId: null })} />
         {!isGuest && <Tab active={index === 3} label="Computers" icon={<ComputersIcon size={22} />} accent="computers" target={href({ view: "computers", computerId: null })} dot={working} />}
+        <Tab active={index === moreIndex} label="More" icon={<Ellipsis size={22} strokeWidth={1.8} aria-hidden />} accent="more" target={href({ view: "more" })} />
       </nav>
     </div>
   );

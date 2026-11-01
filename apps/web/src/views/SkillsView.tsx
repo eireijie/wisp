@@ -362,7 +362,7 @@ function LibrarySkill({ entry, canEdit, onInstall, onTry }: { entry: CatalogSkil
         <Sec onClick={() => onTry({ name, description, agentIds: [] })}>
           <Send size={16} /> Try it
         </Sec>
-        {canEdit && <Prim onClick={() => onInstall(entry)}>Install</Prim>}
+        {canEdit && <Prim onClick={() => onInstall(entry)}>Add</Prim>}
       </div>
 
       <MoreOptions title="Read the full instructions">
@@ -411,7 +411,7 @@ export function StoreSkillDetail({ s, icon, canEdit, onAdd, onTry }: { s: StoreS
         <Sec onClick={onTry}>
           <Send size={16} /> Try it
         </Sec>
-        {canEdit && s.license.open && <Prim onClick={onAdd}>Install</Prim>}
+        {canEdit && s.license.open && <Prim onClick={onAdd}>Add</Prim>}
       </div>
       {content === undefined ? <Loader /> : content && (
         <MoreOptions title="Read the full instructions">

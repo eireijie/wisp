@@ -55,6 +55,7 @@
 		36B336A6A24D232EFCDAF48F /* AgentEdit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5426E91C311555AC0E59CFF8 /* AgentEdit.swift */; };
 		370536961D0A16E0D579F8E6 /* Store+Management.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6BB72F2C5812E58FABC3B18 /* Store+Management.swift */; };
 		3799C45ADAA3389B00C8A1FC /* ModelConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A7CCCC14E8D7B790B54764E /* ModelConnections.swift */; };
+		37C0A18BAFB91CFA88B67BC5 /* AppLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = F967BF9B869E77B6B41CEAAC /* AppLogo.swift */; };
 		37D5660977E249F49BB2F1E7 /* MemoryParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B83EDCDF10B8B431A021BE7C /* MemoryParityTests.swift */; };
 		3855BDFB5819B6D35F57ED9E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 099181E9B8BFE6F3475C5D36 /* Assets.xcassets */; };
 		38F1ADFB8A54389EDF62DB20 /* ManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90BD07D7DEF5B7CF9DC66500 /* ManagementModels.swift */; };
@@ -130,6 +131,7 @@
 		94C64C1A8579301623464C1E /* DeviceShelf.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F87480CA3DA4BDAF852D823 /* DeviceShelf.swift */; };
 		95B64235A26210880A982C0A /* AgentComputerPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB763485EEAEA575F2465D57 /* AgentComputerPage.swift */; };
 		96E8BA61B76815F70DEF9642 /* ChannelTeamEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA77F51ED184D4A7A705AFEB /* ChannelTeamEditor.swift */; };
+		9A7CC76E59009143B77B90D9 /* MoreTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92456909E28F458070E16E3 /* MoreTab.swift */; };
 		9BA1EEBF8C67BA24524A1E0B /* ChatFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64B962AB99AB5CE63EBCD814 /* ChatFormat.swift */; };
 		9E78DDF8B87FBAE57FBD189A /* WispApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C016387D643C647AABE68DC /* WispApp.swift */; };
 		9FB64377769AB257EB7A97EA /* UpdateModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73695F1B697075837BCC929A /* UpdateModels.swift */; };
@@ -392,6 +394,7 @@
 		B657709B4B61AE0BF9E3FCFB /* AgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsView.swift; sourceTree = "<group>"; };
 		B72BE8CB3E7A800AA9616FFC /* Store+Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Store+Chat.swift"; sourceTree = "<group>"; };
 		B83EDCDF10B8B431A021BE7C /* MemoryParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryParityTests.swift; sourceTree = "<group>"; };
+		B92456909E28F458070E16E3 /* MoreTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreTab.swift; sourceTree = "<group>"; };
 		B9CB1825799D151309BAF989 /* DeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceTests.swift; sourceTree = "<group>"; };
 		BB763485EEAEA575F2465D57 /* AgentComputerPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentComputerPage.swift; sourceTree = "<group>"; };
 		BF622C2FD8F425C6046CDCC7 /* Store+Computers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Store+Computers.swift"; sourceTree = "<group>"; };
@@ -438,6 +441,7 @@
 		F63DC27D29325FC666533969 /* MemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryView.swift; sourceTree = "<group>"; };
 		F6C73D54209E9DBFDBB24C50 /* AboutJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutJournal.swift; sourceTree = "<group>"; };
 		F822FA007798ACCBD1B3774C /* ComputerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerTests.swift; sourceTree = "<group>"; };
+		F967BF9B869E77B6B41CEAAC /* AppLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogo.swift; sourceTree = "<group>"; };
 		F99A7581839946D00DED4AE9 /* MemoryStorageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryStorageView.swift; sourceTree = "<group>"; };
 		FA1C5ED729A713227BDFE33B /* ChangesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChangesView.swift; sourceTree = "<group>"; };
 		FABFBF67ADFF41E1ABCF8EEC /* AgentVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentVoiceView.swift; sourceTree = "<group>"; };
@@ -562,6 +566,7 @@
 				7ABBE05F1006B4D3A53EF579 /* AgentVoicePicker.swift */,
 				FABFBF67ADFF41E1ABCF8EEC /* AgentVoiceView.swift */,
 				7D958988B1ED63DCC56FDE20 /* API.swift */,
+				F967BF9B869E77B6B41CEAAC /* AppLogo.swift */,
 				9FD6DE3A8E6EC9FB4A81DD72 /* AppModels.swift */,
 				099181E9B8BFE6F3475C5D36 /* Assets.xcassets */,
 				6B8705FA995A7628FF5AF3D1 /* AuthKit.swift */,
@@ -641,6 +646,7 @@
 				9A7CCCC14E8D7B790B54764E /* ModelConnections.swift */,
 				5E82C1A0EDF072A656171B27 /* Models.swift */,
 				62B9478935C10014F8F1F480 /* ModelsSettingsView.swift */,
+				B92456909E28F458070E16E3 /* MoreTab.swift */,
 				DA8179DE73625026B3318B26 /* Motion.swift */,
 				B3B0C971974EB93B639D13A4 /* NativeSettingsView.swift */,
 				FEC85BDF3987C0A606B9EF70 /* NoteExtras.swift */,
@@ -918,6 +924,7 @@
 				CDF9CCEBF9982AC677C24CD0 /* AgentVoicePicker.swift in Sources */,
 				D768A77798F093014BCAA012 /* AgentVoiceView.swift in Sources */,
 				D817B25643F45C35D1866EE4 /* AgentsView.swift in Sources */,
+				37C0A18BAFB91CFA88B67BC5 /* AppLogo.swift in Sources */,
 				C3996E4891C45ABFF60EEACC /* AppModels.swift in Sources */,
 				45CEFDD8D372D3F2B2603C01 /* AuthKit.swift in Sources */,
 				D383F851D4CADE1CAB4D6F08 /* AutomationModels.swift in Sources */,
@@ -995,6 +1002,7 @@
 				3799C45ADAA3389B00C8A1FC /* ModelConnections.swift in Sources */,
 				7FBC6E0DB4D7138174EE8421 /* Models.swift in Sources */,
 				40BA6BDB2DD2739CCF674DB7 /* ModelsSettingsView.swift in Sources */,
+				9A7CC76E59009143B77B90D9 /* MoreTab.swift in Sources */,
 				BBA2ECF524CE714536166DA5 /* Motion.swift in Sources */,
 				C11460AB716439B3C07CCC94 /* NativeSettingsView.swift in Sources */,
 				E28A77EAD52F4631C48ADFB5 /* NoteExtras.swift in Sources */,

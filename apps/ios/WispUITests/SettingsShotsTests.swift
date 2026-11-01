@@ -20,7 +20,7 @@ final class SettingsShotsTests: XCTestCase {
     Thread.sleep(forTimeInterval: 1.5)
     shot("00-sheet")
     // pages the sheet opens
-    for (id, screen) in [("you-profile", "profile"), ("you-mods", "mods"), ("settings-appearance", "appearance"), ("you-help", "help"), ("settings-agent-defaults", "agent-defaults")] {
+    for (id, screen) in [("you-profile", "profile"), ("settings-appearance", "appearance"), ("settings-agent-defaults", "agent-defaults")] {
       visit(id, screen)
     }
     guard reveal("you-settings") else { return XCTFail("no all-settings row") }

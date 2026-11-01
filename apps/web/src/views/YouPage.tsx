@@ -1,13 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Bot, Brain, Building2, Cpu, LifeBuoy, ListTodo, Monitor, Palette, Bell, Blocks, Plug, Server, Settings, SlidersHorizontal, SquarePen, Sparkles, Store, ChevronRight, X } from "lucide-react";
+import { Bot, Brain, Building2, ChevronLeft, Cpu, Palette, Bell, Settings, Sparkles, ChevronRight, X } from "lucide-react";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { href } from "../router.ts";
+import { go, href } from "../router.ts";
 import { THEMES, useAppearance } from "../theme.ts";
 import { initialsOf } from "../components/Rail.tsx";
 import { OrgList, useOrgs } from "../components/OrgSwitcher.tsx";
-import { useDevices } from "../devices.ts";
-import { useFeatures } from "../features.ts";
 import { setupProgress, useDismissed, useOnboarding } from "../onboarding.ts";
 import { Toggle } from "./settings/parts.tsx";
 import { SignOutButton } from "./settings/signout.tsx";
@@ -16,17 +14,15 @@ import { ASK, type AgentPolicy } from "./settings/workspace.tsx";
 const ICON = { size: 20, strokeWidth: 1.8 };
 
 /**
- * Phones: you and what's around you in one place, laid out like the iPhone settings sheet: who you are,
- * computers, apps and memory, the agent rules, notifications and appearance, help, sign out.
- * The rest of Settings is one row away.
+ * Phones: you, behind your avatar, laid out like the iPhone sheet: who you are, your organization,
+ * the agent rules, notifications and appearance, sign out. The rest of Settings is one row away;
+ * features are in More.
  */
 export function YouPage() {
   const me = useStore((s) => s.me)!;
   const { done } = useOnboarding();
   const dismissed = useDismissed();
-  const features = useFeatures();
   const { current } = useOrgs();
-  const devices = useDevices(15_000);
   const { theme } = useAppearance();
   const [orgs, setOrgs] = useState(false);
   const { progress, steps, complete } = setupProgress(done);
@@ -41,7 +37,6 @@ export function YouPage() {
     if (!policy) return;
     setPolicy(await api<AgentPolicy>("PUT", "/api/settings/agents", { askBefore: on ? ASK.map(([k]) => k) : [] }).catch(() => policy));
   };
-  const online = devices?.filter((d) => d.online).length ?? 0;
   const roleName = isGuest ? "Guest" : isOwner ? "Owner" : "Member";
   const orgName = current?.name ?? me.workspace.name;
   const themeName = THEMES.find((t) => t.id === theme)?.name;
@@ -76,7 +71,12 @@ export function YouPage() {
   return (
     <div className="flex-1 overflow-y-auto safe-top">
       <div className="p-[18px] space-y-5">
-        <h1 className="sr-only">You</h1>
+        <header className="flex items-center gap-3">
+          <button className="circle shrink-0" onClick={() => (history.length > 1 ? history.back() : go({ view: "more" }))} aria-label="Back">
+            <ChevronLeft size={22} aria-hidden />
+          </button>
+          <h1 className="t-title">You</h1>
+        </header>
         {card(
           <a href={href({ view: "settings", page: "profile" })} className="flex items-center gap-3.5 px-4 min-h-14 hover:bg-hover">
             <span className="circle shrink-0" style={{ width: 48, height: 48 }}>
@@ -94,10 +94,8 @@ export function YouPage() {
         {!complete && !isGuest && card(row(<Sparkles {...ICON} />, dismissed ? "Finish setup" : "Get started", href({ view: "welcome" }), dismissed ? `${progress} of ${steps}` : `${progress}/${steps}`))}
         {card(
           <>
-            {!isGuest && row(<Monitor {...ICON} />, "Computers and devices", href({ view: "computers", computerId: null }), devices ? `${online} online` : undefined)}
-            {!isGuest && row(<Store {...ICON} />, "Connect apps", href({ view: "marketplace" }), undefined, "Tools and skills for your agents")}
-            {row(<BookOpen {...ICON} />, "Memory", href({ view: "vault", path: null }), isGuest ? "Shared folder" : undefined)}
-            {row(<Building2 {...ICON} />, orgName, () => setOrgs(true), undefined, "Switch organization")}
+            {row(<Building2 {...ICON} />, "Organization", () => setOrgs(true), orgName)}
+            {!isGuest && row(<Brain {...ICON} />, "About you", href({ view: "about" }))}
           </>,
         )}
         {!isGuest && (
@@ -116,7 +114,6 @@ export function YouPage() {
                   <Toggle on={askOn} onChange={setAsk} label="Ask before risky actions" disabled={!isOwner || !policy} />
                 </div>
                 {row(<Cpu {...ICON} />, "Default model", href({ view: "settings", page: "agent-defaults" }), "Each AI tool")}
-                {row(<Plug {...ICON} />, "Agents policy", href({ view: "settings", page: "agents" }))}
               </>,
             )}
           </>
@@ -125,21 +122,9 @@ export function YouPage() {
           <>
             {row(<Bell {...ICON} />, "Notifications", href({ view: "settings", page: "notifications" }))}
             {row(<Palette {...ICON} />, "Appearance", href({ view: "settings", page: "appearance" }), themeName)}
-            {row(<SlidersHorizontal {...ICON} />, "App behavior", href({ view: "settings", page: "preferences" }))}
-            {row(<LifeBuoy {...ICON} />, "Help", href({ view: "help" }), undefined, "Answers, setup, and what words mean")}
+            {row(<Settings {...ICON} />, "All settings", href({ view: "settings" }))}
           </>,
         )}
-        {!isGuest &&
-          card(
-            <>
-              {features.tasks && row(<ListTodo {...ICON} />, "Tasks", href({ view: "tasks" }), undefined, "Work you handed to an agent")}
-              {features.tasks && row(<SquarePen {...ICON} />, "New task", () => useStore.setState({ newTaskOpen: true }))}
-              {row(<Brain {...ICON} />, "About you", href({ view: "about" }), undefined, "What agents should know about you")}
-              {row(<Server {...ICON} />, "Computers", href({ view: "computers", computerId: null }), undefined, "Computers running Wisp")}
-              {row(<Blocks {...ICON} />, "Mods", href({ view: "mods" }), undefined, "Optional parts of Wisp")}
-            </>,
-          )}
-        {card(row(<Settings {...ICON} />, "All settings", href({ view: "settings" })))}
         <SignOutButton icon={false} className="w-full min-h-12 rounded-3xl bg-card text-bad text-body font-medium" />
       </div>
       {orgs && (

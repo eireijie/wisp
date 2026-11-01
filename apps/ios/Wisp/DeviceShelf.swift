@@ -140,7 +140,7 @@ struct DeviceShelfList: View {
           if d.online { Button { onRefresh(d) } label: { Label("Look again", systemImage: "arrow.clockwise").font(.system(size: 13)).foregroundStyle(Palette.muted) }.buttonStyle(.plain) }
         }
         if d.items.isEmpty {
-          Text("\(d.nodeName): Nothing found in its harnesses.").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
+          Text("Nothing found in its harnesses.").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
         } else {
           CardGroup { ForEach(shown(d)) { item in ShelfRow(device: d, item: item, onBring: { onBring(d, item) }) } }
         }
@@ -159,7 +159,7 @@ struct ShelfRow: View {
     let have = ShelfLogic.inWisp(device.nodeId, item, skills: store.skills, connectors: store.connectors)
     MarketRow(symbol: item.isSkill ? MarketText.skillSymbol(item.name) : "powerplug", title: item.isSkill ? MarketText.skillTitle(item.name) : item.name, subtitle: ShelfLogic.harnessName(item.harness) + (item.isSkill ? "" : item.readyAsIs ? " · app" : " · app, needs a key")) {
       if have { MarketPill(text: "In Wisp", tone: .green) }
-      else if store.canManage { AddButton(title: "Bring in", action: onBring) }
+      else if store.canManage { AddButton(title: "Add", action: onBring) }
     }
   }
 }

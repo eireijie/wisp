@@ -112,14 +112,18 @@ struct FieldRow: View {
 struct ToggleRow: View {
   var title: String
   var subtitle: String? = nil
+  var symbol: String? = nil
   @Binding var isOn: Bool
   var id: String? = nil
 
   var body: some View {
     Toggle(isOn: $isOn) {
-      VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.system(size: 15)).foregroundStyle(Palette.text)
-        if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint) }
+      HStack(spacing: 12) {
+        if let symbol { rowIcon(symbol) }
+        VStack(alignment: .leading, spacing: 2) {
+          Text(title).font(.system(size: 15)).foregroundStyle(Palette.text)
+          if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint) }
+        }
       }
     }
     .tint(Palette.blue)

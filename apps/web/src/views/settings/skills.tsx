@@ -152,7 +152,7 @@ export function SkillsPage() {
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="t-title">Skills</h2>
+        <h2 className="t-title max-md:hidden">Skills</h2>
         <span className="flex gap-2">
           <a href={href({ view: "marketplace", section: "skills" })} className="inline-flex h-[34px] items-center rounded-lg bg-control px-3 text-[13px] font-medium text-ink/80 hover:text-ink">
             Browse the shop

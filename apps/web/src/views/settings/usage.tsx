@@ -292,7 +292,7 @@ export function UsagePage() {
 
   const header = (
     <div className="flex items-end justify-between gap-4">
-      <h2 className="t-title">Usage</h2>
+      <h2 className="t-title max-md:hidden">Usage</h2>
       <Seg label="Range" value={range} options={RANGES.map(([key, label]) => ({ key, label }))} onChange={(k) => setRange(k as Range)} className="w-[220px] max-w-[60%]" />
     </div>
   );

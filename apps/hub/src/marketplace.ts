@@ -12,15 +12,15 @@ const FEATURED_TTL = 6 * 60 * 60_000;
  * yet (Gmail, Outlook…).
  */
 export const FEATURED: [string, AppCategory][] = [
-  ["com.mintmcp/gmail", "Email and calendar"],
   ["io.github.github/github-mcp-server", "Developer"],
   ["com.notion/mcp", "Docs and notes"],
+  ["app.linear/linear", "Developer"],
+  ["com.mintmcp/gmail", "Email and calendar"],
   ["com.zapier/mcp", "Automation"],
   ["com.mintmcp/outlook-email", "Email and calendar"],
   ["com.mintmcp/outlook-calendar", "Email and calendar"],
   ["net.todoist/mcp", "Docs and notes"],
   ["io.github.zoom/zoom-meetings", "Email and calendar"],
-  ["app.linear/linear", "Developer"],
   ["com.atlassian/atlassian-mcp-server", "Developer"],
   ["com.airtable/mcp", "Data"],
   ["com.monday/monday.com", "Docs and notes"],

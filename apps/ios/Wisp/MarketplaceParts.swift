@@ -15,9 +15,9 @@ struct AddLabel: View {
     Text(title)
       .font(.system(size: 15, weight: .medium))
       .foregroundStyle(muted ? Palette.faint : Palette.text)
-      .padding(.horizontal, 18)
-      .frame(height: 38)
-      .background(Capsule().fill(MarketColor.chip))
+      .padding(.horizontal, 14)
+      .frame(height: 34)
+      .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(MarketColor.chip))
   }
 }
 

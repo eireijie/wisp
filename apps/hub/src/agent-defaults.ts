@@ -36,7 +36,7 @@ export function saveAgentDefaults(store: Store, workspaceId: string, patch: Part
 
 /**
  * The defaults for a new agent: what the owner saved, and for anything not saved, what the most
- * recently made agent uses (else the first harness a device offers), on a device that can run VMs.
+ * recently made agent uses (else the first signed-in harness a device offers), on a device that can run VMs.
  */
 export function agentDefaults(store: Store, workspaceId: string): AgentDefaults {
   const saved = savedAgentDefaults(store, workspaceId);
@@ -47,7 +47,10 @@ export function agentDefaults(store: Store, workspaceId: string): AgentDefaults 
 
   const nodeId = known(saved.nodeId) ? saved.nodeId! : known(latest?.nodeId) ? latest!.nodeId! : (nodes.find((n) => canRunVms(n.id)) ?? nodes[0])?.id ?? null;
   const offered = [...(nodeId ? [nodeId] : []), ...nodes.map((n) => n.id)].flatMap((id) => store.nodeCatalog(id));
-  const harness = saved.harness !== undefined ? saved.harness : (latest?.harness ?? offered[0]?.harness ?? null);
+  // a tool that's signed in beats one that would fail its first run; "can't tell" beats "signed out"
+  const readiness = (accounts: Record<string, boolean | null> | undefined) => (Object.values(accounts ?? {}).some((v) => v === true) ? 0 : Object.values(accounts ?? {}).some((v) => v === false) ? 2 : 1);
+  const firstOffered = [...offered].sort((a, b) => readiness(a.accounts) - readiness(b.accounts))[0];
+  const harness = saved.harness !== undefined ? saved.harness : (latest?.harness ?? firstOffered?.harness ?? null);
   const model = saved.model !== undefined ? saved.model : latest && latest.harness === harness ? latest.model : null;
   const computer = saved.computer ?? (nodes.some((n) => canRunVms(n.id)) ? "own-vm" : "none");
   return { harness, model, computer, nodeId, models: saved.models ?? {} };

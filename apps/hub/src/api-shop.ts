@@ -24,7 +24,8 @@ export function registerShopApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     const names = (Array.isArray(q) ? q : q ? [q] : []).slice(0, 3).map((n) => String(n).slice(0, 100));
     const svg = names.length ? await hub.logos.svg(names) : null;
     reply.header("cache-control", "public, max-age=86400").header("x-content-type-options", "nosniff");
-    if (!svg) return reply.code(404).send({ error: "no logo" });
+    // nothing to show isn't an error: the tile falls back to a line icon, with nothing in the console
+    if (!svg) return reply.code(204).send();
     // opened on its own, the file still can't run anything
     return reply.header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'").type("image/svg+xml").send(svg);
   });
