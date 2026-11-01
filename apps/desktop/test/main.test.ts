@@ -152,10 +152,12 @@ describe("desktop approval IPC", () => {
     expect(f.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it("opens web onboarding when Start Wisp finishes", async () => {
+  it("waits for Continue, then opens web onboarding", async () => {
     const f = fixture();
     f.main.init();
     expect(await f.handlers.get("setup:create")!(f.setupEvent())).toEqual({ ok: true });
+    expect(f.windows[0].loadURL).not.toHaveBeenCalledWith("http://localhost:4747/#/welcome/intro");
+    await f.handlers.get("setup:open")!(f.setupEvent());
     await vi.waitFor(() => expect(f.windows[0].loadURL).toHaveBeenCalledWith("http://localhost:4747/#/welcome/intro"));
   });
 
@@ -164,6 +166,7 @@ describe("desktop approval IPC", () => {
     f.engine.localSetupCode.mockReturnValue("k7qm-29xd-hp4c");
     f.main.init();
     expect(await f.handlers.get("setup:create")!(f.setupEvent())).toEqual({ ok: true });
+    await f.handlers.get("setup:open")!(f.setupEvent());
     await vi.waitFor(() => expect(f.windows[0].loadURL).toHaveBeenCalledWith("http://localhost:4747/#/setup/k7qm-29xd-hp4c"));
   });
 });

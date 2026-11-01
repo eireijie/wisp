@@ -221,6 +221,22 @@ async function waitFor(url, ms) {
   return false;
 }
 
+/** Find this computer's server, or start it. Says what went wrong, if anything. */
+async function startLocalHub(onStarting = () => {}) {
+  if (await engine.hubUp(LOCAL_HUB)) {
+    hubBy = (await engine.serviceRunning("hub")) ? "service" : hub.running() ? "app" : "already running";
+    return {};
+  }
+  const found = needs();
+  if (found.problem) return { problem: found.problem };
+  onStarting();
+  hub.start(found.node, found.wispDir, ["hub", "start"], { ...found.env, PORT: String(PORT) });
+  hubBy = "app";
+  if (await waitFor(LOCAL_HUB, 90_000)) return {};
+  hub.stop();
+  return { problem: "The server didn't start.", log: hub.tail() };
+}
+
 /** Find or start the hub for the saved choice, then show it. */
 async function connect(restartDevice = false) {
   if (config.mode === "remote" && config.hubUrl) {
@@ -231,18 +247,8 @@ async function connect(restartDevice = false) {
   }
   if (config.mode !== "local") return showSetup();
 
-  if (await engine.hubUp(LOCAL_HUB)) hubBy = (await engine.serviceRunning("hub")) ? "service" : hub.running() ? "app" : "already running";
-  else {
-    const found = needs();
-    if (found.problem) return showSetup({ step: "create", problem: found.problem });
-    showSetup({ step: "starting" });
-    hub.start(found.node, found.wispDir, ["hub", "start"], { ...found.env, PORT: String(PORT) });
-    hubBy = "app";
-    if (!(await waitFor(LOCAL_HUB, 90_000))) {
-      hub.stop();
-      return showSetup({ step: "create", problem: "The server didn't start.", log: hub.tail() });
-    }
-  }
+  const started = await startLocalHub(() => showSetup({ step: "starting" }));
+  if (started.problem) return showSetup({ step: "create", ...started });
   // a new Wisp here: its setup link, so making the first account doesn't ask for the code
   const setupCode = engine.localSetupCode(config.wispDir);
   openHub(LOCAL_HUB, setupCode ? `#/setup/${setupCode}` : openOnboarding ? "#/welcome/intro" : "");
@@ -639,15 +645,18 @@ setup("setup:check", () => {
   return { problem: found.problem ?? null, platform: process.platform, hubUrl: config.hubUrl ?? "", mode: config.mode ?? null, device: config.device ?? true, deviceName: deviceName() };
 });
 
-/** Create: run a server on this computer, then open it (the window makes the first account). */
+/** Create: run a server on this computer; the setup page says when, then opens it (setup:open). */
 setup("setup:create", async ({ device: asDevice = true } = {}) => {
   const found = needs();
   if (found.problem) return { ok: false, error: found.problem };
   switchTo({ mode: "local", hubUrl: undefined, cloud: undefined, device: !!asDevice });
   openOnboarding = true;
-  connect();
-  return { ok: true };
+  const started = await startLocalHub();
+  return started.problem ? { ok: false, error: started.problem, log: started.log } : { ok: true };
 });
+
+/** Open the server that's now running (the window makes the first account). */
+setup("setup:open", () => connect());
 
 setup("setup:discover", () => discovery.browse());
 setup("setup:cancel-join", () => { discovery.cancel(); joinClient.cancel(); return { ok: true }; });

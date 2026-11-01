@@ -240,6 +240,49 @@ describe("running agents on a connection", () => {
     expect(JSON.parse(fs.readFileSync(path.join(nodeDir, "connections", oauthId, "codex", "auth.json"), "utf8")).tokens.refresh_token).toBe("r2");
   });
 
+  it("tells the hub about a renewal before the run's outcome, which is what frees the sign-in for the next run", async () => {
+    const sent: string[] = [];
+    const real = (daemon as any).send.bind(daemon);
+    const spy = vi.spyOn(daemon as any, "send").mockImplementation((m: any) => {
+      sent.push(m.type);
+      return real(m);
+    });
+    try {
+      const fresh = hub.models.create({ workspaceId: ws, userId: me, provider: "openai", kind: "oauth", label: "Order", secret: { auth: chatgpt("r1", new Date(Date.now() - 86_400_000).toISOString()) } });
+      await owner.request("PATCH", `/api/agents/${nova.id}`, { settings: { connectionId: fresh } });
+      const own = await channelWith("renewal-order", [nova.id]);
+      await message(own.id, "@nova renew please");
+      await waitFor(() => (sent.includes("run_done") ? true : undefined));
+      expect(sent.indexOf("credential_refreshed")).toBeGreaterThan(-1);
+      expect(sent.indexOf("credential_refreshed")).toBeLessThan(sent.indexOf("run_done"));
+    } finally {
+      spy.mockRestore();
+      await owner.request("PATCH", `/api/agents/${nova.id}`, { settings: { connectionId: oauthId } });
+    }
+  });
+
+  it("removes a connection's folder from the device when it's removed, and no other's", async () => {
+    const goner = hub.models.create({ workspaceId: ws, userId: me, provider: "openai", kind: "oauth", label: "Goner", secret: { auth: chatgpt("g1") } });
+    await owner.request("PATCH", `/api/agents/${nova.id}`, { settings: { connectionId: goner } });
+    const own = await channelWith("renewal-gone", [nova.id]);
+    await message(own.id, "@nova use it");
+    const gone = path.join(nodeDir, "connections", goner);
+    const kept = path.join(nodeDir, "connections", oauthId);
+    expect(fs.existsSync(path.join(gone, "codex", "auth.json"))).toBe(true);
+    await owner.request("DELETE", `/api/model-connections/${goner}`);
+    await waitFor(() => (!fs.existsSync(gone) ? true : undefined));
+    expect(fs.existsSync(path.join(kept, "codex", "auth.json"))).toBe(true);
+    await owner.request("PATCH", `/api/agents/${nova.id}`, { settings: { connectionId: oauthId } });
+  });
+
+  it("removes one removed while the device was away, when it's back", async () => {
+    const left = path.join(nodeDir, "connections", "mc_removed_meanwhile", "codex", "auth.json");
+    fs.mkdirSync(path.dirname(left), { recursive: true });
+    fs.writeFileSync(left, "{}");
+    await (daemon as any).onMessage({ type: "welcome", nodeId: box.id });
+    await waitFor(() => (!fs.existsSync(left) ? true : undefined));
+  });
+
   it("shows the plan's usage on the connection and in the agent's context", async () => {
     const c = (await owner.modelConnections()).find((x) => x.id === oauthId)!;
     expect(c).toMatchObject({ account: "me@example.com", plan: "Pro", usage: { window: "weekly", usedFraction: 0.3, planType: "pro" }, usedBy: [{ handle: "nova" }] });
@@ -453,6 +496,77 @@ describe("a connection stays with its owner's devices", () => {
 });
 
 describe("renewed sign-ins come back only from the run they were handed to", () => {
+  it("ignores a late renewal older than the one it has", async () => {
+    const cid = hub.models.create({ workspaceId: ws, userId: me, provider: "openai", kind: "oauth", label: "Late", secret: { auth: chatgpt("l1", "2026-10-30T00:00:00.000Z") } });
+    const fay = await owner.request("POST", "/api/agents", { handle: "fay", name: "Fay", harness: "codex", nodeId: phone.id, settings: { connectionId: cid } });
+    const general = await channelWith(`renew-${cid}`.toLowerCase().replace(/_/g, "-"), [fay.id]);
+    const runs: Extract<HubToNode, { type: "run" }>[] = [];
+    device.onMessage = (m) => {
+      if (m.type === "run") runs.push(m);
+    };
+    await owner.send(general.id, "@fay go");
+    const run = await waitFor(() => runs.find((r) => r.run.agentId === fay.id));
+    device.send({ type: "credential_refreshed", connectionId: cid, runId: run.run.runId, secret: { auth: chatgpt("l3", "2026-10-31T00:00:00.000Z") } });
+    await waitFor(() => ((hub.models.secret(cid)?.auth as any).tokens.refresh_token === "l3" ? true : undefined));
+    // l2 was sent by a device that was offline, and l3 was made from it: l2 is already dead
+    device.send({ type: "credential_refreshed", connectionId: cid, runId: run.run.runId, secret: { auth: chatgpt("l2", "2026-10-30T12:00:00.000Z") } });
+    await new Promise((r) => setTimeout(r, 100));
+    expect((hub.models.secret(cid)?.auth as any).tokens.refresh_token).toBe("l3");
+    device.send({ type: "run_done", runId: run.run.runId, finalText: "ok" });
+  });
+
+  it("takes a renewal for a run from before the hub restarted, which it no longer remembers handing out", async () => {
+    const cid = hub.models.create({ workspaceId: ws, userId: me, provider: "openai", kind: "oauth", label: "Restart", secret: { auth: chatgpt("h1", "2026-10-30T00:00:00.000Z") } });
+    const rena = await owner.request("POST", "/api/agents", { handle: "rena", name: "Rena", harness: "codex", nodeId: phone.id, settings: { connectionId: cid } });
+    const general = await channelWith(`renew-${cid}`.toLowerCase().replace(/_/g, "-"), [rena.id]);
+    const runs: Extract<HubToNode, { type: "run" }>[] = [];
+    device.onMessage = (m) => {
+      if (m.type === "run") runs.push(m);
+    };
+    await owner.send(general.id, "@rena go");
+    const run = await waitFor(() => runs.find((r) => r.run.agentId === rena.id));
+    // what a restart does: nothing remembered, and this hub started after the run did
+    (hub as any).handedOut.delete(run.run.runId);
+    const since = (hub as any).handedOutSince;
+    (hub as any).handedOutSince = new Date(Date.now() + 1000).toISOString();
+    try {
+      device.send({ type: "credential_refreshed", connectionId: cid, runId: run.run.runId, secret: { auth: chatgpt("h2", "2026-10-31T00:00:00.000Z") } });
+      await waitFor(() => ((hub.models.secret(cid)?.auth as any).tokens.refresh_token === "h2" ? true : undefined));
+    } finally {
+      (hub as any).handedOutSince = since;
+    }
+    // a run started since is remembered, so forgetting it means it was over long ago
+    (hub as any).handedOut.delete(run.run.runId);
+    device.send({ type: "credential_refreshed", connectionId: cid, runId: run.run.runId, secret: { auth: chatgpt("h3", "2026-11-01T00:00:00.000Z") } });
+    await new Promise((r) => setTimeout(r, 100));
+    expect((hub.models.secret(cid)?.auth as any).tokens.refresh_token).toBe("h2");
+    device.send({ type: "run_done", runId: run.run.runId, finalText: "ok" });
+  });
+
+  it("holds a sign-in due a renewal after a cancel, until the device says its harness stopped", async () => {
+    const stale = hub.models.create({ workspaceId: ws, userId: me, provider: "openai", kind: "oauth", label: "Cancel", secret: { auth: chatgpt("c1", new Date(Date.now() - 10 * 86_400_000).toISOString()) } });
+    const lee = await owner.request("POST", "/api/agents", { handle: "wren", name: "Wren", harness: "codex", nodeId: phone.id, settings: { connectionId: stale } });
+    const kit = await owner.request("POST", "/api/agents", { handle: "tess", name: "Tess", harness: "codex", nodeId: phone.id, settings: { connectionId: stale } });
+    const general = await channelWith("renew-cancel", [lee.id, kit.id]);
+    const runs: Extract<HubToNode, { type: "run" }>[] = [];
+    device.onMessage = (m) => {
+      if (m.type === "run") runs.push(m);
+    };
+    await owner.send(general.id, "@wren go");
+    const first = await waitFor(() => runs.find((r) => r.run.agentId === lee.id));
+    await owner.send(general.id, "@tess go");
+    await new Promise((r) => setTimeout(r, 200));
+    hub.cancelRun(first.run.runId);
+    await new Promise((r) => setTimeout(r, 200));
+    // Lee's Codex may still be renewing: Kit must not get the old token yet
+    expect(runs.some((r) => r.run.agentId === kit.id)).toBe(false);
+    device.send({ type: "credential_refreshed", connectionId: stale, runId: first.run.runId, secret: { auth: chatgpt("c2", new Date(Date.now() - 10 * 86_400_000 + 1000).toISOString()) } });
+    device.send({ type: "run_failed", runId: first.run.runId, error: "cancelled" });
+    const second = await waitFor(() => runs.find((r) => r.run.agentId === kit.id));
+    expect((second.run.credential?.secret.auth as any).tokens.refresh_token).toBe("c2");
+    device.send({ type: "run_done", runId: second.run.runId, finalText: "ok" });
+  });
+
   it("frees a sign-in when its device drops, and takes a renewal only for a recent run of that device on that connection", async () => {
     const general = (await owner.channels()).find((c) => c.name === "general")!;
     const stale = hub.models.create({ workspaceId: ws, userId: me, provider: "openai", kind: "oauth", label: "Due", secret: { auth: chatgpt("d1", new Date(Date.now() - 10 * 86_400_000).toISOString()) } });
@@ -483,11 +597,17 @@ describe("renewed sign-ins come back only from the run they were handed to", () 
     expect((hub.models.secret(stale)?.auth as any).tokens.refresh_token).not.toMatch(/nope/);
     device.send({ type: "credential_refreshed", connectionId: stale, runId: cyRun, secret: { auth: chatgpt("d2") } });
     await waitFor(() => ((hub.models.secret(stale)?.auth as any).tokens.refresh_token === "d2" ? true : undefined));
+    // a run still going on a device that dropped may take longer than the grace: its renewal is still taken
+    (hub as any).handedOut.get(cyRun).endedAt = Date.now() - 11 * 60_000;
+    device.send({ type: "credential_refreshed", connectionId: stale, runId: cyRun, secret: { auth: chatgpt("d3") } });
+    await waitFor(() => ((hub.models.secret(stale)?.auth as any).tokens.refresh_token === "d3" ? true : undefined));
+    device.send({ type: "run_done", runId: cyRun, finalText: "done" });
+    await waitFor(() => (hub.store.run(cyRun)?.status !== "running" ? true : undefined));
     // long after the run, it isn't
     (hub as any).handedOut.get(cyRun).endedAt = Date.now() - 11 * 60_000;
     device.send({ type: "credential_refreshed", connectionId: stale, runId: cyRun, secret: { auth: chatgpt("late") } });
     await new Promise((r) => setTimeout(r, 100));
-    expect((hub.models.secret(stale)?.auth as any).tokens.refresh_token).toBe("d2");
+    expect((hub.models.secret(stale)?.auth as any).tokens.refresh_token).toBe("d3");
   });
 
   it("never takes a renewal for a connection that doesn't rotate", async () => {

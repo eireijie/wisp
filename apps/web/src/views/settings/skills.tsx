@@ -80,7 +80,7 @@ export function SkillsPage() {
   async function setWho(s: Skill, to: ReturnType<typeof whoValue>) {
     setError(null);
     try {
-      await api("PATCH", `/api/skills/${s.id}`, whoPatch(s, to));
+      await api("PATCH", `/api/skills/${s.id}`, whoPatch(s, to, agents));
       await load();
     } catch (e) {
       setError((e as Error).message);

@@ -68,6 +68,15 @@ function isCheckout(root: string) {
   return fs.existsSync(path.join(root, ".git"));
 }
 
+/** The copy inside the desktop app (see apps/desktop/scripts/bundle-wisp.mjs), which updates with the app. */
+function isBundled(root: string) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).name === "wisp-runtime";
+  } catch {
+    return false;
+  }
+}
+
 export async function version(root = REPO_ROOT, runner: Runner = run): Promise<Version> {
   if (!isCheckout(root)) return { commit: null, date: null };
   try {
@@ -85,7 +94,9 @@ export async function checkForUpdate(root = REPO_ROOT, opts: { fetch?: boolean; 
   const result = (fields: Partial<UpdateCheck> & { reason: string }): UpdateCheck => ({ ...v, behind: null, changes: [], canUpdate: false, checkedAt: new Date().toISOString(), ...fields });
   if (!isCheckout(root)) {
     return result({
-      reason: fs.existsSync("/.dockerenv")
+      reason: isBundled(root)
+        ? "This copy came with the Wisp app, which updates itself. To check now, choose Check for Updates in the app's menu on that computer."
+        : fs.existsSync("/.dockerenv")
         ? "This hub runs in Docker. To update it, run `git pull && docker compose up -d --build` in the folder you cloned Wisp into."
         : "This copy of Wisp isn't a git checkout, so it can't update itself. Clone it with git to get updates.",
     });

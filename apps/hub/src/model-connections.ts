@@ -123,11 +123,17 @@ export class ModelConnections {
     return r ? { connectionId: r.id, provider: r.provider, kind: r.kind, secret: JSON.parse(r.secret_json) } : null;
   }
 
-  /** A harness renewed the sign-in: keep the new one (only the parts a sign-in has). */
+  /**
+   * A harness renewed the sign-in: keep the new one (only the parts a sign-in has). A report older
+   * than what's kept is dropped: a device that was offline can send one after a newer renewal came
+   * in, and its refresh token is already dead.
+   */
   saveRenewed(connectionId: string, secret: ConnectionSecret) {
     const r = this.row(connectionId);
     if (!r || r.kind !== "oauth") return false;
     const before = JSON.parse(r.secret_json) as ConnectionSecret;
+    const renewedAt = (s: ConnectionSecret) => Date.parse(String((s.auth ?? s.pool)?.last_refresh ?? ""));
+    if (renewedAt(before) > renewedAt(secret)) return false;
     const next: ConnectionSecret = { ...before, ...(secret.auth ? { auth: secret.auth } : {}), ...(secret.pool ? { pool: secret.pool } : {}), ...(secret.token ? { token: secret.token } : {}) };
     this.db.prepare("UPDATE model_connections SET secret_json = ?, updated_at = ?, last_error = NULL WHERE id = ?").run(JSON.stringify(ConnectionSecret.parse(next)), now(), connectionId);
     return true;

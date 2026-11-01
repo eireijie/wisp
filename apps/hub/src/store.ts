@@ -951,10 +951,10 @@ export class Store {
   run(runId: string) {
     return this.db
       .prepare(
-        "SELECT id, agent_id AS agentId, channel_id AS channelId, thread_id AS threadId, trigger_message_id AS triggerMessageId, status, hop, discussion_id AS discussionId, phase, requested_by AS requestedBy, kind FROM runs WHERE id = ?",
+        "SELECT id, agent_id AS agentId, channel_id AS channelId, thread_id AS threadId, trigger_message_id AS triggerMessageId, status, hop, discussion_id AS discussionId, phase, requested_by AS requestedBy, kind, created_at AS createdAt, finished_at AS finishedAt FROM runs WHERE id = ?",
       )
       .get(runId) as
-      | { id: string; agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; status: string; hop: number; discussionId: string | null; phase: string | null; requestedBy: string | null; kind: "background" | null }
+      | { id: string; agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; status: string; hop: number; discussionId: string | null; phase: string | null; requestedBy: string | null; kind: "background" | null; createdAt: string; finishedAt: string | null }
       | undefined;
   }
 

@@ -246,6 +246,18 @@ export async function imageExists(engine: Engine, image: string): Promise<boolea
  * home folder lives in a volume, so sign-ins and browser profiles survive restarts, and
  * `files/` is shared with the device (the agents' working folder).
  */
+/**
+ * Writes stdin to a file in the VM, swapped in whole. A private file (and the folders made for it)
+ * is never readable by others, not even until the chmod; a failed write leaves nothing. Exported for tests.
+ */
+export function writeFileScript(vmPath: string, mode: string): string {
+  const priv = (parseInt(mode, 8) & 0o077) === 0;
+  return `${priv ? "umask 077; " : ""}mkdir -p "$(dirname '${vmPath}')" && tmp='${vmPath}'.$$.tmp; if cat > "$tmp" && chmod ${mode} "$tmp" && mv -f "$tmp" '${vmPath}'; then :; else rm -f "$tmp"; exit 1; fi`;
+}
+
+/** $1 is the connections folder; the rest are the connection ids to keep. Exported for tests. */
+export const PRUNE_CONNECTIONS_SCRIPT = `dir="$1"; shift; cd "$dir" 2>/dev/null || exit 0; for d in *; do [ -e "$d" ] || continue; keep=; for k in "$@"; do [ "$d" = "$k" ] && keep=1; done; [ -n "$keep" ] || rm -rf -- "$d"; done`;
+
 export class DockerVm implements Driver {
   readonly label = "Linux VM";
   private desktop: X11Driver;
@@ -474,10 +486,22 @@ export class DockerVm implements Driver {
     await exec(this.bin, ["exec", this.name, "sh", "-c", `p=$(cat ${pidFile} 2>/dev/null) && { kill -TERM -$p 2>/dev/null || kill -TERM $p; }; rm -f ${pidFile}`], { timeoutMs: 15_000 }).catch(() => undefined);
   }
 
+  /** A run is over: the files it had put in the VM (its tools' config has tokens in it) and its pid file go. */
+  async cleanupRun(runId: string) {
+    const safe = runId.replace(/[^\w-]/g, "");
+    await exec(this.bin, ["exec", "-u", this.user, this.name, "rm", "-rf", `/tmp/wisp-run-${safe}`, `/tmp/wisp-run-${safe}.pid`], { timeoutMs: 15_000 });
+  }
+
   /** Put a file in the VM (as wisp), e.g. Wisp's tools for harnesses that run in here. */
   async writeFile(vmPath: string, content: string | Buffer, mode = "644") {
     await this.ready();
-    await must(this.bin, ["exec", "-i", "-u", this.user, this.name, "sh", "-c", `mkdir -p "$(dirname '${vmPath}')" && cat > '${vmPath}' && chmod ${mode} '${vmPath}'`], { input: content, timeoutMs: 60_000 });
+    await must(this.bin, ["exec", "-i", "-u", this.user, this.name, "sh", "-c", writeFileScript(vmPath, mode)], { input: content, timeoutMs: 60_000 });
+  }
+
+  /** Remove the folders of model connections not in `keep` (a removed connection's sign-ins and keys). */
+  async pruneConnections(keep: string[]) {
+    await this.ready();
+    await exec(this.bin, ["exec", "-u", this.user, this.name, "sh", "-c", PRUNE_CONNECTIONS_SCRIPT, "sh", `${this.home}/.wisp/connections`, ...keep], { timeoutMs: 30_000 });
   }
 
   /** A file in the VM (as wisp), or null when it isn't there. */

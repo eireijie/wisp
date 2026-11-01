@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { HarnessLogins, findLink, withheld } from "../../node/src/harness-login.ts";
 import { ModelLogins } from "../../node/src/model-login.ts";
 
@@ -88,7 +90,8 @@ describe("harness sign-ins", () => {
   });
 
   it("removes sign-in scratch folders when the device stops", () => {
-    const logins = new ModelLogins(() => {});
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-scratch-"));
+    const logins = new ModelLogins(() => {}, root);
     logins.start("ml_1", "anthropic", "claude-code", process.execPath);
     const dirs = logins.scratch;
     expect(dirs).toHaveLength(1);
@@ -96,5 +99,22 @@ describe("harness sign-ins", () => {
     logins.stopAll();
     expect(fs.existsSync(dirs[0])).toBe(false);
     expect(logins.scratch).toEqual([]);
+  });
+
+  it("removes a scratch folder a crash left behind, with the sign-in in it, when the device starts again", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-scratch-"));
+    const left = path.join(root, "login-crashed", "auth.json");
+    fs.mkdirSync(path.dirname(left));
+    fs.writeFileSync(left, '{"tokens":{"refresh_token":"left-behind"}}');
+    new ModelLogins(() => {}, root);
+    expect(fs.existsSync(left)).toBe(false);
+  });
+
+  it("keeps scratch folders inside its own root, not the shared temp folder", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-scratch-"));
+    const logins = new ModelLogins(() => {}, root);
+    logins.start("ml_2", "anthropic", "claude-code", process.execPath);
+    expect(logins.scratch[0].startsWith(root + path.sep)).toBe(true);
+    logins.stopAll();
   });
 });

@@ -18,6 +18,7 @@ import { HarnessLogins } from "./harness-login.ts";
 import { ModelLogins } from "./model-login.ts";
 import { type DockerVm } from "./computers/docker.ts";
 import { mcpBundle } from "./vm-tools.ts";
+import { NO_NODE, findNpmDir, withDir } from "./npm.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
 import { agentFolder } from "./agent-dir.ts";
 import { bringBack, mergeBranch, prepareCheckout, prepareClone } from "./git.ts";
@@ -107,7 +108,10 @@ export class NodeDaemon {
   /** sign-ins running for those accounts */
   private logins = new HarnessLogins();
   /** sign-ins to model providers this device runs for the hub (Settings → Models) */
-  private modelLogins = new ModelLogins((m) => this.send(m));
+  private modelLogins: ModelLogins;
+  /** connections whose folders may stay (null until the hub says); connections runs here are using right now */
+  private keepConnections: Set<string> | null = null;
+  private connectionsInUse = new Map<string, number>();
   /** VMs whose harnesses were listed for the hub since this process started (computer id → the listing) */
   private vmCatalogs = new Map<string, Promise<void>>();
   /** each VM's harnesses as last listed (computer id → the listing), to send again with what runs learned */
@@ -142,6 +146,7 @@ export class NodeDaemon {
     this.sessions = readJson(this.sessionsFile, {});
     this.sessionHarness = readJson(path.join(cfg.dir, "session-harness.json"), {});
     this.agentTokens = readJson(this.tokensFile, {});
+    this.modelLogins = new ModelLogins((m) => this.send(m), path.join(cfg.dir, "login-scratch"));
     this.local = this.readLocal();
     this.lock = new ScreenLock(cfg.dir, () => this.local.code);
     this.remoteServer = new RemoteDesktopServer(cfg.dir, log);
@@ -382,7 +387,10 @@ export class NodeDaemon {
           this.send({ type: "result", requestId: msg.requestId, ok: true, result });
           if (msg.action.action === "start") this.send({ type: "computer_status", computerId: msg.computer.id, status: "ready", text: "" });
           // a VM that just came up: tell the hub which harnesses (and models) it has
-          if (msg.action.action === "start" && msg.computer.kind === "vm") void this.sendVmCatalog(msg.computer);
+          if (msg.action.action === "start" && msg.computer.kind === "vm") {
+            void this.sendVmCatalog(msg.computer);
+            void this.sweepVmConnections(msg.computer);
+          }
           if (msg.action.action === "destroy") this.forgetVm(msg.computer.id);
         },
         (err) => {
@@ -486,6 +494,10 @@ export class NodeDaemon {
       }
     } else if (msg.type === "computer_catalog") {
       void this.sendVmCatalog(msg.computer, true);
+    } else if (msg.type === "connections_keep") {
+      this.keepConnections = new Set(msg.connectionIds.map(safeId));
+      this.sweepConnections();
+      for (const c of msg.computers) void this.sweepVmConnections(c);
     } else if (msg.type === "harness_settings" || msg.type === "harness_settings_change" || msg.type === "harness_skill" || msg.type === "harness_open_config" || msg.type === "harness_account") {
       this.harnessSettings(msg).then(
         (result) => this.send({ type: "result", requestId: msg.requestId, ok: true, result }),
@@ -571,12 +583,18 @@ export class NodeDaemon {
     }
     // the connection goes where the harness reads it: its environment, or a folder of its own (kept, for resuming)
     let credential: PreparedCredential | null = null;
+    let usedConnection: string | null = null;
     if (run.credential && support) {
+      const used = safeId(run.credential.connectionId);
+      this.keepConnections?.add(used);
+      this.connectionsInUse.set(used, (this.connectionsInUse.get(used) ?? 0) + 1);
+      usedConnection = used;
       try {
         const baseHome = inside ? `${vm!.home}/${VM_HARNESS_DIR[agent.harness] ?? ".config"}` : this.accounts.dir(agent.harness, this.accounts.accountOf(agent.id, agent.harness));
         const connectionHome = inside ? `${vm!.home}/.wisp/connections/${safeId(run.credential.connectionId)}/${agent.harness}` : path.join(this.cfg.dir, "connections", safeId(run.credential.connectionId), agent.harness);
         credential = await prepareCredential(agent.harness, run.credential, { fs: inside ? vmCredentialFs(vm!) : localCredentialFs, baseHome, connectionHome });
       } catch (err) {
+        this.connectionDone(usedConnection);
         return this.send({ type: "run_failed", runId: run.runId, error: `couldn't use the ${providerLabel(run.credential.provider)} connection: ${(err as Error).message}` });
       }
     }
@@ -652,6 +670,16 @@ export class NodeDaemon {
         },
       );
 
+    // a sign-in the harness renewed during the run goes back to the hub, or the next run anywhere uses a dead one.
+    // Before the run's outcome: the outcome is what lets the hub hand the sign-in to the next run waiting.
+    const reportRenewal = async () => {
+      if (!credential || !run.credential) return;
+      const renewed = await credential.refreshed().catch(() => null);
+      if (!renewed) return;
+      this.send({ type: "credential_refreshed", connectionId: run.credential.connectionId, runId: run.runId, secret: renewed });
+      this.log(`@${agent.handle}: ${providerLabel(run.credential.provider)} sign-in renewed; sent to the hub`);
+    };
+
     if (!inside) this.runningHere.set(agent.id, (this.runningHere.get(agent.id) ?? 0) + 1);
     try {
       let result;
@@ -669,24 +697,23 @@ export class NodeDaemon {
       }
       // commits made inside the VM go to the device's copy of the repo, for reviews and merges
       if (inside && run.workspace) await bringBack(this.cfg.dir, cwd, run.workspace).catch((err) => this.log(`couldn't bring ${run.workspace!.branch} back from ${run.computer!.name}: ${(err as Error).message}`));
+      await reportRenewal();
       this.send({ type: "run_done", runId: run.runId, finalText: result.finalText });
       this.log(`@${agent.handle} finished ${run.runId}`);
     } catch (err) {
       const message = abort.signal.aborted ? (abort.signal.reason === "paused" ? `stopped: ${this.cfg.name} was paused` : "cancelled") : (err as Error).message;
+      await reportRenewal();
       this.send({ type: "run_failed", runId: run.runId, error: message });
       this.log(`@${agent.handle} failed ${run.runId}: ${message}`);
     } finally {
       this.aborts.delete(run.runId);
-      // a sign-in the harness renewed during the run goes back to the hub, or the next run anywhere uses a dead one
-      if (credential && run.credential) {
-        const renewed = await credential.refreshed().catch(() => null);
-        if (renewed) {
-          this.send({ type: "credential_refreshed", connectionId: run.credential.connectionId, runId: run.runId, secret: renewed });
-          this.log(`@${agent.handle}: ${providerLabel(run.credential.provider)} sign-in renewed; sent to the hub`);
-        }
-      }
+      this.connectionDone(usedConnection);
+      if (inside) await vm!.cleanupRun(run.runId).catch(() => {});
       // the first run in a VM since this started: tell the hub what's installed in there
-      if (inside && run.computer) void this.sendVmCatalog(run.computer);
+      if (inside && run.computer) {
+        void this.sendVmCatalog(run.computer);
+        void this.sweepVmConnections(run.computer);
+      }
       if (!inside) {
         const left = (this.runningHere.get(agent.id) ?? 1) - 1;
         if (left > 0) this.runningHere.set(agent.id, left);
@@ -718,25 +745,30 @@ export class NodeDaemon {
   private async installHarness(id: string): Promise<string> {
     const pkg = harnessInfo(id)?.install?.npm;
     if (!pkg) throw new Error(`${harnessLabel(id)} isn't installed with npm; install it on ${this.cfg.name} with its own installer`);
-    const npm = process.platform === "win32" ? "npm.cmd" : path.join(path.dirname(process.execPath), "npm");
+    // look again each time: someone may have installed Node.js since the last try, and a GUI-launched app has a short PATH
+    const npmDir = findNpmDir();
+    if (!npmDir) throw new Error(`${NO_NODE}, and ${harnessLabel(id)} is installed with it. Install Node.js from https://nodejs.org, then try again.`);
+    const npm = process.platform === "win32" ? "npm.cmd" : path.join(npmDir, "npm");
+    const env = withDir(npmDir);
     this.log(`installing ${harnessLabel(id)} (${pkg})`);
     const out = await new Promise<{ code: number | null; text: string }>((resolve) => {
-      const child = spawn(fs.existsSync(npm) || process.platform === "win32" ? npm : "npm", ["install", "-g", "--no-audit", "--no-fund", pkg], { stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32" });
+      const child = spawn(npm, ["install", "-g", "--no-audit", "--no-fund", pkg], { stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32", env });
       let text = "";
       child.stdout.on("data", (d) => (text = (text + d).slice(-8000)));
       child.stderr.on("data", (d) => (text = (text + d).slice(-8000)));
       const timer = setTimeout(() => child.kill("SIGKILL"), 15 * 60_000);
-      child.on("error", (e) => (clearTimeout(timer), resolve({ code: -1, text: e.message })));
+      child.on("error", (e) => (clearTimeout(timer), resolve({ code: -1, text: (e as NodeJS.ErrnoException).code === "ENOENT" ? "ENOENT" : e.message })));
       child.on("close", (code) => (clearTimeout(timer), resolve({ code, text })));
     });
     if (out.code !== 0) {
+      if (out.text === "ENOENT") throw new Error(`${NO_NODE}, and ${harnessLabel(id)} is installed with it. Install Node.js from https://nodejs.org, then try again.`);
       const last = out.text.trim().split("\n").slice(-6).join("\n");
       throw new Error(/EACCES|permission denied/i.test(out.text) ? `npm can't write its global folder on ${this.cfg.name} (permission denied). Install it there yourself: npm install -g ${pkg}` : `npm install -g ${pkg} failed:\n${last}`);
     }
     // npm's global bin may not be on this process's PATH (a background service starts with a short one)
-    const prefix = await new Promise<string>((resolve) => execFile(npm, ["prefix", "-g"], (err, stdout) => resolve(err ? "" : stdout.trim())));
+    const prefix = await new Promise<string>((resolve) => execFile(npm, ["prefix", "-g"], { env, shell: process.platform === "win32" }, (err, stdout) => resolve(err ? "" : stdout.trim())));
     const bin = prefix && (process.platform === "win32" ? prefix : path.join(prefix, "bin"));
-    if (bin && !(process.env.PATH ?? "").split(path.delimiter).includes(bin)) process.env.PATH = `${bin}${path.delimiter}${process.env.PATH ?? ""}`;
+    for (const dir of [bin, npmDir]) if (dir && !(process.env.PATH ?? "").split(path.delimiter).includes(dir)) process.env.PATH = `${dir}${path.delimiter}${process.env.PATH ?? ""}`;
     this.log(`installed ${harnessLabel(id)}`);
     return out.text.trim().split("\n").slice(-3).join("\n");
   }
@@ -812,6 +844,31 @@ export class NodeDaemon {
     return this.logins.start(harness, action.account, { command: this.registry[harness]?.binary || cmd.command, args: cmd.args, env });
   }
 
+
+  /** A run stopped using a connection: if that connection was removed meanwhile, its folder can go now. */
+  private connectionDone(id: string | null) {
+    if (!id) return;
+    const left = (this.connectionsInUse.get(id) ?? 1) - 1;
+    if (left > 0) this.connectionsInUse.set(id, left);
+    else this.connectionsInUse.delete(id);
+    this.sweepConnections();
+  }
+
+  /** Remove this device's folders of connections it may no longer keep (their sign-ins and keys are in them). */
+  private sweepConnections() {
+    if (!this.keepConnections) return;
+    const root = path.join(this.cfg.dir, "connections");
+    const names = fs.existsSync(root) ? fs.readdirSync(root) : [];
+    for (const name of names) if (!this.keepConnections.has(name) && !this.connectionsInUse.has(name)) fs.rmSync(path.join(root, name), { recursive: true, force: true });
+  }
+
+  /** The same inside a VM, when it's up (one that's down is swept when it next starts). */
+  private async sweepVmConnections(spec: ComputerSpec) {
+    if (!this.keepConnections || spec.kind !== "vm") return;
+    const vm = await this.computers.vm(spec).catch(() => null);
+    if (!vm || !(await vm.isRunning().catch(() => false))) return;
+    await vm.pruneConnections([...this.keepConnections, ...this.connectionsInUse.keys()]).catch((err) => this.log(`couldn't clear removed connections from ${spec.name}: ${(err as Error).message}`));
+  }
 
   /**
    * The harnesses that come with a VM, as installed in it, with their models: what agents that run
