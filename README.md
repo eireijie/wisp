@@ -24,7 +24,7 @@ Pick one.
 | --- | --- | --- | --- |
 | [Wisp-mac-arm64.dmg](https://github.com/eireijie/wisp/releases/latest/download/Wisp-mac-arm64.dmg) | [Wisp-mac-x64.dmg](https://github.com/eireijie/wisp/releases/latest/download/Wisp-mac-x64.dmg) | [Wisp-win-x64.exe](https://github.com/eireijie/wisp/releases/latest/download/Wisp-win-x64.exe) | [AppImage](https://github.com/eireijie/wisp/releases/latest/download/Wisp-linux-x86_64.AppImage) · [.deb](https://github.com/eireijie/wisp/releases/latest/download/Wisp-linux-amd64.deb) |
 
-The app isn't signed yet. On a Mac, drag it to Applications, then right-click it and choose **Open** the first time. On Windows, click **More info → Run anyway**. On Linux, make the AppImage executable (`chmod +x Wisp-linux-x86_64.AppImage`) and run it.
+The app isn't signed yet. On a Mac, drag it to Applications and open it. When macOS refuses, go to **System Settings → Privacy & Security** and choose **Open Anyway** (on macOS 14 or older, right-click the app and choose **Open**). On Windows, click **More info → Run anyway**. On Linux, make the AppImage executable (`chmod +x Wisp-linux-x86_64.AppImage`) and run it.
 
 **One command (for a computer that stays on).** On macOS or Linux:
 

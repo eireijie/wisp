@@ -3,7 +3,8 @@ name: App release
 # Linux and Android and attach the builds to a GitHub release, marked latest. Installed apps find it there and update
 # themselves (apps/desktop/src/updater.cjs). The file names never change between versions, so
 # The repository's releases/latest/download/<name> URL always links the newest one.
-# Builds are unsigned for now (Macs: ad hoc, see scripts/after-sign.cjs).
+# Macs are signed and notarized when the repository has the Apple secrets (docs/signing.md), and signed
+# ad hoc without them (scripts/after-sign.cjs). Windows builds are unsigned for now.
 on:
   push:
     tags: ["desktop-v*"]
@@ -51,8 +52,30 @@ jobs:
       - run: npm run bundle -w @wisp/desktop
         env:
           WISP_BUNDLE_ARCH: ${{ matrix.arch }}
-      - run: npx electron-builder ${{ matrix.dist }} --publish never
+      - run: |
+          # Only Macs get these, and only when set: electron-builder would read CSC_LINK as a Windows certificate too
+          if [ "$RUNNER_OS" = "macOS" ] && [ -n "$MAC_CERT" ]; then
+            export CSC_LINK="$MAC_CERT" CSC_KEY_PASSWORD="$MAC_CERT_PASSWORD" APPLE_ID="$NOTARY_APPLE_ID" APPLE_APP_SPECIFIC_PASSWORD="$NOTARY_PASSWORD" APPLE_TEAM_ID="$NOTARY_TEAM_ID"
+          fi
+          npx electron-builder ${{ matrix.dist }} --publish never
+        shell: bash
         working-directory: apps/desktop
+        env:
+          MAC_CERT: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          NOTARY_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      # a signed build has to pass Gatekeeper before it reaches the release
+      - if: runner.os == 'macOS'
+        run: |
+          [ -n "$MAC_CERT" ] || { echo "No Apple secrets: this build is signed ad hoc"; exit 0; }
+          app=$(find apps/desktop/dist -maxdepth 2 -iname '*.app' | head -n 1)
+          codesign --verify --deep --strict "$app"
+          spctl --assess --type execute --verbose "$app"
+          xcrun stapler validate "$app"
+        env:
+          MAC_CERT: ${{ secrets.MAC_CERT_P12_BASE64 }}
       - run: gh release upload "$GITHUB_REF_NAME" apps/desktop/dist/Wisp-* --clobber
         shell: bash
         env:

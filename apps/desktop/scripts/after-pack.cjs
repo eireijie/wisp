@@ -14,4 +14,9 @@ exports.default = async function afterPack(context) {
   const to = path.join(resources, "wisp");
   fs.rmSync(to, { recursive: true, force: true });
   fs.cpSync(from, to, { recursive: true, verbatimSymlinks: true });
+  // A Mac app signs every binary it carries, and native modules for other systems can't be signed or notarized.
+  if (context.electronPlatformName === "darwin") {
+    const prebuilds = path.join(to, "node_modules", "better-sqlite3", "prebuilds");
+    if (fs.existsSync(prebuilds)) for (const f of fs.readdirSync(prebuilds)) if (!f.startsWith("darwin-")) fs.rmSync(path.join(prebuilds, f), { recursive: true });
+  }
 };
