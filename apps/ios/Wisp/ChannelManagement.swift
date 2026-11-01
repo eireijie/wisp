@@ -28,7 +28,7 @@ struct ChannelTeamScreen: View {
       } else {
         Section {
           Text(saved.nodes.isEmpty
-            ? "\(current.name) has no team yet, so only agents someone @mentions (or the one that answers here) reply. Draw how it works, or add agents and make one of them a lead."
+            ? "\(current.name) has no steps yet, so only agents someone @mentions (or the one that answers here) reply. Draw how it works, or add agents and make one of them a lead."
             : "The leads read every new message in \(current.name) and hand out the work along the arrows.")
             .font(.subheadline).foregroundStyle(.secondary)
           if editable { Button("Draw how it works") { building = true } }

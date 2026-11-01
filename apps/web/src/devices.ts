@@ -68,6 +68,21 @@ export function usableDevices(devices: DeviceInfo[]): DeviceInfo[] {
   return devices.filter((d) => d.mine || d.shared);
 }
 
+/** The agents that run on a device, the one count every screen shows. */
+export function agentsOnDevice<A extends { nodeId: string | null }>(agents: A[], deviceId: string): A[] {
+  return agents.filter((a) => a.nodeId === deviceId);
+}
+
+/**
+ * Who can really ask this agent: what the hub enforces, not just the saved choice. An agent running
+ * directly on a private device answers only that device's owner until the owner opens it up.
+ */
+export function whoCanAsk(agent: Pick<Agent, "harness" | "settings" | "computerId">, device: { shared?: boolean } | undefined): "me" | "anyone" | "people" {
+  const direct = !!device && !(runsInVm(agent.harness) && agent.settings?.runIn === "computer" && !!agent.computerId);
+  if (direct && !agent.settings?.anyoneCanAsk && !device?.shared) return "me";
+  return agent.settings?.respondTo ?? "anyone";
+}
+
 /** Is the agent's harness signed in where it runs? null when nobody can tell. Hub connections bring their own sign-in. */
 export function agentSignedIn(agent: Pick<Agent, "id" | "harness" | "settings" | "computerId">, device: DeviceInfo): boolean | null {
   if (agent.settings?.connectionId) return true;

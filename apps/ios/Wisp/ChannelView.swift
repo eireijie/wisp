@@ -305,6 +305,11 @@ struct ThreadView: View {
 
   private var root: Message? { store.message(ref.rootId, in: ref.channelId) }
   private var replies: [Message] { store.threads[ref.rootId] ?? [] }
+  /** the same count the chat shows, so an unloaded thread never says a false "0" */
+  private var threadCountLine: String {
+    let n = max(store.threads[ref.rootId]?.count ?? 0, store.replyCounts[ref.rootId] ?? 0)
+    return n == 1 ? "1 reply" : "\(n) replies"
+  }
   /** the thread this one branched off from */
   private var parent: String? { root?.threadId }
   private var below: [Agent] { store.working(in: ref.channelId, thread: ref.rootId).filter { store.activityThread[$0.id] != ref.rootId } }
@@ -340,7 +345,7 @@ struct ThreadView: View {
         if let root {
           if let task = handoffTask { HandoffBrief(message: root, taskId: task) } else { ThreadRoot(message: root) }
           HStack {
-            Text(replies.count == 1 ? "1 reply" : "\(replies.count) replies").font(.system(size: 13)).foregroundStyle(Palette.muted)
+            Text(threadCountLine).font(.system(size: 13)).foregroundStyle(Palette.muted)
             VStack { Rectangle().fill(Palette.separator).frame(height: 1) }
           }
           .padding(.horizontal, 18)
@@ -605,9 +610,10 @@ struct EmptyChannel: View {
 
   private func intro(_ team: ChannelTeam?) -> String {
     let head = channel.topic.isEmpty ? "This is the start of the team. " : "\(channel.topic.trimmingCharacters(in: CharacterSet(charactersIn: ".!? "))). "
-    guard let team else { return head + "Add the agents who will work here." }
+    let none = (channel.memberCount ?? 0) > 1 ? "@mention an agent to ask them." : "Add the agents who will work here."
+    guard let team else { return head + none }
     let leads = team.leads.compactMap { store.agent($0)?.name }
-    if leads.isEmpty { return head + "Add the agents who will work here." }
+    if leads.isEmpty { return head + none }
     return head + "\(ChannelTeam.list(leads)) \(leads.count > 1 ? "read" : "reads") every new message here and hand\(leads.count > 1 ? "" : "s") out the work."
   }
 

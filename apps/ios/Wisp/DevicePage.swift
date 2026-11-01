@@ -169,12 +169,12 @@ struct DeviceDetail: View {
           HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
               Text(title).font(.system(size: 15)).foregroundStyle(Palette.text)
-              Text(detail).font(.system(size: 13)).foregroundStyle(Palette.faint)
+              Text(id == "vms" && n.role != id ? n.vmProblem ?? detail : detail).font(.system(size: 13)).foregroundStyle(Palette.faint)
             }
             Spacer(minLength: 6)
             if n.role == id { Image(systemName: "checkmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.blue) }
           }.contentShape(Rectangle())
-        }.buttonStyle(.plain).disabled(!editable || action.busy).accessibilityIdentifier("device-role-\(id)")
+        }.buttonStyle(.plain).disabled(!editable || action.busy || (id == "vms" && n.role != id && n.vmProblem != nil)).accessibilityIdentifier("device-role-\(id)")
       }
       Toggle(isOn: Binding(get: { n.shared == true }, set: { on in action.run { try await store.updateNode(n.id, ["shared": AnyEncodable(on)]) } })) {
         VStack(alignment: .leading, spacing: 2) {
@@ -262,8 +262,8 @@ private struct AgentsHere: View {
       InlineError(error: action.error)
     } header: { Text("Agents on this computer") }
     .listRowBackground(Palette.card)
-    .confirmationDialog("Run \(headless?.name ?? "it") without a computer? It won't be able to use apps or websites.", isPresented: Binding(get: { headless != nil }, set: { if !$0 { headless = nil } }), titleVisibility: .visible, presenting: headless) { agent in
-      Button("No computer") { set(.none, agent) }
+    .confirmationDialog("Run \(headless?.name ?? "it") without a screen? It won't be able to use apps or websites.", isPresented: Binding(get: { headless != nil }, set: { if !$0 { headless = nil } }), titleVisibility: .visible, presenting: headless) { agent in
+      Button("No screen") { set(.none, agent) }
     }
   }
 
@@ -281,13 +281,13 @@ private struct AgentsHere: View {
     for vm in store.computers where vm.kind == "vm" && vm.nodeId == node.id { list.append((vm.id, vm.name)) }
     if case .computer(let id) = current, !list.contains(where: { $0.0 == id }), let c = store.computers.first(where: { $0.id == id }) { list.append((c.id, c.name)) }
     if caps?.vm?.ok == true { list.append(("new-vm", "New VM")) }
-    list.append(("none", "No computer"))
+    list.append(("none", "No screen"))
     return list
   }
 
   private func worksOnLabel(_ agent: Agent) -> String {
     if let c = store.computers.first(where: { $0.id == agent.computerId }) { return c.kind == "device" ? "This screen" : c.name }
-    return agent.computerId == nil ? "No computer" : "Its owner's screen"
+    return agent.computerId == nil ? "No screen" : "Its owner's screen"
   }
 
   private func pick(_ choice: WorksOn, _ agent: Agent) {

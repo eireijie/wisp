@@ -56,7 +56,8 @@ export function failTaskOfRun(hub: Hub, run: { agentId: string; channelId: strin
     channelId: run.channelId,
     threadId: run.threadId,
     author: { kind: "user", id: "system" },
-    body: `${from ? `@${from.handle} ` : ""}Task **${task.title}** failed: ${result}.${parent ? ` It's part of **${parent.title}** (\`${parent.id}\`); hand it out again or report back.` : " Fix the cause and hand it out again, or reopen it on the Tasks page."}`,
+    // a person just read why in the run's own message; an agent that handed it out needs the reason here
+    body: !from && !parent ? `Task **${task.title}** failed. Try again above, or from the Tasks page.` : `${from ? `@${from.handle} ` : ""}Task **${task.title}** failed: ${result}.${parent ? ` It's part of **${parent.title}** (\`${parent.id}\`); hand it out again or report back.` : " Fix the cause and hand it out again, or reopen it on the Tasks page."}`,
     hop: 1,
     // only an agent that handed the work out gets woken; a person sees it on the Tasks page
     route: !!from,

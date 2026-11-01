@@ -43,7 +43,7 @@ struct AgentPage: View {
           CardGroup {
             link("Model", id: "agent-model", icon: "dial.medium", value: AgentLine.model(agent: current, catalog: catalog)) { AgentModelPage(agent: current) }
             if store.canViewComputers {
-              link("Computer", id: "agent-computer", icon: "desktopcomputer", value: AgentLine.computer(agent: current, computer: computer)) { AgentComputerView(agent: current) }
+              link("Computer", id: "agent-computer", icon: "desktopcomputer", value: AgentLine.computer(agent: current, computer: computer, device: store.nodes.first { $0.id == current.nodeId })) { AgentComputerView(agent: current) }
             }
             if store.features.routines {
               link("Routines", id: "agent-routines", icon: "clock", value: AgentLine.routines(routines)) { RoutinesView(agent: current) }
@@ -53,7 +53,7 @@ struct AgentPage: View {
           }
           CardGroup {
             if canAsk {
-              link("Who can ask it", id: "agent-who", icon: "person.2", value: AgentLine.respond(current)) { AgentWhoPage(agent: current) }
+              link("Who can ask it", id: "agent-who", icon: "person.2", value: AgentLine.respond(current, device: store.nodes.first { $0.id == current.nodeId })) { AgentWhoPage(agent: current) }
             }
             if store.features.background {
               link("Background", id: "agent-background", icon: "moon", value: backgroundValue) { BackgroundView(agent: current) }

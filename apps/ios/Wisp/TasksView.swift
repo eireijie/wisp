@@ -163,6 +163,7 @@ struct TaskDetail: View {
   var taskId: String
   var root = false
   @State private var cancelling = false
+  @State private var retrying = FormAction()
   @State private var merging = false
   @State private var editing = false
   @State private var output: String?
@@ -258,6 +259,10 @@ struct TaskDetail: View {
         if let result = t.result, !result.isEmpty {
           InboxHead(title: t.cancelled ? "Cancelled" : t.status == "failed" ? "What happened" : "Result")
           note { NoteMarkdown(text: result) }
+        }
+        if state == "Failed" {
+          PillButton(title: "Try again", busy: retrying.busy, id: "task-retry") { retrying.run { try await store.retryTask(t.id) } }
+          InlineError(error: retrying.error)
         }
         if channel != nil, t.closed || store.taskWaiting(t) != nil || state == "Working" {
           if let channel {

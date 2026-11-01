@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CHANNEL_SETTINGS, builtinRules, channelTeams, covers, pickReviewer, teamChain, teamOf, teamProblem, LoopGuard, parseMentions, parseSubjectKey, accessChecker, signInProblem, startupRules, subjectKey, type AccessRule, type Channel, type ChannelTeam, type Viewer } from "../src/index.ts";
+import { DEFAULT_CHANNEL_SETTINGS, builtinRules, channelTeams, covers, pickReviewer, teamChain, teamOf, teamProblem, LoopGuard, parseMentions, parseSubjectKey, accessChecker, signInProblem, plainFailure, startupRules, subjectKey, type AccessRule, type Channel, type ChannelTeam, type Viewer } from "../src/index.ts";
 
 describe("parseMentions", () => {
   it("finds handles, ignores emails and code", () => {
@@ -181,6 +181,16 @@ describe("default ghost", () => {
     }
     const shapes = new Set(Array.from({ length: 40 }, (_, i) => defaultAppearance(`agent-${i}`).shape));
     expect(shapes.size).toBeGreaterThan(2); // agents don't all look alike
+  });
+});
+
+describe("plainFailure", () => {
+  it("keeps a failure readable: no backticks, paths or system errors", () => {
+    expect(plainFailure("run `claude` first")).toBe("run claude first");
+    expect(plainFailure("Couldn't read /Users/me/.hermes/config.yaml please")).toBe("Couldn't read a file please");
+    expect(plainFailure("Error: ENOENT: no such file or directory, open '/x/y'")).toContain("Try again");
+    expect(plainFailure("harness crashed\n    at foo (/a/b.js:1:1)")).toBe("harness crashed");
+    expect(plainFailure("")).toBe("It stopped before it finished.");
   });
 });
 

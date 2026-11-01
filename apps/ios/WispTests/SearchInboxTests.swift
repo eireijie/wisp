@@ -13,6 +13,19 @@ final class SearchInboxTests: XCTestCase {
     ReadyDevice(id: id, name: "Studio Mac", online: online, paused: paused, harnesses: harnesses)
   }
 
+  func testSignInStateReachesReadiness() {
+    let h = { (signed: Bool?) in AgentNode.Harness(id: "codex", version: nil, accounts: ["default": signed]) }
+    let a = agent("a1", harness: "codex", node: "n1")
+    var d = device(); d.details = [h(false)]
+    XCTAssertEqual(Readiness.ready(a, devices: [d]).problem, "Codex isn't signed in")
+    XCTAssertEqual(Readiness.checks(agents: [a], devices: [d]).last?.to, .signIn(agentId: "a1"))
+    d.details = [h(true)]
+    XCTAssertTrue(Readiness.ready(a, devices: [d]).ready)
+    d.details = [h(nil)]
+    XCTAssertTrue(Readiness.ready(a, devices: [d]).ready, "never flags what it can't tell")
+    XCTAssertEqual(Readiness.checks(agents: [a], devices: [d]).last?.status, .unknown)
+  }
+
   func testSearchResultsDecode() throws {
     let json = ##"""
     {"channels":[{"id":"c1","name":"general","kind":"channel","topic":"Hello","createdAt":"2026-10-18T12:00:00Z"}],
@@ -83,7 +96,8 @@ final class SearchInboxTests: XCTestCase {
     XCTAssertEqual(checks.first { $0.id == "harness" }?.status, .unknown)
     XCTAssertTrue(Readiness.ready(agent("a1", node: "n1"), devices: [device(harnesses: [])]).ready)
     // all good; and helpers that join from outside need no device
-    checks = Readiness.checks(agents: [agent("a1", node: "n1")], devices: [device()])
+    var signedIn = device(); signedIn.details = [AgentNode.Harness(id: "codex", version: nil, accounts: ["default": true])]
+    checks = Readiness.checks(agents: [agent("a1", node: "n1")], devices: [signedIn])
     XCTAssertFalse(checks.contains { $0.status != .ok })
     XCTAssertTrue(Readiness.ready(agent("g1", harness: "grok"), devices: []).ready)
     // a ready helper is picked before a broken one

@@ -401,6 +401,7 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
   const prefs = usePrefs();
   const agent = ctx.agents.find((a) => a.id === t.toAgentId);
   const state = ctx.stateOf(t);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const note = ctx.waitingOn(t);
   const subs = ctx.children.get(t.id) ?? [];
   const name = agent?.name ?? "The agent";
@@ -553,6 +554,14 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
               <button onClick={conversation} className="self-start text-sm text-accent-text hover:underline">
                 Open conversation
               </button>
+            )}
+            {state === "failed" && ctx.canCancel && (
+              <div className="pt-1 flex flex-wrap items-center gap-2">
+                <CardButton tone="primary" onClick={() => void api("POST", `/api/tasks/${t.id}/retry`).then(ctx.refetch, (e) => setRetryError((e as Error).message))}>
+                  Try again
+                </CardButton>
+                {retryError && <span className="text-sm text-bad">{retryError}</span>}
+              </div>
             )}
           </GroupCard>
         </>

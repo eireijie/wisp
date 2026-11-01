@@ -23,8 +23,9 @@ export function ComputersView({ computerId, teach, deviceId }: { computerId: str
   const devices = useDevices();
   const selected = computers.find((c) => c.id === computerId);
 
+  const [computersChecked, setComputersChecked] = useState(false);
   useEffect(() => {
-    if (me?.role !== "guest") useStore.getState().refreshComputers();
+    if (me?.role !== "guest") void Promise.resolve(useStore.getState().refreshComputers()).finally(() => setComputersChecked(true));
   }, [me?.role]);
 
   if (me?.role === "guest") return null;
@@ -36,7 +37,7 @@ export function ComputersView({ computerId, teach, deviceId }: { computerId: str
     if (!selected)
       return (
         <ComputersShell>
-          <div className="flex-1 grid place-items-center text-sm text-muted">{computers.length ? "That computer is gone." : "Loading…"}</div>
+          <div className="flex-1 grid place-items-center text-sm text-muted text-center px-4">{computersChecked ? <p>That computer is gone. <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>See your computers</a></p> : "Loading…"}</div>
         </ComputersShell>
       );
     return <ComputerDetail key={selected.id} computer={selected} devices={devices} teach={teach} />;

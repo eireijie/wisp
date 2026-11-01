@@ -136,6 +136,10 @@ struct ReadinessCheckRow: View {
     case .makeHelper: if store.canManage { Button("Fix this", action: makeHelper).buttonStyle(.pill(.secondary, small: true)) }
     case .chooseDevice(let id), .chooseModel(let id):
       if let a = store.agent(id) { NavigationLink { AgentPage(agent: a) } label: { Text("Fix this") }.buttonStyle(.pill(.secondary, small: true)) }
+    case .signIn(let id):
+      if let a = store.agent(id) {
+        NavigationLink { if a.settings?.runIn == "computer" && a.computerId != nil { AgentComputerView(agent: a) } else { HarnessesView() } } label: { Text("Sign in") }.buttonStyle(.pill(.secondary, small: true))
+      }
     case .devices: Button { store.route = .device(id: nil) } label: { Text("Fix this") }.buttonStyle(.pill(.secondary, small: true))
     case nil: EmptyView()
     }

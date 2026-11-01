@@ -4,7 +4,7 @@ import type { Agent } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href, useRoute } from "../router.ts";
-import { osName, useDevices, type DeviceInfo } from "../devices.ts";
+import { agentsOnDevice, osName, useDevices, type DeviceInfo } from "../devices.ts";
 import { AddDeviceDialog } from "../components/AddDevice.tsx";
 import { ScreenThumb, WorkingBadge } from "../components/Screen.tsx";
 import { AgentAvatar, Button, Menu, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
@@ -168,7 +168,7 @@ export function ComputerTree() {
         const st = deviceStatus(device);
         return (
           <div key={device.id}>
-            {treeRow(device.id, href({ view: "computers", computerId: null, deviceId: device.id }), <Laptop size={18} strokeWidth={1.8} />, device.name, [device.mine ? null : (device.ownerName ?? "Shared"), list.length ? `${agentCount(list)} agent${agentCount(list) === 1 ? "" : "s"}` : st.label].filter(Boolean).join(" · "), st.tone, activeDevice === device.id, false)}
+            {treeRow(device.id, href({ view: "computers", computerId: null, deviceId: device.id }), <Laptop size={18} strokeWidth={1.8} />, device.name, [device.mine ? null : (device.ownerName ?? "Shared"), (() => { const count = agentsOnDevice(agents, device.id).length; return count ? `${count} agent${count === 1 ? "" : "s"}` : st.label; })()].filter(Boolean).join(" · "), st.tone, activeDevice === device.id, false)}
             {list.map((c) => computerRow(c, true))}
           </div>
         );
@@ -178,10 +178,6 @@ export function ComputerTree() {
       {add.element}
     </div>
   );
-}
-
-function agentCount(list: ComputerInfo[]) {
-  return new Set(list.flatMap((c) => c.agents)).size;
 }
 
 // --- the overview ---------------------------------------------------------------------------------------
@@ -339,7 +335,7 @@ function DeviceGroupCard({ device: n, list, agents, isOwner, actions }: { device
     ...(isOwner && n.online && !busy ? [{ label: "Update Wisp", icon: <Download size={15} />, onSelect: () => void actions.update(n) }] : []),
     ...(n.mine || isOwner ? [{ label: "Remove device", icon: <Trash2 size={15} />, danger: true, onSelect: () => void actions.remove(n) }] : []),
   ];
-  const count = agentCount(list);
+  const count = agentsOnDevice(agents, n.id).length;
   return (
     <section className="rounded-3xl bg-card border border-line p-4 space-y-3.5">
       <div className="flex items-center gap-3">

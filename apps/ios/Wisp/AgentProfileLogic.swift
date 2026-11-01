@@ -25,7 +25,7 @@ enum AgentLine {
   }
 
   /** The Computer row: what state the agent's computer is in, or that it has none. */
-  static func computer(agent: Agent, computer: Computer?) -> String {
+  static func computer(agent: Agent, computer: Computer?, device: AgentNode? = nil) -> String {
     if agent.status == .busy { return "Working" }
     if let computer {
       switch computer.status {
@@ -38,7 +38,7 @@ enum AgentLine {
       }
     }
     if agent.computerId != nil { return "Ready" }
-    return agent.settings?.headless == true ? "Headless" : "None yet"
+    return agent.settings?.headless == true ? "Headless" : device?.name ?? "None yet"
   }
 
   /** The Routines row: how many are on. */
@@ -50,9 +50,16 @@ enum AgentLine {
   /** The Skills row. */
   static func count(_ n: Int) -> String { n == 0 ? "None" : "\(n)" }
 
+  /** Who can really ask it: what the hub enforces. On a private device it runs directly on, only that device's owner until they open it up. */
+  static func askMode(_ agent: Agent, device: AgentNode?) -> String {
+    let inComputer = Readiness.runsInVm(agent.harness) && agent.settings?.runIn == "computer" && agent.computerId != nil
+    if let device, !inComputer, agent.settings?.anyoneCanAsk != true, device.shared != true { return "me" }
+    return agent.settings?.respondTo ?? "anyone"
+  }
+
   /** Who can ask it, in the row's words. */
-  static func respond(_ agent: Agent) -> String {
-    switch agent.settings?.respondTo ?? "anyone" {
+  static func respond(_ agent: Agent, device: AgentNode? = nil) -> String {
+    switch askMode(agent, device: device) {
     case "me": "Only me"
     case "people": "Picked"
     default: "Anyone"

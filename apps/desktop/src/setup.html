@@ -364,7 +364,7 @@
   const show = (id) => {
     SCREENS.forEach((s) => ($(s).hidden = s !== id));
     document.querySelector("main")?.setAttribute("data-screen", id);
-    $("back").hidden = ["welcome", "installing", "ready", "waiting", "starting", "unreachable"].includes(id);
+    $("back").hidden = ["welcome", "installing", "ready", "waiting", "starting", "unreachable"].includes(id) && !(id === "welcome" && state.canReturn);
   };
   const err = (id, msg) => { $(id).hidden = !msg; $(id).textContent = msg || ""; };
 
@@ -529,7 +529,7 @@
   $("cancel-join").onclick = goJoin;
   $("join-again").onclick = goJoin;
   window.addEventListener("beforeunload", stopJoin);
-  document.querySelectorAll("[data-back]").forEach((b) => (b.onclick = goWelcome));
+  document.querySelectorAll("[data-back]").forEach((b) => (b.onclick = () => (document.querySelector("main")?.getAttribute("data-screen") === "welcome" && state.canReturn ? setup.returnToServer() : goWelcome())));
   $("retry").onclick = () => { show("starting"); setup.retry(); };
   $("switch").onclick = goWelcome;
   async function startWisp() {

@@ -11,6 +11,7 @@ import { renderMarkdown } from "../markdown.ts";
 import { LookPanel } from "./LookEditor.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { Intro, SaveBar } from "./SettingsParts.tsx";
+import { useFeatures } from "../features.ts";
 import { AccessPanel, EditAgent, MemoryPanel, AppsPanel, OverviewRows, PageHead, RemovePanel, SkillsPanel, TAB_TITLES } from "./AgentSections.tsx";
 import { AgentAvatar, Button, CopyBlock, Field, harnessLabel, Input, Pill, StatusChip, Textarea, cx, timeAgo } from "../components/ui.tsx";
 import { LEVEL_LABEL, pathLabel, subjectLabel } from "../components/AccessDialog.tsx";
@@ -51,7 +52,11 @@ export const agentSections = () => SIDE.map((i) => i.id);
  * mounted so drafts survive switching sections; sections with unsaved changes show a dot.
  */
 export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: NodeInfo[]; tab: AgentTab | null }) {
-  const active = tab ?? "overview";
+  const features = useFeatures();
+  // a tab for a mod that's off isn't there; its old address lands on the overview
+  const offTabs: AgentTab[] = [...(features.routines ? [] : ["routines" as const]), ...(features.background ? [] : ["background" as const])];
+  const side = SIDE.filter((i) => !offTabs.includes(i.id));
+  const active = tab && !offTabs.includes(tab) ? tab : "overview";
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState<Partial<Record<AgentTab, boolean>>>({});
   const hasDirty = Object.values(dirty).some(Boolean);
@@ -152,7 +157,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
       </header>
       <div className="flex-1 min-h-0 flex">
         <nav className="hidden md:flex w-[250px] shrink-0 border-r border-line overflow-y-auto px-3.5 py-[18px] flex-col gap-0.5" aria-label="Agent sections">
-          {SIDE.map((i) => link(i.id, i.label, i.icon))}
+          {side.map((i) => link(i.id, i.label, i.icon))}
           <span className="flex-1" />
           <a href={href({ view: "agents", agentId: agent.id, tab: "remove" })} aria-current={active === "remove" ? "page" : undefined} className={cx("flex items-center gap-3 h-11 px-3.5 rounded-[14px] text-body font-medium text-bad hover:bg-hover", active === "remove" && "bg-card")}>
             <Trash2 size={18} /> Remove agent
@@ -220,7 +225,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
             </div>
           </Panel>
           <Panel show={active === "access"}>
-            <AccessPanel agent={agent} device={<WhoCanAsk agent={agent} device={nodes.find((n) => n.id === agent.nodeId)} />} />
+            <AccessPanel agent={agent} device={nodes.find((n) => n.id === agent.nodeId)} />
           </Panel>
           <Panel show={active === "background"}>
             <BackgroundPanel agent={agent} active={active === "background"} onDirty={markDirty("background")} />
@@ -837,42 +842,6 @@ function DevicePanel({ agent, nodes, onDirty, active }: { agent: FullAgent; node
  * An agent whose harness runs directly on someone's device can reach that device's files, so by
  * default only the device's owner can ask it for things. The owner can open it up.
  */
-function WhoCanAsk({ agent, device }: { agent: FullAgent; device: NodeInfo | undefined }) {
-  const refreshAgents = useStore((s) => s.refreshAgents);
-  const [error, setError] = useState<string | null>(null);
-  if (!device || !runsOnDevice(agent.harness)) return null;
-  const open = !!agent.settings.anyoneCanAsk || !!device.shared;
-  const owner = device.mine ? "you" : (device.ownerName ?? "its owner");
-  const set = async (anyone: boolean) => {
-    setError(null);
-    try {
-      await api("PATCH", `/api/agents/${agent.id}`, { settings: { anyoneCanAsk: anyone } });
-      await refreshAgents();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  return (
-    <section>
-      <Intro title="Who can ask it">
-        <p>
-          @{agent.handle} runs directly on {device.mine ? "your" : `${device.ownerName ?? "someone"}'s`} device "{device.name}", where it can reach files.{" "}
-          {device.shared ? "That device is shared with the organization, so everyone can ask it." : `So only ${owner} can ask it for things, including through other agents.`}
-        </p>
-      </Intro>
-      {device.mine && !device.shared ? (
-        <div className="grid sm:grid-cols-2 gap-2 max-w-2xl">
-          <Choice selected={!open} onClick={() => set(false)} title="Only me" body="Requests from anyone else, or from agents working for them, are turned away." />
-          <Choice selected={open} onClick={() => set(true)} title="Anyone in the organization" body="People and their agents can ask it. It still can't use your own screen for them." />
-        </div>
-      ) : (
-        <p className="text-sm text-muted">{open ? "Anyone in the organization can ask it." : `Only ${owner} can ask it.`}</p>
-      )}
-      {error && <p className="mt-2 text-sm text-bad">{error}</p>}
-    </section>
-  );
-}
-
 /** The effective reach of an access level in plain words (edit = the harness's workspace sandbox: its own folder). */
 export function accessScope(access: AccessLevel, name: string, handle: string, device: string | undefined): string {
   if (!device) return "It has no device yet, so it can't touch any files.";
@@ -937,8 +906,6 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
           </p>
         )}
       </section>
-
-      <WhoCanAsk agent={agent} device={nodes.find((n) => n.id === agent.nodeId)} />
 
       <section>
         <Intro title="In memory">
@@ -1083,10 +1050,15 @@ function RunList({ runs, compact }: { runs: RunRow[] | null; compact?: boolean }
                 <a href={`#/c/${r.channelId}${r.threadId ? `/t/${r.threadId}` : ""}`} className="block truncate hover:underline">
                   {r.kind === "background" ? "Background check" : runTitle(r.trigger) || "Message"}
                 </a>
-                {!compact && why && <span className="block text-xs text-bad truncate">{why}</span>}
+                {!compact && why && <span className="block text-xs text-bad break-words">{why.replace(/`/g, "")}</span>}
               </span>
               <span className="text-xs text-muted shrink-0 hidden sm:inline">{channel}</span>
               {secs !== null && <span className="text-xs text-faint shrink-0 tabular-nums w-10 text-right">{secs < 60 ? `${secs}s` : `${Math.round(secs / 60)}m`}</span>}
+              {!compact && r.status === "failed" && r.channelName !== null && (
+                <button type="button" className="text-xs text-accent-text hover:underline shrink-0" onClick={() => void api("POST", `/api/runs/${r.id}/retry`).catch((e) => alert((e as Error).message))}>
+                  Try again
+                </button>
+              )}
               <span className="text-xs text-faint shrink-0 w-16 text-right">{timeAgo(r.createdAt)}</span>
             </div>
             {!compact && (
@@ -1104,7 +1076,6 @@ function RunList({ runs, compact }: { runs: RunRow[] | null; compact?: boolean }
                   </div>
                   <div>Channel: {channel}</div>
                   {r.trigger && <div className="whitespace-pre-wrap break-words max-h-32 overflow-y-auto rounded-lg bg-hover px-2 py-1.5">{r.trigger}</div>}
-                  {r.error && <div className="text-bad break-words">Error: {r.error}</div>}
                 </div>
               </details>
             )}

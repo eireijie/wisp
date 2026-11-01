@@ -333,6 +333,8 @@ export type MessagePart =
   | { type: "tool_call"; name: string; input: unknown; output?: unknown }
   | { type: "file"; fileId: string; name: string }
   | { type: "status"; text: string }
+  /** the run this message reports failed: what the person can do next. retry when asking again makes sense; fix when something must be signed in first */
+  | { type: "run_failed"; runId: string; retry: boolean; fix?: "signin" | "computer" | "connection" }
   /** a quiet line from Wisp, e.g. "Round 2 of 3" */
   | { type: "notice"; text: string }
   /** the agent saved a new skill during this reply, or followed one */

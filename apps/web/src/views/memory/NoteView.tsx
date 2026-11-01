@@ -3,7 +3,7 @@ import { BookOpen, Bold, Check, ChevronRight, ExternalLink, FolderInput, Hash, H
 import { type MemoryLevel } from "@wisp/core";
 import { api } from "../../api.ts";
 import { useStore } from "../../store.ts";
-import { go, guardLeaving } from "../../router.ts";
+import { go, guardLeaving, href } from "../../router.ts";
 import { renderMarkdown } from "../../markdown.ts";
 import { Empty, Menu, cx, timeAgo, agentColor } from "../../components/ui.tsx";
 import { MoreOptions } from "../../components/MoreOptions.tsx";
@@ -190,7 +190,8 @@ export function NoteView({
       <div className="h-full flex flex-col">
         {phone && <PhoneBar title="Note" onBack={onBack} />}
         <Empty icon={<BookOpen />} title="Can't open this note">
-          {error}
+          {/not found/i.test(error) ? "It may have been moved or deleted." : error}{" "}
+          <a className="text-accent-text hover:underline" href={href({ view: "vault", path: null })}>Back to Memory</a>
         </Empty>
       </div>
     );

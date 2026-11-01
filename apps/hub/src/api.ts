@@ -1061,6 +1061,20 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return hub.postMessage({ channelId: ch.id, threadId, author: c.actor, body: body.body, replyToId, parts: [...files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })), ...(body.voice ? [{ type: "status" as const, text: "Voice message" }] : [])], hop, onBehalfOf: requesterOf(c) });
   });
 
+  /** Ask again after a failed run. Goes through the same "who can ask it" rules as a new message. */
+  app.post("/api/runs/:id/retry", async (req, reply) => {
+    const c = need(req, reply, { notGuest: true });
+    if (!c) return;
+    const run = store.run((req.params as { id: string }).id);
+    const agent = run && store.agent(run.agentId);
+    if (!run || !agent || agent.workspaceId !== c.workspaceId || !channelVisible(c, run.channelId)) return reply.code(404).send({ error: "That run is gone." });
+    if (run.status !== "failed" || !run.triggerMessageId || run.discussionId) return reply.code(409).send({ error: "This one can't be tried again. Send the message again instead." });
+    const refused = hub.whyNotAllowed(agent, c.actor.id) ?? (hub.answers(agent, c.actor.id) ? null : `${agent.name} only answers the people it was set up for.`);
+    if (refused) return reply.code(403).send({ error: refused });
+    if (store.activeRuns(agent.id).some((r) => r.triggerMessageId === run.triggerMessageId)) return reply.code(409).send({ error: `${agent.name} is already on it.` });
+    return { runId: hub.retryRun(run, c.actor.id) };
+  });
+
   app.post("/api/runs/:id/cancel", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;
@@ -1267,6 +1281,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       const screenWhy = screenProblem(after.computerId, after.nodeId);
       if (screenWhy) return reply.code(400).send({ error: screenWhy });
     }
+    // who it answers is one choice: on the owner's own device it also opens the device up (or closes it)
+    if (body.settings?.respondTo !== undefined && body.settings.anyoneCanAsk === undefined && store.node(after.nodeId ?? "")?.ownerId === c.actor.id) body.settings.anyoneCanAsk = body.settings.respondTo !== "me";
     if (body.settings?.anyoneCanAsk !== undefined) {
       const target = store.node(body.nodeId ?? agent.nodeId ?? "");
       if (target?.ownerId !== c.actor.id) return reply.code(403).send({ error: "only the device's owner decides who can ask an agent that runs on it" });
@@ -1720,6 +1736,24 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const wasFinished = task.status === "done" || task.status === "failed";
     const flowReviews = (body.status === "done" || body.status === "failed") && !wasFinished ? hub.flows.taskFinished(updated, body.verdict ?? null) : false;
     if (body.status === "done" && !flowReviews && !hub.flows.inFlow(updated)) requestReview(updated, requesterOf(c));
+    return updated;
+  });
+
+  /** Try a failed task again: it reopens and its agent gets the hand-off once more. A team's run has its own Try again. */
+  app.post("/api/tasks/:id/retry", async (req, reply) => {
+    const c = need(req, reply, { notGuest: true });
+    if (!c || c.actor.kind !== "user") return c ? reply.code(403).send({ error: "a person decides this" }) : undefined;
+    const task = store.task((req.params as { id: string }).id);
+    if (!task || task.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "That task is gone." });
+    if (task.status !== "failed") return reply.code(409).send({ error: "This task hasn't failed." });
+    if (hub.flows.inFlow(task)) return reply.code(409).send({ error: "This task is part of a team's run. Use Try again in the team's chat." });
+    const agent = task.toAgentId ? store.agent(task.toAgentId) : undefined;
+    if (!agent || !task.channelId || !task.threadId) return reply.code(409).send({ error: "Nobody has this task any more. Start a new task instead." });
+    const refused = hub.whyNotAllowed(agent, c.actor.id) ?? (hub.answers(agent, c.actor.id) ? null : `${agent.name} only answers the people it was set up for.`);
+    if (refused) return reply.code(403).send({ error: refused });
+    const updated = store.updateTask(task.id, "open")!;
+    hub.broadcast(c.workspaceId, { type: "tasks_changed" });
+    hub.dispatchRun(store.createRun({ agentId: agent.id, channelId: task.channelId, threadId: task.threadId, triggerMessageId: task.threadId, hop: 0, requestedBy: c.actor.id }));
     return updated;
   });
 

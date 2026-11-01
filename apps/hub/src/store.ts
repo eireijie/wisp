@@ -1077,7 +1077,7 @@ export class Store {
 
   /** Runs that haven't ended yet (queued or running). */
   activeRuns(agentId: string) {
-    return this.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND status IN ('queued', 'running') ORDER BY created_at").all(agentId) as { id: string }[];
+    return this.db.prepare("SELECT id, trigger_message_id AS triggerMessageId FROM runs WHERE agent_id = ? AND status IN ('queued', 'running') ORDER BY created_at").all(agentId) as { id: string; triggerMessageId: string }[];
   }
 
   activeRunCount(agentId: string): number {
