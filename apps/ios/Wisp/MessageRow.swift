@@ -46,9 +46,30 @@ struct MessageRow: View {
   @ViewBuilder private var systemLine: some View {
     if let taskId = handedTask {
       HandoffRow(message: message, taskId: taskId, replies: replies, thread: thread ?? ThreadRef(channelId: message.channelId, rootId: message.id), working: working)
+    } else if message.parts.contains(where: { if case .status("Schedule") = $0 { true } else { false } }) {
+      scheduleRow
     } else {
       plainSystemLine
     }
+  }
+
+  /** The message that opens a scheduled run: what the team was asked, and how far it's got. */
+  private var scheduleRow: some View {
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: "clock").font(.system(size: 15)).foregroundStyle(Palette.muted)
+        .frame(width: 32, height: 32).background(Circle().fill(Palette.badge))
+      VStack(alignment: .leading, spacing: 6) {
+        Text("Schedule").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+        Text(message.body).font(.system(size: 15)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
+        FlowStrip(channelId: message.channelId, threadId: message.id)
+        NavigationLink(value: thread ?? ThreadRef(channelId: message.channelId, rootId: message.id)) {
+          Text(replies == 0 ? "Open the thread" : replies == 1 ? "1 reply" : "\(replies) replies").font(.system(size: 13)).foregroundStyle(Palette.muted)
+        }
+        .buttonStyle(.plain)
+      }
+    }
+    .padding(.horizontal, 16).padding(.vertical, 8)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private var plainSystemLine: some View {

@@ -32,6 +32,7 @@ extension ChannelTeam.Step {
     case .branch: ("arrow.triangle.branch", "If / else")
     case .handOut: ("square.split.2x2", "Splits the work")
     case .custom: ("slider.horizontal.3", "Custom")
+    case .schedule: ("clock", "Schedule")
     }
   }
 
@@ -44,6 +45,7 @@ extension ChannelTeam.Step {
     case .handoff: "Hand off to a team"
     case .branch: "If / else"
     case .custom: "Custom"
+    case .schedule: "Schedule"
     }
   }
 }
@@ -154,7 +156,7 @@ struct TeamBuilder: View {
             if channelId != nil && canSaveTemplate { Button("Save as template", systemImage: "square.and.arrow.down") { naming = true } }
           } label: {
             HStack(spacing: 4) {
-              Text("\(steps.count) \(steps.count == 1 ? "step" : "steps")")
+              Text("\(team.orderedSteps.count) \(team.orderedSteps.count == 1 ? "step" : "steps")")
               Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
             }
             .font(.system(size: 15)).foregroundStyle(Palette.muted)
@@ -209,11 +211,15 @@ struct TeamBuilder: View {
     return ScrollView {
       VStack(spacing: 0) {
         if !problems.isEmpty || error != nil { problemBanner.padding(.bottom, 16) }
-        Chip(symbol: "bubble.left", text: "A message comes in")
+        // a schedule box heads the chart instead (its sheet says a message still starts the team)
+        let scheduled = steps.contains { $0.kind == .schedule }
+        if !scheduled { Chip(symbol: "bubble.left", text: "A message comes in") }
         ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
           let before = i == 0 ? 0 : rows[i - 1].count
-          Connector(from: before, to: row.count, plus: row.count == 1) {
-            adding = AddRequest(from: i == 0 ? [] : rows[i - 1].map(\.id), to: row.map(\.id), after: nil, between: true)
+          if i > 0 || !scheduled {
+            Connector(from: before, to: row.count, plus: row.count == 1) {
+              adding = AddRequest(from: i == 0 ? [] : rows[i - 1].map(\.id), to: row.map(\.id), after: nil, between: true)
+            }
           }
           HStack(alignment: .top, spacing: 10) {
             ForEach(row) { s in
@@ -265,6 +271,11 @@ struct TeamBuilder: View {
     switch kind {
     case .beside:
       next = next.inserting(fresh, beside: anchor)
+    case .schedule:
+      // it comes in front of the steps a message starts
+      let starts = ChannelTeam.startSteps(steps).map(\.id)
+      next = next.appending(fresh)
+      for s in starts { next = next.connecting(fresh.id, s) }
     default:
       if request.between {
         next = next.insertingBetween(fresh, from: request.from, to: request.to)
@@ -286,6 +297,10 @@ struct TeamBuilder: View {
     let anchorStep = team.step(anchor)
     let agent = anchorStep.flatMap { team.agentId(of: $0) } ?? steps.compactMap { team.agentId(of: $0) }.last ?? store.agents.first?.id
     switch kind {
+    case .schedule:
+      var s = ChannelTeam.Step(id: id, kind: .schedule, action: "", prompt: "")
+      s.schedule = "0 9 * * 1"; s.timezone = TimeZone.current.identifier; s.enabled = true
+      return s
     case .agent, .beside: return .init(id: id, kind: .do, action: "New step", agentId: agent)
     case .review: return .init(id: id, kind: .review, action: "Check the work", sendBackTo: anchor, maxRounds: ChannelTeam.defaultRounds, agentId: agent)
     case .ask: return .init(id: id, kind: .ask, action: "Approve before it goes on", notifyPhone: true)
@@ -396,7 +411,43 @@ private struct StepCard: View {
   private var number: Int { team.number(of: step.id) }
   private var title: String { step.action.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled step" : step.action }
 
+  private var nextText: String? {
+    guard step.enabled != false else { return "Off" }
+    let zone = step.timezone ?? "UTC"
+    guard let at = CronSchedule(step.schedule ?? "")?.nextRun(timezone: zone) else { return nil }
+    var style = Date.FormatStyle(date: .abbreviated, time: .omitted).weekday(.abbreviated)
+    style.timeZone = TimeZone(identifier: zone) ?? .current
+    return "Next: \(at.formatted(style))"
+  }
+
+  private var scheduleCard: some View {
+    Button(action: open) {
+      VStack(alignment: .leading, spacing: 6) {
+        Label("Schedule", systemImage: "clock").labelStyle(CompactLabel()).font(.system(size: 13)).foregroundStyle(Palette.muted)
+        Text(describeCron(step.schedule ?? "")).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+        if let nextText { Text(nextText).font(.system(size: 15)).foregroundStyle(Palette.muted) }
+        if let problem { Text(problem).font(.system(size: 13)).foregroundStyle(Palette.red).fixedSize(horizontal: false, vertical: true) }
+      }
+      .padding(.horizontal, 16).padding(.vertical, 14)
+      .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
+      .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+      .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(problem != nil ? Palette.red.opacity(0.6) : Palette.cardBorder))
+      .contentShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    }
+    .buttonStyle(.plain)
+    .contextMenu {
+      Button(action: open) { Label("Edit schedule", systemImage: "pencil") }
+      Button(role: .destructive, action: onDelete) { Label("Delete schedule", systemImage: "trash") }
+    }
+    .accessibilityAction(named: "Delete schedule", onDelete)
+    .accessibilityIdentifier("step-card")
+  }
+
   var body: some View {
+    if step.kind == .schedule { scheduleCard } else { stepCard }
+  }
+
+  private var stepCard: some View {
     Button(action: open) {
       HStack(alignment: .center, spacing: 14) {
         if wide { visual(size: 44) }
@@ -418,8 +469,8 @@ private struct StepCard: View {
           HStack(spacing: 8) {
             if !wide { visual(size: 22) }
             Text(who).font(.system(size: 15)).foregroundStyle(problem != nil && agent == nil && step.needsAgent ? Palette.red : Palette.muted).lineLimit(1)
-            if step.inputIds.count > 0 {
-              Text("Uses \(FlowWords.join(step.inputIds.map { String(team.number(of: $0)) }))")
+            if step.inputIds.contains(where: { team.number(of: $0) > 0 }) {
+              Text("Uses \(FlowWords.join(step.inputIds.map { team.number(of: $0) }.filter { $0 > 0 }.map(String.init)))")
                 .font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.muted)
                 .padding(.horizontal, 10).frame(height: 28).background(Capsule().fill(Palette.badge))
                 .lineLimit(1)
@@ -533,7 +584,7 @@ struct TeamHowList: View {
           .font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.top, 4)
         HStack(spacing: 12) {
           Button {
-            UIPasteboard.general.string = lines.map { "\($0.n). \($0.text)" }.joined(separator: "\n")
+            UIPasteboard.general.string = lines.map { $0.n > 0 ? "\($0.n). \($0.text)" : $0.text }.joined(separator: "\n")
             copied = true
           } label: { Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc").frame(maxWidth: .infinity) }
             .secondaryButton().controlSize(.large)
@@ -558,7 +609,10 @@ struct TeamHowLine: View {
 
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
-      Text("\(line.n)").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
+      Group {
+        if line.n > 0 { Text("\(line.n)").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted) }
+        else { Image(systemName: "clock").font(.system(size: 13)).foregroundStyle(Palette.muted) }
+      }
         .frame(width: 24, height: 24).background(Circle().fill(Palette.badge)).padding(.top, 4)
       who
       (Text(line.together ? "At the same time, " : "").foregroundColor(Palette.muted)
@@ -568,7 +622,7 @@ struct TeamHowLine: View {
       Spacer(minLength: 0)
     }
     .accessibilityElement(children: .combine)
-    .accessibilityLabel("\(line.n). \(line.text)")
+    .accessibilityLabel(line.n > 0 ? "\(line.n). \(line.text)" : line.text)
   }
 
   @ViewBuilder private var who: some View {

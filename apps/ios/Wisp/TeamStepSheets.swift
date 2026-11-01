@@ -3,7 +3,7 @@ import SwiftUI
 // The sheets of the builder: add a step, and edit one (each kind has its own fields).
 
 enum AddKind: CaseIterable {
-  case agent, beside, review, ask, handoff, branch, custom, handOut
+  case schedule, agent, beside, review, ask, handoff, branch, custom, handOut
 }
 
 private func uid(_ prefix: String) -> String {
@@ -66,11 +66,12 @@ struct AddStepSheet: View {
 
   private var kinds: [AddKind] {
     empty ? [.agent, .custom, .handOut] : request.between && request.from.isEmpty ? [.agent, .ask, .handoff, .branch, .custom, .handOut]
-      : [.agent, .beside, .review, .ask, .handoff, .branch, .custom, .handOut]
+      : [.schedule, .agent, .beside, .review, .ask, .handoff, .branch, .custom, .handOut]
   }
 
   private func title(_ k: AddKind) -> String {
     switch k {
+    case .schedule: "Schedule"
     case .agent: "Agent step"
     case .beside: "Side by side"
     case .review: "Repeat until approved"
@@ -84,6 +85,7 @@ struct AddStepSheet: View {
 
   private func blurb(_ k: AddKind) -> String {
     switch k {
+    case .schedule: "Starts the team at set times."
     case .agent: "An agent does one thing."
     case .beside: "Runs at the same time as the step above."
     case .review: "A checker sends it back, up to a limit."
@@ -97,6 +99,7 @@ struct AddStepSheet: View {
 
   private func symbol(_ k: AddKind) -> String {
     switch k {
+    case .schedule: "clock"
     case .agent: "person.crop.circle"
     case .beside: "arrow.triangle.branch"
     case .review: "arrow.triangle.2.circlepath"
@@ -229,6 +232,154 @@ private struct RoundsRow: View {
 
 // MARK: edit a step
 
+/** A cron schedule as the form's choices; anything they can't say stays as typed cron. */
+struct ScheduleChoices: Equatable {
+  enum Repeat: String, CaseIterable { case hourly = "Hourly", daily = "Daily", weekly = "Weekly", monthly = "Monthly", custom = "Custom" }
+  var repeats = Repeat.weekly
+  var minute = 0, hour = 9, day = 1, date = 1
+
+  init(cron: String) {
+    let p = cron.split(separator: " ").map(String.init)
+    guard p.count == 5, let m = Int(p[0]), p[3] == "*" else { repeats = .custom; return }
+    minute = m
+    if p[1] == "*" && p[2] == "*" && p[4] == "*" { repeats = .hourly; return }
+    guard let h = Int(p[1]) else { repeats = .custom; return }
+    hour = h
+    if p[2] == "*" && p[4] == "*" { repeats = .daily }
+    else if p[2] == "*", let d = Int(p[4]) { repeats = .weekly; day = d % 7 }
+    else if p[4] == "*", let d = Int(p[2]) { repeats = .monthly; date = d }
+    else { repeats = .custom }
+  }
+
+  /** nil for custom: its text is the cron */
+  var cron: String? {
+    switch repeats {
+    case .hourly: "\(minute) * * * *"
+    case .daily: "\(minute) \(hour) * * *"
+    case .weekly: "\(minute) \(hour) * * \(day)"
+    case .monthly: "\(minute) \(hour) \(date) * *"
+    case .custom: nil
+    }
+  }
+}
+
+/** The fields of a schedule box: what the team gets asked, and when. */
+private struct ScheduleStep: View {
+  @Environment(Store.self) private var store
+  @Binding var team: ChannelTeam
+  var stepId: String
+  var channelId: String?
+  @State private var note: String?
+  @State private var running = false
+
+  private var step: ChannelTeam.Step? { team.step(stepId) }
+  private var choices: ScheduleChoices { ScheduleChoices(cron: step?.schedule ?? "") }
+  private func change(_ edit: (inout ChannelTeam.Step) -> Void) { team = team.updating(stepId, edit) }
+  private func pick(_ edit: (inout ScheduleChoices) -> Void) {
+    var c = choices
+    edit(&c)
+    if let cron = c.cron { change { $0.schedule = cron } }
+  }
+  private var saved: Bool {
+    store.channels.first { $0.id == channelId }?.settings?.team?.steps?.contains { $0.id == stepId && $0.kind == .schedule } == true
+  }
+  private var time: Binding<Date> {
+    Binding(
+      get: { Calendar.current.date(from: DateComponents(year: 2001, month: 1, day: 1, hour: choices.hour, minute: choices.minute)) ?? Date() },
+      set: { d in
+        let t = Calendar.current.dateComponents([.hour, .minute], from: d)
+        pick { $0.hour = t.hour ?? 9; $0.minute = t.minute ?? 0 }
+      })
+  }
+  private var startsText: String {
+    let n = (step?.nexts ?? []).map { team.number(of: $0) }.filter { $0 > 0 }.sorted()
+    guard !n.isEmpty else { return "Point it at the steps it starts." }
+    return "Starts step\(n.count > 1 ? "s" : "") \(FlowWords.join(n.map(String.init))). Each result goes to the next step along the arrows. A message in the chat still starts the team too."
+  }
+
+  var body: some View {
+    let c = choices
+    Field(title: "On") {
+      Toggle("On", isOn: Binding(get: { step?.enabled != false }, set: { v in change { $0.enabled = v } }))
+        .labelsHidden().padding(.horizontal, 18).frame(minHeight: 56, alignment: .leading)
+    }
+    Field(title: "What the team gets asked") {
+      BigText(placeholder: "Put together this week's report.", text: Binding(get: { step?.prompt ?? "" }, set: { v in change { $0.prompt = v } }), id: "schedule-ask")
+    }
+    Field(title: "Repeats") {
+      Picker("Repeats", selection: Binding(get: { c.repeats }, set: { r in pick { $0.repeats = r } })) {
+        ForEach(ScheduleChoices.Repeat.allCases.filter { $0 != .custom || c.repeats == .custom }, id: \.self) { Text($0.rawValue).tag($0) }
+      }
+      .pickerStyle(.segmented).padding(12)
+    }
+    if c.repeats == .custom {
+      Field(title: "Custom schedule (cron)") {
+        TextField("0 9 * * 1-5", text: Binding(get: { step?.schedule ?? "" }, set: { v in change { $0.schedule = v } }))
+          .textInputAutocapitalization(.never).autocorrectionDisabled().font(.system(size: 15, design: .monospaced)).padding(18)
+      }
+    }
+    if c.repeats == .weekly {
+      Field(title: "Day") {
+        Picker("Day", selection: Binding(get: { c.day }, set: { d in pick { $0.day = d } })) {
+          ForEach(0..<7, id: \.self) { Text(Calendar.current.weekdaySymbols[$0]).tag($0) }
+        }
+        .pickerStyle(.menu).padding(.horizontal, 8).frame(minHeight: 56, alignment: .leading)
+      }
+    }
+    if c.repeats == .monthly {
+      Field(title: "Day of the month") {
+        Picker("Day of the month", selection: Binding(get: { c.date }, set: { d in pick { $0.date = d } })) {
+          ForEach(1...31, id: \.self) { Text("\($0)").tag($0) }
+        }
+        .pickerStyle(.menu).padding(.horizontal, 8).frame(minHeight: 56, alignment: .leading)
+      }
+    }
+    if c.repeats == .hourly {
+      Field(title: "Minute past the hour") {
+        Picker("Minute past the hour", selection: Binding(get: { c.minute }, set: { m in pick { $0.minute = m } })) {
+          ForEach([0, 15, 30, 45], id: \.self) { Text("\($0)").tag($0) }
+        }
+        .pickerStyle(.menu).padding(.horizontal, 8).frame(minHeight: 56, alignment: .leading)
+      }
+    }
+    if c.repeats == .daily || c.repeats == .weekly || c.repeats == .monthly {
+      Field(title: "Time") {
+        DatePicker("Time", selection: time, displayedComponents: .hourAndMinute).labelsHidden().padding(.horizontal, 18).frame(minHeight: 56, alignment: .leading)
+      }
+    }
+    Field(title: "Time zone", note: startsText) {
+      Picker("Time zone", selection: Binding(get: { step?.timezone ?? "UTC" }, set: { z in change { $0.timezone = z } })) {
+        ForEach(TimeZone.knownTimeZoneIdentifiers, id: \.self) { Text($0).tag($0) }
+      }
+      .pickerStyle(.menu).padding(.horizontal, 8).frame(minHeight: 56, alignment: .leading)
+    }
+    if channelId != nil {
+      VStack(alignment: .leading, spacing: 8) {
+        Button {
+          guard let channelId else { return }
+          running = true
+          note = nil
+          Task {
+            do {
+              try await store.runSchedule(channelId: channelId, stepId: stepId)
+              note = "Started. Follow it in the team's chat."
+            } catch { note = error.localizedDescription }
+            running = false
+          }
+        } label: {
+          Label("Run now", systemImage: "play").font(.system(size: 15)).foregroundStyle(Palette.text)
+            .frame(maxWidth: .infinity, minHeight: 54)
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
+        }
+        .buttonStyle(.plain).disabled(!saved || running).opacity(saved ? 1 : 0.5)
+        .accessibilityIdentifier("schedule-run")
+        if let text = note ?? (saved ? nil : "Save the team first.") { Text(text).font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 18) }
+      }
+    }
+  }
+}
+
 struct StepEditor: View {
   @Environment(Store.self) private var store
   @Binding var team: ChannelTeam
@@ -258,8 +409,9 @@ struct StepEditor: View {
             case .handoff: handoffStep(step)
             case .branch: ifStep(step)
             case .handOut: splitStep(step)
+            case .schedule: ScheduleStep(team: $team, stepId: stepId, channelId: channelId)
             }
-            Field(title: "Kind of step") { kindMenu(step) }
+            if step.kind != .schedule { Field(title: "Kind of step") { kindMenu(step) } }
             Button(role: .destructive) {
               if team.deleteNeedsConfirm(stepId) { confirmDelete = true } else { team = team.removingStep(stepId); close() }
             } label: {
@@ -333,7 +485,7 @@ struct StepEditor: View {
 
   private func kindMenu(_ step: ChannelTeam.Step) -> some View {
     Menu {
-      ForEach(ChannelTeam.Step.Kind.allCases, id: \.self) { kind in
+      ForEach(ChannelTeam.Step.Kind.allCases.filter { $0 != .schedule }, id: \.self) { kind in
         Button(ChannelTeam.Step.kindName(kind)) { team = team.retyping(stepId, to: kind, agents: store.agents.map(\.id)) }
       }
     } label: {
@@ -663,7 +815,7 @@ struct StepEditor: View {
   }
 
   private func whenText(_ step: ChannelTeam.Step) -> String {
-    let ids = step.inputIds.map { team.number(of: $0) }.sorted()
+    let ids = step.inputIds.map { team.number(of: $0) }.filter { $0 > 0 }.sorted()
     switch ids.count {
     case 0: return "At the start, with the first steps"
     case 1: return "After step \(ids[0]) finishes"

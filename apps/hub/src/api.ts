@@ -31,9 +31,11 @@ import {
   hasSteps,
   MAX_ROUNDS_LIMIT,
   layoutSteps,
+  startSteps,
   templateFromTeam,
   type TeamTemplate,
   type TeamRole,
+  type TeamStep,
   type AccessRule,
   type Actor,
   type ChannelTeam,
@@ -542,7 +544,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
           id: z.string().trim().min(1).max(60),
           // older teams name a role; steps made in the flow chart builder name their agent
           roleId: z.string().max(60).default(""),
-          kind: z.enum(["do", "review", "hand_out", "ask", "handoff", "branch", "custom"]),
+          kind: z.enum(["do", "review", "hand_out", "ask", "handoff", "branch", "custom", "schedule"]),
           action: z.string().trim().max(200),
           next: z.string().nullable().default(null),
           nexts: z.array(z.string()).max(40).optional(),
@@ -562,6 +564,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
           rule: z.object({ op: z.enum(["contains", "not_contains", "starts_with", "equals"]), value: z.string().max(500) }).nullable().optional(),
           ifTrue: z.string().nullable().optional(),
           ifFalse: z.string().nullable().optional(),
+          schedule: z.string().max(100).optional(),
+          timezone: z.string().max(80).optional(),
+          enabled: z.boolean().optional(),
           x: z.number().finite().default(0),
           y: z.number().finite().default(0),
         }),
@@ -620,6 +625,17 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const graph = migrateTeam(team as unknown as ChannelTeam) as unknown as T;
     return { ...graph, ...chartFromSteps(graph as unknown as ChannelTeam, graph.nodes) };
   };
+  /** A schedule runs for whoever last set it up: new or changed ones become this caller's, the rest stay whose they were. */
+  const stampSchedules = <T extends z.infer<typeof CHANNEL_TEAM>>(c: Caller, team: T, before?: ChannelTeam | null): T => {
+    if (!team.steps?.some((s) => s.kind === "schedule")) return team;
+    const steps = team.steps.map((s) => {
+      if (s.kind !== "schedule") return s;
+      const was = before?.steps?.find((o) => o.id === s.id && o.kind === "schedule");
+      const same = was && was.schedule === s.schedule && (was.timezone ?? "UTC") === (s.timezone ?? "UTC") && (was.prompt ?? "") === (s.prompt ?? "") && (was.enabled ?? true) === (s.enabled ?? true);
+      return { ...s, scheduledBy: same ? (was.scheduledBy ?? null) : c.actor.kind === "user" ? c.actor.id : null };
+    });
+    return { ...team, steps };
+  };
   /** #general stays public, so everyone in the workspace can still find it. It can be archived or deleted like any other channel. */
   const protectedReason = (_c: Caller, ch: { id: string; name: string }, what: string) => (ch.name === "general" ? `#general can't be ${what}: everyone in the workspace lands there` : null);
   /** A team that just got a memory folder gets a starter brief there. */
@@ -649,7 +665,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       const sent = new Set(body.settings.team.nodes.map((n) => n.agentId));
       if (onTeam.size !== sent.size || [...sent].some((a) => !onTeam.has(a))) return reply.code(409).send({ error: "This team runs on roles and steps. Change who's on it from the channel's Team tab in the web app." });
     }
-    if (body.settings?.team) body.settings.team = withChart(keepTeamExtras(body.settings.team, ch.settings.team));
+    if (body.settings?.team) body.settings.team = stampSchedules(c, withChart(keepTeamExtras(body.settings.team, ch.settings.team)), ch.settings.team);
     const problem = settingsProblem(c, body.settings, ch.settings.team, ch.id);
     if (problem) return reply.code(400).send({ error: problem });
     if (body.private && !ch.private) {
@@ -969,7 +985,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!body) return;
     if (store.channelByName(c.workspaceId, body.name)) return reply.code(409).send({ error: "channel exists" });
     if (body.sectionId && store.section(body.sectionId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown section" });
-    if (body.settings?.team) body.settings.team = withChart(body.settings.team);
+    if (body.settings?.team) body.settings.team = stampSchedules(c, withChart(body.settings.team));
     const problem = settingsProblem(c, body.settings);
     if (problem) return reply.code(400).send({ error: problem });
     const members = body.members.filter((m) => (m.kind === "user" ? !!store.role(c.workspaceId, m.id) : store.agent(m.id)?.workspaceId === c.workspaceId));
@@ -1834,6 +1850,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
           )
           .min(1)
           .max(40),
+        schedules: z.array(z.object({ cron: z.string().max(100), ask: z.string().min(1).max(8000), timezone: z.string().max(80).optional() })).max(10).optional(),
       }),
       req.body,
       reply,
@@ -1865,7 +1882,13 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     }));
     const missing = body.steps.find((s) => s.kind !== "ask" && !roleId(s.role));
     if (missing) return reply.code(400).send({ error: `no role called ${missing.role}` });
-    const team = withChart({ ...(ch.settings.team ?? { nodes: [], edges: [] }), roles, steps: layoutSteps(steps) });
+    // the new steps get the team's schedules: the ones given, else the ones it has, at the new first steps
+    const firsts = startSteps(steps as TeamStep[]).map((s) => s.id);
+    const schedules: TeamStep[] = (
+      body.schedules?.map((s, i): TeamStep => ({ id: `schedule-${i + 1}`, roleId: "", kind: "schedule", action: "", next: null, schedule: s.cron, timezone: s.timezone ?? "UTC", prompt: s.ask, enabled: true, x: 0, y: 0 })) ??
+      (ch.settings.team?.steps ?? []).filter((s) => s.kind === "schedule")
+    ).map((s) => ({ ...s, inputs: [], next: firsts[0] ?? null, nexts: firsts }));
+    const team = stampSchedules(c, withChart({ ...(ch.settings.team ?? { nodes: [], edges: [] }), roles, steps: layoutSteps([...schedules, ...(steps as TeamStep[])]) }), ch.settings.team);
     const problem = teamProblem(team);
     if (problem) return reply.code(400).send({ error: problem });
     joinTeam(ch.id, { team });
@@ -1873,6 +1896,18 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     hub.flows.teamChanged(ch.id, ch.settings.team, updated!.settings.team);
     hub.broadcast(c.workspaceId, { type: "channels_changed" });
     return updated;
+  });
+
+  app.post("/api/channels/:id/schedules/:stepId/run", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    const { id: channelId, stepId } = req.params as { id: string; stepId: string };
+    const ch = channelVisible(c, channelId);
+    const step = ch?.settings.team?.steps?.find((s) => s.id === stepId && s.kind === "schedule");
+    if (!ch || !step) return reply.code(404).send({ error: "Save the team first, then run its schedule." });
+    const flow = hub.schedules.run(ch.id, step.id, c.actor.kind === "user" ? c.actor.id : null);
+    if (!flow) return reply.code(409).send({ error: "This schedule's last run is still going." });
+    return flow;
   });
 
   // --- discussions --------------------------------------------------------------

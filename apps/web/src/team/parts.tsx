@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Users, GitBranch, LayoutGrid, MessageSquare, Repeat2, SlidersHorizontal, UserCheck, Bot, Share2 } from "lucide-react";
+import { Check, ChevronDown, Clock, Users, GitBranch, LayoutGrid, MessageSquare, Repeat2, SlidersHorizontal, UserCheck, Bot, Share2 } from "lucide-react";
 import { stepAgentId, type Agent, type ChannelTeam, type TeamStep, type TeamStepKind } from "@wisp/core";
 import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { Ghost } from "../components/Ghost.tsx";
@@ -20,6 +20,8 @@ export function StepNum({ n, size = 22 }: { n: number; size?: number }) {
 export function KindIcon({ kind, size = 16 }: { kind: TeamStepKind | "beside" | "agent"; size?: number }) {
   const p = { size, strokeWidth: 1.8, "aria-hidden": true } as const;
   switch (kind) {
+    case "schedule":
+      return <Clock {...p} />;
     case "review":
       return <Repeat2 {...p} />;
     case "ask":

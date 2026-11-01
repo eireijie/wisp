@@ -1,10 +1,11 @@
 import { Check, Minus, Plus, Trash2 } from "lucide-react";
-import { DEFAULT_ROUNDS, MAX_ROUNDS_LIMIT, stepAgentId, stepGraph, stepOrder, stepsAfter, type ChannelTeam, type StepRule, type TeamRole, type TeamStep, type TeamStepKind } from "@wisp/core";
+import { DEFAULT_ROUNDS, MAX_ROUNDS_LIMIT, stepAgentId, stepGraph, stepsAfter, workSteps, type ChannelTeam, type StepRule, type TeamRole, type TeamStep, type TeamStepKind } from "@wisp/core";
 import { useStore } from "../store.ts";
 import { useCreateAgent } from "./NewAgent.tsx";
 import { AgentAvatar, cx } from "../components/ui.tsx";
 import { MoreOptions } from "../components/MoreOptions.tsx";
 import { AgentField, FieldBox, InputsField, KindIcon, PickBox, TextBox } from "./parts.tsx";
+import { ScheduleForm } from "./ScheduleForm.tsx";
 import { freeStepId, handoffCanWait,insertingBefore, numberOf, possibleInputs, retype, roleById, settingInputs, stepById, titleOf, updating, disconnecting } from "./flow.ts";
 
 const KIND_NAME: Record<TeamStepKind, string> = {
@@ -15,6 +16,7 @@ const KIND_NAME: Record<TeamStepKind, string> = {
   handoff: "Hand off to a team",
   branch: "If / else",
   custom: "Custom",
+  schedule: "Schedule",
 };
 export const kindName = (k: TeamStepKind) => KIND_NAME[k];
 
@@ -29,6 +31,7 @@ const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 7)}`;
 
 /** A step's header text: "Step 3", or the kind's name for the special ones. */
 export function stepHeading(team: ChannelTeam, s: TeamStep): string {
+  if (s.kind === "schedule") return "Schedule";
   const n = numberOf(team, s.id);
   return s.kind === "do" || s.kind === "custom" ? `Step ${n}` : `Step ${n} · ${kindName(s.kind)}`;
 }
@@ -61,9 +64,10 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
   const createAgent = useCreateAgent();
   const step = stepById(team, stepId);
   if (!step) return null;
+  if (step.kind === "schedule") return <ScheduleForm team={team} stepId={stepId} onChange={onChange} onDelete={onDelete} channelId={channelId} />;
   const steps = team.steps ?? [];
   const set = (patch: Partial<TeamStep>) => onChange(updating(team, stepId, patch));
-  const order = stepOrder(steps);
+  const order = workSteps(steps);
   const others = order.filter((s) => s.id !== stepId);
   const after = stepsAfter(steps, stepId);
   /** steps before this one, where work can go back to */
@@ -80,7 +84,7 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
 
   // when it runs: after the steps it uses, or with another step
   const together = others.filter((s) => !after.has(s.id));
-  const ids = (step.inputs ?? []).map((i) => numberOf(team, i)).sort((a, b) => a - b);
+  const ids = (step.inputs ?? []).map((i) => numberOf(team, i)).filter(Boolean).sort((a, b) => a - b);
   const whenText = ids.length === 0 ? "At the start, with the first steps" : ids.length === 1 ? `After step ${ids[0]} finishes` : `After steps ${ids.slice(0, -1).join(", ")} and ${ids.at(-1)} finish`;
   const addGate = (kind: "ask" | "branch") => {
     const id = freeStepId(team);
@@ -288,7 +292,7 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
             label="Kind of step"
             lead={<KindIcon kind={step.kind} size={18} />}
             shown={kindName(step.kind)}
-            options={(Object.keys(KIND_NAME) as TeamStepKind[]).map((k) => ({ value: k, label: KIND_NAME[k] }))}
+            options={(Object.keys(KIND_NAME) as TeamStepKind[]).filter((k) => k !== "schedule").map((k) => ({ value: k, label: KIND_NAME[k] }))}
             onPick={(k) => onChange(retype(team, stepId, k as TeamStepKind, agents))}
           />
         </div>

@@ -454,4 +454,31 @@ final class TeamFlowTests: XCTestCase {
     XCTAssertNil(RunOpen.thread(for: try run(#"{"id":"r","status":"done","channelId":"c1"}"#)))
     XCTAssertNil(RunOpen.thread(for: try run(#"{"id":"r","status":"done","threadId":"m9"}"#)))
   }
+
+  func testAScheduleStartsTheFirstStepsAndIsNotNumbered() throws {
+    var s = ChannelTeam.Step(id: "s", kind: .schedule, action: "", next: "a", nexts: ["a"], inputs: [], prompt: "Write the report.")
+    s.schedule = "0 9 * * 1"; s.timezone = "UTC"
+    let a = ChannelTeam.Step(id: "a", kind: .do, action: "Gather", nexts: [], inputs: ["s"], agentId: "x")
+    let team = ChannelTeam(nodes: [], edges: [], steps: [s, a])
+    XCTAssertEqual(ChannelTeam.startSteps([s, a]).map(\.id), ["a"])
+    XCTAssertEqual(team.number(of: "s"), 0)
+    XCTAssertEqual(team.number(of: "a"), 1)
+    XCTAssertEqual(team.orderedSteps.map(\.id), ["a"])
+    XCTAssertEqual(team.connecting("a", "s").step("a")?.nexts ?? [], [])
+    XCTAssertEqual(team.setting(inputs: [], of: "a").step("a")?.inputs, ["s"])
+    let data = try JSONEncoder().encode(s)
+    let back = try JSONDecoder().decode(ChannelTeam.Step.self, from: data)
+    XCTAssertEqual(back.kind, .schedule)
+    XCTAssertEqual(back.schedule, "0 9 * * 1")
+    XCTAssertEqual(team.describeFlow(nameOf: { _ in "Scout" }).first?.who, "Schedule")
+  }
+
+  func testScheduleChoicesReadAndWriteCron() {
+    XCTAssertEqual(ScheduleChoices(cron: "30 8 * * 1").repeats, .weekly)
+    XCTAssertEqual(ScheduleChoices(cron: "30 8 * * 1").cron, "30 8 * * 1")
+    XCTAssertEqual(ScheduleChoices(cron: "0 * * * *").repeats, .hourly)
+    XCTAssertEqual(ScheduleChoices(cron: "0 9 15 * *").cron, "0 9 15 * *")
+    XCTAssertEqual(ScheduleChoices(cron: "0 9 * * 1-5").repeats, .custom)
+    XCTAssertNil(ScheduleChoices(cron: "0 9 * * 1-5").cron)
+  }
 }

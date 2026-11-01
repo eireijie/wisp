@@ -15,7 +15,9 @@ import {
   stepOrder,
   stepsAfter,
   stepsProblem,
+  scheduleProblem,
   startSteps,
+  workSteps,
   type Agent,
   type ChannelTeam,
   type FlowLane,
@@ -44,7 +46,7 @@ export const titleOf = (s: Pick<TeamStep, "action">) => s.action.trim() || "Unti
 
 /** The number a step shows ("step 3"): its place in the order things happen in. */
 export function numberOf(team: Pick<ChannelTeam, "steps">, id: string | null | undefined): number {
-  return stepOrder(stepsOf(team)).findIndex((s) => s.id === id) + 1;
+  return workSteps(stepsOf(team)).findIndex((s) => s.id === id) + 1;
 }
 
 /** The steps as rows, in order; steps in a row run at the same time. */
@@ -80,7 +82,7 @@ const blank = (s: TeamStep): TeamStep => ({ ...s, inputs: [], nexts: [], next: n
 
 /** Draw an arrow a -> b (both ends, and `next`). */
 export function connecting(team: ChannelTeam, a: string, b: string): ChannelTeam {
-  if (a === b) return team;
+  if (a === b || stepById(team, b)?.kind === "schedule") return team;
   const src = stepById(team, a);
   // an if/else leads only where its Yes and No point: fill an empty one, or do nothing when both are taken
   if (src?.kind === "branch") {
@@ -124,7 +126,7 @@ export const handoffCanWait = (target: { settings: { team: Pick<ChannelTeam, "st
 /** The steps a step can take its input from: every step that doesn't come after it. */
 export function possibleInputs(team: ChannelTeam, id: string): TeamStep[] {
   const after = stepsAfter(stepsOf(team), id);
-  return stepOrder(stepsOf(team)).filter((s) => s.id !== id && !after.has(s.id));
+  return stepOrder(stepsOf(team)).filter((s) => s.id !== id && s.kind !== "schedule" && !after.has(s.id));
 }
 
 /** The steps whose results a step receives. */
@@ -134,7 +136,8 @@ export const inputIds = (s: TeamStep): string[] => s.inputs ?? [];
 export function settingInputs(team: ChannelTeam, id: string, ids: string[]): ChannelTeam {
   let next = team;
   const current = inputIds(stepById(team, id) ?? ({} as TeamStep));
-  for (const a of current) if (!ids.includes(a)) next = disconnecting(next, a, id);
+  // the arrow from a schedule isn't a result, so it stays
+  for (const a of current) if (!ids.includes(a) && stepById(team, a)?.kind !== "schedule") next = disconnecting(next, a, id);
   for (const a of ids) if (!current.includes(a)) next = connecting(next, a, id);
   return next;
 }
@@ -277,9 +280,10 @@ export function movingAfter(team: ChannelTeam, id: string, target: string | null
 
 // --- new steps ----------------------------------------------------------------------------
 
-export type AddKind = "agent" | "beside" | "review" | "ask" | "handoff" | "branch" | "custom" | "handOut";
+export type AddKind = "schedule" | "agent" | "beside" | "review" | "ask" | "handoff" | "branch" | "custom" | "handOut";
 
 export const ADD_KINDS: { kind: AddKind; title: string; blurb: string }[] = [
+  { kind: "schedule", title: "Schedule", blurb: "Starts the team at set times." },
   { kind: "agent", title: "Agent step", blurb: "An agent does one thing." },
   { kind: "beside", title: "Side by side", blurb: "Runs at the same time as this one." },
   { kind: "review", title: "Repeat until approved", blurb: "A checker sends it back, up to a limit." },
@@ -297,6 +301,8 @@ export function newStep(team: ChannelTeam, kind: AddKind, anchor: string | null,
   const fallback = (anchorStep && stepAgentId(team, anchorStep)) || stepsOf(team).map((s) => stepAgentId(team, s)).filter((a): a is string => !!a).at(-1) || agents[0]?.id || null;
   const base = { id, roleId: "", next: null, x: 0, y: 0 };
   switch (kind) {
+    case "schedule":
+      return { ...base, kind: "schedule", action: "", schedule: "0 9 * * 1", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", prompt: "", enabled: true };
     case "agent":
     case "beside":
       return { ...base, kind: "do", action: "New step", agentId: fallback };
@@ -328,7 +334,11 @@ export function addStep(team: ChannelTeam, kind: AddKind, at: AddAt, agents: Pic
   const anchor = at.after ?? at.between?.from.at(-1) ?? null;
   const fresh = newStep(team, kind, anchor, agents);
   let next: ChannelTeam;
-  if (kind === "beside") next = inserting(team, fresh, { beside: anchor });
+  if (kind === "schedule") {
+    // it comes in front of the steps a message starts
+    next = appending(team, fresh);
+    for (const s of startSteps(stepsOf(team))) next = connecting(next, fresh.id, s.id);
+  } else if (kind === "beside") next = inserting(team, fresh, { beside: anchor });
   else if (at.between) next = insertingBetween(team, fresh, at.between.from, at.between.to);
   else if (anchor) next = inserting(team, fresh, { after: anchor });
   else next = inserting(team, fresh, { atEnd: stepsOf(team).length > 0 });
@@ -415,6 +425,11 @@ export function stepProblem(team: ChannelTeam, s: TeamStep): string | null {
     }
   }
   if (s.kind === "handoff" && !s.handoffTo) return `Pick the team “${label}” hands the work to.`;
+  if (s.kind === "schedule") {
+    const problem = scheduleProblem(s);
+    if (problem) return problem;
+    if (!(s.nexts ?? []).length) return "Point the schedule at the steps it starts.";
+  }
   if (s.kind === "branch") {
     if (!s.rule && !(s.condition ?? "").trim()) return `Say what “${label}” checks for.`;
     if (s.rule && !s.rule.value.trim()) return `Say what “${label}” looks for in the result.`;
@@ -474,6 +489,7 @@ export const KIND_MARK: Record<TeamStepKind, string | null> = {
   branch: "If / else",
   hand_out: "Splits the work",
   custom: "Custom",
+  schedule: "Schedule",
 };
 
 export type { TeamRole };

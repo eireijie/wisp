@@ -17,7 +17,7 @@ extension ChannelTeam {
 
   /** One box on the flow chart (TeamStep in packages/core). Every field after `action` is optional so older teams still load. */
   struct Step: Codable, Hashable, Identifiable {
-    enum Kind: String, Codable, CaseIterable { case `do`, review, handOut = "hand_out", ask, handoff, branch, custom }
+    enum Kind: String, Codable, CaseIterable { case `do`, review, handOut = "hand_out", ask, handoff, branch, custom, schedule }
 
     /** A simple rule on a result, for an if/else that needs no agent. */
     struct Rule: Codable, Hashable {
@@ -68,6 +68,10 @@ extension ChannelTeam {
     var rule: Rule?
     var ifTrue: String?
     var ifFalse: String?
+    /** schedule: when it runs (cron), in which time zone, and whether it's on; `prompt` is what the team gets asked */
+    var schedule: String?
+    var timezone: String?
+    var enabled: Bool?
     var x: Double
     var y: Double
 
@@ -85,7 +89,7 @@ extension ChannelTeam {
 
     private enum K: String, CodingKey {
       case id, roleId, kind, action, next, nexts, inputs, agentId, prompt, harness, sendBackTo, maxRounds, handTo, reviewBy
-      case show, notifyPhone, handoffTo, waitForReply, condition, rule, ifTrue, ifFalse, x, y
+      case show, notifyPhone, handoffTo, waitForReply, condition, rule, ifTrue, ifFalse, schedule, timezone, enabled, x, y
     }
 
     init(from decoder: Decoder) throws {
@@ -112,6 +116,9 @@ extension ChannelTeam {
       rule = try? c.decodeIfPresent(Rule.self, forKey: .rule)
       ifTrue = try? c.decodeIfPresent(String.self, forKey: .ifTrue)
       ifFalse = try? c.decodeIfPresent(String.self, forKey: .ifFalse)
+      schedule = try? c.decodeIfPresent(String.self, forKey: .schedule)
+      timezone = try? c.decodeIfPresent(String.self, forKey: .timezone)
+      enabled = try? c.decodeIfPresent(Bool.self, forKey: .enabled)
       x = (try? c.decode(Double.self, forKey: .x)) ?? 0
       y = (try? c.decode(Double.self, forKey: .y)) ?? 0
     }
@@ -141,6 +148,9 @@ extension ChannelTeam {
       try c.encodeIfPresent(rule, forKey: .rule)
       try c.encodeIfPresent(ifTrue, forKey: .ifTrue)
       try c.encodeIfPresent(ifFalse, forKey: .ifFalse)
+      try c.encodeIfPresent(schedule, forKey: .schedule)
+      try c.encodeIfPresent(timezone, forKey: .timezone)
+      try c.encodeIfPresent(enabled, forKey: .enabled)
       try c.encode(x, forKey: .x)
       try c.encode(y, forKey: .y)
     }
@@ -149,7 +159,7 @@ extension ChannelTeam {
     var inputIds: [String] { inputs ?? [] }
     /** the kinds an agent does (the rest are a person, another team, or a rule) */
     var needsAgent: Bool {
-      if kind == .ask || kind == .handoff { return false }
+      if kind == .ask || kind == .handoff || kind == .schedule { return false }
       if kind == .branch && rule != nil { return false }
       return true
     }
@@ -246,10 +256,11 @@ extension ChannelTeam {
     }
   }
 
-  /** The steps nothing leads to: where a new request starts, all at once. */
+  /** The steps nothing leads to but a schedule: where a new message starts, all at once. */
   static func startSteps(_ steps: [Step]) -> [Step] {
     let g = stepGraph(steps)
-    return steps.filter { (g.ins[$0.id] ?? []).isEmpty }
+    let kinds = Dictionary(uniqueKeysWithValues: steps.map { ($0.id, $0.kind) })
+    return steps.filter { $0.kind != .schedule && (g.ins[$0.id] ?? []).allSatisfy { kinds[$0] == .schedule } }
   }
 
   static func firstStep(_ steps: [Step]) -> Step? { startSteps(steps).first ?? steps.first }
@@ -302,10 +313,11 @@ extension ChannelTeam {
 
   /** The number a step shows ("step 3"): its place in the order it happens in. */
   func number(of id: String?) -> Int {
-    (Self.stepOrder(steps ?? []).firstIndex { $0.id == id }).map { $0 + 1 } ?? 0
+    (orderedSteps.firstIndex { $0.id == id }).map { $0 + 1 } ?? 0
   }
 
-  var orderedSteps: [Step] { Self.stepOrder(steps ?? []) }
+  /** The steps that do work, in order (a schedule box only starts them). */
+  var orderedSteps: [Step] { Self.stepOrder(steps ?? []).filter { $0.kind != .schedule } }
 
   /** An older linear team as a graph: every step's edges spelled out, its prompt on the step, nothing lost. Safe to run again. */
   var migrated: ChannelTeam {
@@ -365,6 +377,11 @@ extension ChannelTeam {
     let refs = (s.nexts ?? []) + (s.next.map { [$0] } ?? []) + (s.inputs ?? [])
     if refs.contains(where: { !stepIds.contains($0) }) { return "A step leads to a step that isn't there." }
     if refs.contains(s.id) { return "A step can't lead to itself." }
+    if s.kind == .schedule {
+      if (s.prompt ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Say what the schedule asks the team." }
+      if CronSchedule(s.schedule ?? "") == nil { return "Say when the schedule runs." }
+      if (s.nexts ?? []).isEmpty { return "Point the schedule at the steps it starts." }
+    }
     if s.kind == .review {
       guard let b = s.sendBackTo, stepIds.contains(b) else { return "Say where “\(label)” sends work back to." }
       if b == s.id { return "A review can't send work back to itself." }
@@ -582,11 +599,19 @@ enum FlowWords {
 extension ChannelTeam {
   /** How a team works, one plain line per step (describeFlow). `nameOf` gives an agent's name; `teamName` a team's name by channel id. */
   func describeFlow(nameOf: (String?) -> String, teamName: (String) -> String = { _ in "another" }) -> [FlowLine] {
-    let steps = steps ?? []
+    let everything = steps ?? []
+    let steps = everything.filter { $0.kind != .schedule }
     let order = Self.stepOrder(steps)
     func num(_ id: String?) -> Int { (order.firstIndex { $0.id == id }).map { $0 + 1 } ?? 0 }
     let g = Self.stepGraph(steps)
     var lines: [FlowLine] = []
+    for s in everything where s.kind == .schedule {
+      let starts = (s.nexts ?? []).map { num($0) }.filter { $0 > 0 }.sorted()
+      let what = starts.isEmpty ? "nothing yet" : "step\(starts.count > 1 ? "s" : "") \(FlowWords.join(starts.map(String.init)))"
+      let when = describeCron(s.schedule ?? "")
+      let rest = "\(s.enabled == false ? "is off. When on, it starts" : "starts") \(what) \(when.hasPrefix("Every") ? "every" + when.dropFirst(5) : when)"
+      lines.append(FlowLine(stepId: s.id, n: 0, together: false, who: "Schedule", rest: rest, text: "Schedule \(rest)."))
+    }
     var prevKey = ""
     for (i, s) in order.enumerated() {
       let ins = g.ins[s.id] ?? []
@@ -669,7 +694,7 @@ extension ChannelTeam {
 
   /** Draw an arrow a -> b (both ends, and `next`). */
   func connecting(_ a: String, _ b: String) -> ChannelTeam {
-    guard a != b else { return self }
+    guard a != b, step(b)?.kind != .schedule else { return self }
     // an if/else leads only where its Yes and No point: fill an empty one, or do nothing when both are taken
     if let src = step(a), src.kind == .branch {
       if src.ifTrue == b || src.ifFalse == b { return self }
@@ -710,7 +735,8 @@ extension ChannelTeam {
   func setting(inputs: [String], of id: String) -> ChannelTeam {
     var team = self
     let current = step(id)?.inputIds ?? []
-    for a in current where !inputs.contains(a) { team = team.disconnecting(a, id) }
+    // the arrow from a schedule isn't a result, so it stays
+    for a in current where !inputs.contains(a) && step(a)?.kind != .schedule { team = team.disconnecting(a, id) }
     for a in inputs where !current.contains(a) { team = team.connecting(a, id) }
     return team
   }

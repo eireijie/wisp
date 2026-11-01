@@ -119,7 +119,7 @@ export class WispClient {
   }
   /** Every channel's team: `name` is the channel's, `folder` "" when it has no memory folder. */
   /** Set up a channel's roles and steps by role names and agent handles. */
-  setTeamSteps(channel: string, team: { roles: { name: string; description: string; agent: string }[]; steps: { role?: string; kind?: "do" | "review" | "hand_out" | "ask"; action: string; prompt?: string; inputs?: number[]; send_back_to?: number; max_rounds?: number; hand_to?: string[]; review_by?: string }[] }) {
+  setTeamSteps(channel: string, team: { schedules?: { cron: string; ask: string; timezone?: string }[]; roles: { name: string; description: string; agent: string }[]; steps: { role?: string; kind?: "do" | "review" | "hand_out" | "ask"; action: string; prompt?: string; inputs?: number[]; send_back_to?: number; max_rounds?: number; hand_to?: string[]; review_by?: string }[] }) {
     return this.request("PUT", `/api/channels/${encodeURIComponent(channel.replace(/^#/, ""))}/team-steps`, team);
   }
   teams() {

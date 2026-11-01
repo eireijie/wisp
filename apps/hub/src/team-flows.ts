@@ -8,6 +8,7 @@ import {
   stepPrompt,
   stepsAfter,
   startSteps,
+  workSteps,
   type Actor,
   type ChannelTeam,
   type FlowCarry,
@@ -177,12 +178,21 @@ export class TeamFlows {
     return !!channel && channel.kind === "channel" && !channel.archivedAt && !!channel.settings.team?.steps?.length;
   }
 
-  /** A person's new message in a stepped channel: start every step nothing leads to, in a thread under it. */
-  start(msg: Message, workspaceId: string, requestedBy: string | null, depth = 0): TeamFlow | null {
+  /** Is this schedule's last run still going? */
+  scheduleBusy(channelId: string, scheduleId: string): boolean {
+    return this.flows(channelId).some((f) => f.scheduleId === scheduleId && (f.status === "running" || f.status === "waiting"));
+  }
+
+  /**
+   * A new message in a stepped channel: start every step nothing leads to, in a thread under it.
+   * With `scheduleId` a schedule box started it: only what its arrows lead to runs, and a step
+   * that also waits for something this run won't reach goes on with what it gets.
+   */
+  start(msg: Message, workspaceId: string, requestedBy: string | null, depth = 0, scheduleId?: string): TeamFlow | null {
     const channel = this.hub.store.channel(msg.channelId);
     const team = channel?.settings.team?.steps?.length ? (migrateTeam(channel.settings.team) as ChannelTeam & { steps: TeamStep[] }) : null;
-    const starters = team ? startSteps(team.steps) : [];
-    if (!channel || !team || !starters.length) return null;
+    const starters = team && !scheduleId ? startSteps(team.steps) : [];
+    if (!channel || !team || (!scheduleId && !starters.length)) return null;
     const now = new Date().toISOString();
     const f: TeamFlow = {
       id: id("flow"),
@@ -192,7 +202,8 @@ export class TeamFlows {
       status: "running",
       request: msg.body,
       requestedBy,
-      stepId: starters[0].id,
+      stepId: starters[0]?.id ?? scheduleId!,
+      ...(scheduleId ? { scheduleId } : {}),
       taskId: null,
       rounds: {},
       history: [],
@@ -205,6 +216,12 @@ export class TeamFlows {
     };
     this.starting.add(f.id);
     try {
+      // schedules do no work: the arrows of the one that fired (of all of them, for a message) are already open, the others never will be
+      for (const s of team.steps) if (s.kind === "schedule") f.lanes![s.id] = { stepId: s.id, status: !scheduleId || s.id === scheduleId ? "done" : "skipped", taskId: null, carry: null, pieces: {}, waitingFor: null };
+      if (scheduleId) {
+        const g = stepGraph(team.steps);
+        for (const s of team.steps) if (!g.ins.get(s.id)!.length && !f.lanes![s.id]) this.skip(f, team, s.id);
+      }
       for (const s of starters) if (!f.lanes![s.id]) this.runStep(f, s, null);
     } finally {
       this.starting.delete(f.id);
@@ -251,7 +268,7 @@ export class TeamFlows {
       if (reviewed && built && this.hub.store.task(built.taskId)?.toAgentId === agent.id)
         return this.waitLane(f, lane, `${agent.name} did ${this.title(team, reviewed)} and would be reviewing its own work as ${step.roleId ? `the ${this.who(team, step)}` : `“${this.title(team, step)}”`}. Pick a different agent, then try again, or approve it anyway.`, "retry");
     }
-    const order = stepOrder(team.steps);
+    const order = workSteps(team.steps);
     const n = order.findIndex((s) => s.id === step.id) + 1;
     const round = (f.rounds[step.id] ?? 0) + 1;
     const handTo = (step.handTo ?? []).map((r) => ({ role: team.roles?.find((x) => x.id === r)?.name ?? "someone", agent: this.hub.store.agent(team.roles?.find((x) => x.id === r)?.agentId ?? "") })).filter((x) => x.agent);

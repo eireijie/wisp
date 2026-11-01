@@ -8,6 +8,7 @@ import { Apns } from "./apns.ts";
 import { Fcm } from "./fcm.ts";
 import { Reach } from "./reach.ts";
 import { Routines } from "./routines.ts";
+import { TeamSchedules } from "./team-schedules.ts";
 import { BACKGROUND_THREAD, Background } from "./background.ts";
 import { Push } from "./push.ts";
 import { Loops } from "./loops.ts";
@@ -79,6 +80,7 @@ export class Hub {
   /** logins agents fill from the person's password manager */
   readonly logins: Logins;
   readonly routines: Routines;
+  readonly schedules: TeamSchedules;
   readonly background: Background;
   readonly loops: Loops;
   readonly push: Push;
@@ -128,6 +130,7 @@ export class Hub {
     this.computers = new Computers(this);
     this.logins = new Logins(this);
     this.routines = new Routines(this);
+    this.schedules = new TeamSchedules(this);
     this.background = new Background(this);
     this.loops = new Loops(this);
     this.push = new Push(this);
@@ -239,6 +242,7 @@ export class Hub {
     void this.reach.cloudflare.close();
     this.computers.shutdown();
     this.routines.stop();
+    this.schedules.stop();
     this.background.stop();
     for (const c of this.clients) c.socket.terminate();
     for (const n of this.nodes.values()) n.socket.terminate();
@@ -1405,7 +1409,7 @@ export class Hub {
   stepsSection(channelName: string, team: ChannelTeam, agentId: string): string {
     const t = migrateTeam(team);
     const roles = t.roles ?? [];
-    const all = t.steps ?? [];
+    const all = (t.steps ?? []).filter((s) => s.kind !== "schedule");
     const mineRoles = roles.filter((r) => r.agentId === agentId);
     const mineSteps = all.filter((s) => stepAgentId(t, s) === agentId);
     if (!mineRoles.length && !mineSteps.length) return "";
