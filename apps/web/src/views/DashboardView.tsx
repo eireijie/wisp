@@ -526,7 +526,7 @@ function ReadinessCard() {
 
   if (r.kind === "setup") {
     return (
-      <Frame title="Your helper isn't ready yet" sub={`Next: ${NEXT_STEP[r.next]}`}>
+      <Frame title="Your agent isn't ready yet" sub={`Next: ${NEXT_STEP[r.next]}`}>
         {bar}
         <div className="flex gap-2.5">
           <CardButton tone="primary" onClick={() => go({ view: "welcome" })}>

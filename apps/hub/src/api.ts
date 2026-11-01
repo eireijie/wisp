@@ -275,7 +275,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     }
     if (atLeast(memory(c)(p).level, need)) return p;
     const lockedSoul = c.actor.kind === "agent" && c.viewer.soulLocked && p.toLowerCase() === soulPath(c.actor.id).toLowerCase();
-    reply.code(403).send({ error: lockedSoul ? "your soul is locked by your owner" : `no ${need} access to ${p}` });
+    reply.code(403).send({ error: lockedSoul ? "your personality is locked by your owner" : `no ${need} access to ${p}` });
     return null;
   }
 
@@ -1191,7 +1191,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const harness = fields.harness;
     if (!harness) return reply.code(400).send({ error: "harness: pick a harness (no device offers one yet to use as a default)" });
     if (store.agentByHandle(c.workspaceId, body.handle)) return reply.code(409).send({ error: "handle taken" });
-    if (body.settings?.respondPeople?.some((p) => !store.role(c.workspaceId, p))) return reply.code(400).send({ error: "respondPeople: someone isn't in this organization" });
+    if (body.settings?.respondPeople?.some((p) => !store.role(c.workspaceId, p))) return reply.code(400).send({ error: "respondPeople: someone isn't in this workspace" });
     const connWhy = body.settings?.connectionId ? connectionProblem(hub, c, body.settings.connectionId, harness, fields.nodeId) : null;
     if (connWhy) return reply.code(400).send({ error: connWhy });
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
@@ -1245,7 +1245,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (body.settings && (body.settings.respondTo !== undefined || body.settings.respondPeople !== undefined)) {
       const creator = agent.settings.createdBy;
       if (creator && creator !== c.actor.id && c.viewer.role !== "owner") return reply.code(403).send({ error: `only whoever made @${agent.handle} (or an owner) decides who it answers` });
-      if (body.settings.respondPeople?.some((p) => !store.role(c.workspaceId, p))) return reply.code(400).send({ error: "respondPeople: someone isn't in this organization" });
+      if (body.settings.respondPeople?.some((p) => !store.role(c.workspaceId, p))) return reply.code(400).send({ error: "respondPeople: someone isn't in this workspace" });
     }
     // whoever's device the agent runs directly on (now, or after this change) decides about it
     const after = { ...agent, ...body, settings: { ...agent.settings, ...body.settings } };

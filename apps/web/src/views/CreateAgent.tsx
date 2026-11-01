@@ -1162,7 +1162,7 @@ export function ImportAgent({
                 <span className="block text-xs text-muted truncate">
                   {[
                     x.d.description,
-                    x.d.hasSoul && "has a soul",
+                    x.d.hasSoul && "has a personality",
                     x.d.memoryCount
                       ? `${x.d.memoryCount} note${x.d.memoryCount === 1 ? "" : "s"}`
                       : null,

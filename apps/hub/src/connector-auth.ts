@@ -61,7 +61,7 @@ function publicOnly(fetchFn: typeof fetch): typeof fetch {
   return (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     let url = input instanceof Request ? input.url : String(input);
     for (let hop = 0; hop < 5; hop++) {
-      if (!(await isPublicUrl(url))) throw new Error("connectors can only reach public addresses");
+      if (!(await isPublicUrl(url))) throw new Error("connected apps can only reach public addresses");
       const res = await fetchFn(hop === 0 ? input : url, { ...init, redirect: "manual" });
       const to = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
       if (!to) return res;
@@ -205,9 +205,9 @@ export class ConnectorAuth {
   /** The sign-in page sent the person back with a code: trade it for tokens. */
   async finish(state: string, code: string, serverUrlFor: (connectorId: string) => string | null): Promise<string> {
     const r = this.db.prepare("SELECT * FROM connector_auth WHERE state = ?").get(state) as Row | undefined;
-    if (!r?.redirect_url) throw new Error("This sign-in link has expired. Start it again from Connectors.");
+    if (!r?.redirect_url) throw new Error("This sign-in link has expired. Start it again from Connected apps.");
     const serverUrl = serverUrlFor(r.connector_id);
-    if (!serverUrl) throw new Error("That connector was removed.");
+    if (!serverUrl) throw new Error("That connected app was removed.");
     const provider = new Provider(this.db, r.connector_id, r.redirect_url);
     try {
       await auth(provider, { serverUrl, authorizationCode: code, fetchFn: this.fetchFor(r.connector_id) });

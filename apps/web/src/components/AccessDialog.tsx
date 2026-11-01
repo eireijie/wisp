@@ -56,9 +56,9 @@ export function subjectLabel(s: Subject, agents: Pick<Agent, "id" | "handle">[],
 /** "you, Alex, Everyday Helper": a plain list, or the group in words when every person / helper is in it. */
 function audience(people: { name: string; me: boolean; ok: boolean }[], helpers: { name: string; ok: boolean }[]): string {
   const parts: string[] = [];
-  if (people.length > 1 && people.every((p) => p.ok)) parts.push("everyone in the organization");
+  if (people.length > 1 && people.every((p) => p.ok)) parts.push("everyone in the workspace");
   else parts.push(...people.filter((p) => p.me && p.ok).map(() => "you"), ...people.filter((p) => !p.me && p.ok).map((p) => p.name));
-  if (helpers.length > 1 && helpers.every((h) => h.ok)) parts.push("all helpers");
+  if (helpers.length > 1 && helpers.every((h) => h.ok)) parts.push("all agents");
   else parts.push(...helpers.filter((h) => h.ok).map((h) => h.name));
   return parts.join(", ") || "nobody";
 }
@@ -174,7 +174,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
                 <b>Who can change this {noun}:</b> {summary.change}
               </span>
             </p>
-            {isShared(path) && <p className="text-xs text-muted">Shared is the common folder. By default everyone in the organization and all helpers can use what is in it, so don't keep private things there.</p>}
+            {isShared(path) && <p className="text-xs text-muted">Shared is the common folder. By default everyone in the workspace and all agents can use what is in it, so don't keep private things there.</p>}
           </div>
         )}
         <MoreOptions title="How these rules work">
@@ -288,7 +288,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
             <p className="text-xs text-muted flex items-start gap-1.5">
               <Pin size={12} className="mt-0.5 shrink-0" />{" "}
               <span>
-                <b>Always remind helpers of {folder ? "these notes" : "this note"}:</b> use the pin next to a helper. Helpers read {folder ? "them" : "it"} at the start of every chat. Keep {folder ? "them" : "it"} short; long notes make every reply slower and cost more.
+                <b>Always remind agents of {folder ? "these notes" : "this note"}:</b> use the pin next to an agent. Agents read {folder ? "them" : "it"} at the start of every chat. Keep {folder ? "them" : "it"} short; long notes make every reply slower and cost more.
               </span>
             </p>
           </>
@@ -343,8 +343,8 @@ function Row(p: {
           onClick={() => p.onStartup!(!p.startup)}
           disabled={p.disabled || p.level === "none" || p.startupInherited}
           className={cx("p-1.5 rounded-md disabled:opacity-40", p.startup ? "text-accent-text bg-accent-soft" : "text-faint hover:text-ink hover:bg-hover")}
-          title={p.startupInherited ? "Always reminded of this note, because of a rule for its team, role or all agents" : p.startup ? "Always reminded of this note (click to stop)" : "Always remind this helper of this note"}
-          aria-label="Always remind this helper of this note"
+          title={p.startupInherited ? "Always reminded of this note, because of a rule for its team, role or all agents" : p.startup ? "Always reminded of this note (click to stop)" : "Always remind this agent of this note"}
+          aria-label="Always remind this agent of this note"
           aria-pressed={p.startup}
         >
           <Pin size={14} />

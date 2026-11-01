@@ -88,7 +88,7 @@ export function AboutView({ onBack, embedded }: { onBack?: () => void; embedded?
 
   const phone = useIsPhone();
   const addRef = useRef<HTMLInputElement>(null);
-  const subtitle = isMe ? "What your helpers should know about you. Agents add these as you talk with them." : `What helpers should know about ${profile?.person.name ?? "them"}.`;
+  const subtitle = isMe ? "What your agents should know about you. Agents add these as you talk with them." : `What agents should know about ${profile?.person.name ?? "them"}.`;
   const owner = me.role === "owner" && members.length > 1;
   const who = owner && (
     <label className="inline-flex items-center gap-2 h-11 px-4 rounded-full border border-control-line bg-control text-sm font-medium">
@@ -170,8 +170,8 @@ export function AboutView({ onBack, embedded }: { onBack?: () => void; embedded?
                 className="flex-1 min-w-48 h-10 bg-transparent px-2 text-body outline-none placeholder:text-faint"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder={isMe ? "What would you like your helper to remember?" : TABS.find((t) => t.kind === addKind)!.add}
-                aria-label="What would you like your helper to remember?"
+                placeholder={isMe ? "What would you like your agent to remember?" : TABS.find((t) => t.kind === addKind)!.add}
+                aria-label="What would you like your agent to remember?"
               />
               <select value={addKind} onChange={(e) => setAddKind(e.target.value as Kind)} aria-label="Category" className="h-9 rounded-full bg-chip px-3 text-[13px] font-medium outline-none">
                 {TABS.map((t) => (
@@ -221,7 +221,7 @@ export function AboutView({ onBack, embedded }: { onBack?: () => void; embedded?
             </>
           )}
           <p className="mt-4 px-1 text-xs text-muted leading-relaxed">
-            Every helper reads this before it works, so you don't have to repeat yourself. Edit or delete anything that is wrong; it applies from the next message. It's saved as plain notes in{" "}
+            Every agent reads this before it works, so you don't have to repeat yourself. Edit or delete anything that is wrong; it applies from the next message. It's saved as plain notes in{" "}
             <a className="text-accent-text underline underline-offset-2" href={href({ view: "vault", path: null })}>
               Memory
             </a>

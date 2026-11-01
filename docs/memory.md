@@ -1,6 +1,6 @@
 # Memory
 
-Wisp keeps each organization's memory in a folder of markdown notes backed by git. Notes support `[[wikilinks]]`, backlinks, tags and search, and edits have a history showing who changed what.
+Wisp keeps each workspace's memory in a folder of markdown notes backed by git. Notes support `[[wikilinks]]`, backlinks, tags and search, and edits have a history showing who changed what.
 
 Open the folder in [Obsidian](https://obsidian.md) to browse and write, or use Wisp's **Memory** page to search, create, edit and delete notes. **Activity** shows changes across the vault; each note also has history and line authorship. Access rules apply to Wisp's tools and sync gateway; opening the folder directly on disk gives access through that computer's filesystem permissions.
 
@@ -11,13 +11,13 @@ Use the share button on a folder or note in **Memory**, or **Settings → Memory
 | Who | Default access |
 | --- | --- |
 | Every agent | Read and edit `shared/`, its own `agents/<id>/` and every person's `people/<id>/` folder |
-| Agents on a channel's team | Read and edit the team's configured memory folder, if it has one; there is no team folder by default |
+| Agents on a team | Read and edit the team's configured memory folder, if it has one; there is no team folder by default |
 | Owners | Manage everything, including access rules |
 | Members | Read and edit notes except other people's `people/<id>/` folders; explicit rules can restrict access |
 | Each owner or member | Manage their own `people/<id>/` folder |
 | Guests | Read `shared/` and their own `people/<id>/` folder; guests cannot edit notes |
 
-A team's folder is the path configured on the channel, not an automatically assigned `teams/<name>/` path. If the team reports to an agent, that agent and those above it in the reporting chain also get read and edit access to its configured folder.
+A team's folder is the path configured on the team, not an automatically assigned `teams/<name>/` path. If the team reports to an agent, that agent and those above it in the reporting chain also get read and edit access to its configured folder.
 
 - **Rules:** grant one agent, a team role, a team, all agents, one person, members or guests *no access*, *can read*, *can edit* or *can manage*. Only people can manage access; owners always retain it, and guests are limited to reading.
 - **Inheritance:** a folder's rule applies to its contents, but a rule closer to a note wins. At the same path, one agent takes precedence over its role, then its team, then all agents; a stored rule takes precedence over a matching default.
@@ -29,9 +29,9 @@ An agent can use `me/notes.md` as shorthand for a note in its own `agents/<id>/`
 
 ## Choosing the vault folder
 
-The first organization's vault defaults to `<data>/vault`. An owner can choose another folder in **Settings → Memory → Use a different folder**, or set `WISP_VAULT_DIR=/path/to/folder` where the hub runs; the environment variable takes precedence and changes take effect after a restart.
+The first workspace's vault defaults to `<data>/vault`. An owner can choose another folder in **Settings → Memory → Use a different folder**, or set `WISP_VAULT_DIR=/path/to/folder` where the hub runs; the environment variable takes precedence and changes take effect after a restart.
 
-Only the first organization's vault can move this way. Other organizations keep separate vaults and search indexes under `<data>/orgs/<id>/vault`.
+Only the first workspace's vault can move this way. Other workspaces keep separate vaults and search indexes under `<data>/orgs/<id>/vault`.
 
 - An existing Obsidian vault can be adopted in place. Wisp runs `git init` if needed, commits existing notes when starting its history, and keeps an existing repository's history.
 - `.obsidian/` and `.trash/` are added to `.gitignore` and excluded from indexing and normal vault commits. Wisp leaves those folders alone and does not follow symlinks while scanning.
@@ -77,8 +77,8 @@ Wisp commits outside edits on the hub before evaluating a push. If someone edite
 Wisp assembles context for each run alongside the conversation and request:
 
 1. **Soul and instructions:** the agent's personality and the instructions people gave it.
-2. **About the person:** saved preferences, active plans, up to 25 recent activity entries from the last week, and details ranked by relevance to the request, within a size budget. The person is the sender, the last person in the conversation, or the organization owner as a fallback, and the agent must have access to that person's memory.
-3. **Channel teams:** the chart and roles, with role notes, teammates, reporting relationships, repository details and, when configured, an excerpt from the team folder's `README.md` and recent decisions.
+2. **About the person:** saved preferences, active plans, up to 25 recent activity entries from the last week, and details ranked by relevance to the request, within a size budget. The person is the sender, the last person in the conversation, or the workspace owner as a fallback, and the agent must have access to that person's memory.
+3. **Teams:** the chart and roles, with role notes, teammates, reporting relationships, repository details and, when configured, an excerpt from the team folder's `README.md` and recent decisions.
 4. **Startup notes:** readable notes selected with **Load at startup**, limited to 4,000 characters per note and a shared 16,000-character budget. The prompt lists remaining note paths so the agent can read them when needed.
 5. **Related notes:** up to five search matches with snippets, excluding notes already shown, which the agent can open with `memory_read`.
 

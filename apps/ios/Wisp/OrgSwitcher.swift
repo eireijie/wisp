@@ -14,7 +14,7 @@ struct OrgSwitcherSheet: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      SheetHeader(title: "Organizations") { dismiss() }
+      SheetHeader(title: "Workspaces") { dismiss() }
       ScrollView {
         VStack(spacing: 14) {
           CardGroup {
@@ -29,7 +29,7 @@ struct OrgSwitcherSheet: View {
           }
           CardGroup {
             Button { creating = true } label: {
-              RowLabel(title: "New organization", chevron: false) { Image(systemName: "plus").foregroundStyle(Palette.muted).frame(width: 26) }
+              RowLabel(title: "New workspace", chevron: false) { Image(systemName: "plus").foregroundStyle(Palette.muted).frame(width: 26) }
             }.buttonStyle(.plain).accessibilityIdentifier("org-new")
             Button { withAnimation(.snappy) { joining.toggle() } } label: {
               RowLabel(title: "Join with an invite link", chevron: false) { Image(systemName: "link").foregroundStyle(Palette.muted).frame(width: 26) }
@@ -117,7 +117,7 @@ struct NewOrgSheet: View {
         }
         Section { InlineError(error: action.error) }
       }
-      .navigationTitle("New organization")
+      .navigationTitle("New workspace")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(action.busy) }

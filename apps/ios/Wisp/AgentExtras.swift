@@ -189,7 +189,7 @@ struct DiscoveredAgent: Decodable, Identifiable, Hashable {
   var id: String { key }
 
   var summary: String {
-    [description, hasSoul == true ? "has a soul" : nil,
+    [description, hasSoul == true ? "has a personality" : nil,
      (memoryCount ?? 0) > 0 ? "\(memoryCount!) note\(memoryCount == 1 ? "" : "s")" : nil, model]
       .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
   }
@@ -334,7 +334,7 @@ enum AgentVoices {
 
   /** The engine's voices, with "Automatic" first. A saved voice this list lacks still shows up. */
   static func choices(engine: String, agent: Agent, selected: String, recommended: [DeviceVoice], all: [DeviceVoice], language: (String) -> String) -> [VoiceChoice] {
-    var result = [VoiceChoice(id: "", label: "Automatic for \(agent.name)", detail: "A voice picked for this helper")]
+    var result = [VoiceChoice(id: "", label: "Automatic for \(agent.name)", detail: "A voice picked for this agent")]
     func device(_ v: DeviceVoice) -> VoiceChoice { VoiceChoice(id: v.id, label: v.name, detail: language(v.lang)) }
     switch engine {
     case "openai": result += openai.map { VoiceChoice(id: $0, label: $0.prefix(1).uppercased() + $0.dropFirst()) }

@@ -127,7 +127,7 @@ struct ChatsView: View {
         .buttonStyle(.press)
         .accessibilityIdentifier("profile-button")
         .contextMenu {
-          Button("Switch organization", systemImage: "building.2") { openOrganizations() }
+          Button("Switch workspace", systemImage: "building.2") { openOrganizations() }
         }
     } center: {
       EmptyView()

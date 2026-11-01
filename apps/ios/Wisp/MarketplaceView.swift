@@ -245,7 +245,7 @@ struct MarketplaceView: View {
   private func helpers(_ s: HelperSkill) -> String {
     if s.forAll { return "All agents" }
     let n = s.agentIds?.count ?? 0
-    return n == 0 ? "no one yet" : "\(n) helper\(n == 1 ? "" : "s")"
+    return n == 0 ? "no one yet" : "\(n) agent\(n == 1 ? "" : "s")"
   }
 
   // MARK: rows

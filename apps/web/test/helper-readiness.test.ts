@@ -6,7 +6,7 @@ import { helperChecklist, homeReadiness, nextStep, pickHelper } from "../src/onb
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
 
 const dev = (o: Partial<DeviceInfo> = {}): DeviceInfo => ({ id: "n1", name: "my-mac", online: true, agents: [], ...o });
-const helper = (o: Partial<Agent> = {}) => ({ id: "a1", name: "Everyday Helper", nodeId: "n1", harness: "gemini", ...o }) as Agent;
+const helper = (o: Partial<Agent> = {}) => ({ id: "a1", name: "Everyday Agent", nodeId: "n1", harness: "gemini", ...o }) as Agent;
 const none = { anywhere: false, address: false, agent: false, devices: false };
 const all = { anywhere: true, address: true, agent: true, devices: true };
 
@@ -21,7 +21,7 @@ describe("nextStep", () => {
 });
 
 describe("pickHelper", () => {
-  it("prefers a ready helper over an offline one", () => {
+  it("prefers a ready agent over an offline one", () => {
     const off = helper({ id: "off", nodeId: "n2" });
     const ok = helper({ id: "ok" });
     expect(pickHelper([off, ok], [dev(), dev({ id: "n2", online: false })])?.id).toBe("ok");
@@ -30,32 +30,32 @@ describe("pickHelper", () => {
 });
 
 describe("homeReadiness", () => {
-  it("asks to continue setup when there is no helper", () => {
+  it("asks to continue setup when there is no agent", () => {
     expect(homeReadiness({ ...none, anywhere: true, address: true }, [], [dev()])).toEqual({ kind: "setup", next: "agent" });
   });
-  it("says what a helper is waiting for", () => {
+  it("says what an agent is waiting for", () => {
     const r = homeReadiness(all, [helper()], [dev({ online: false })]);
     expect(r).toMatchObject({ kind: "waiting", problem: "my-mac is offline", deviceName: "my-mac" });
   });
-  it("is ready when the helper can work, even before the first hello", () => {
+  it("is ready when the agent can work, even before the first hello", () => {
     expect(homeReadiness({ ...all, hello: false }, [helper()], [dev()])).toMatchObject({ kind: "ready" });
   });
 });
 
 describe("helperChecklist", () => {
-  it("checks the host install unless the helper is placed in a computer", () => {
+  it("checks the host install unless the agent is placed in a computer", () => {
     const devices = [dev({ harnesses: [{ id: "gemini", version: "1" }] })];
     expect(helperChecklist([helper({ harness: "claude-code", settings: { runIn: "device" }, computerId: null })], devices).at(-1)?.status).toBe("bad");
     expect(helperChecklist([helper({ harness: "claude-code", settings: { runIn: "computer" }, computerId: "vm" })], devices).find((c) => c.id === "harness")?.status).toBe("ok");
   });
 
   const status = (c: ReturnType<typeof helperChecklist>) => c.map((x) => `${x.id}:${x.status}`);
-  it("starts with making a helper", () => {
+  it("starts with making an agent", () => {
     const c = helperChecklist([], [dev()]);
     expect(status(c)).toEqual(["helper:bad", "device:unknown", "online:unknown", "harness:unknown"]);
     expect(c[0].to).toEqual({ view: "welcome" });
   });
-  it("points a helper with no device at its device settings", () => {
+  it("points an agent with no device at its device settings", () => {
     const c = helperChecklist([helper({ nodeId: null })], [dev()]);
     expect(status(c)).toEqual(["helper:ok", "device:bad", "online:unknown", "harness:unknown"]);
     expect(c[1].to).toEqual({ view: "agents", agentId: "a1", tab: "device" });

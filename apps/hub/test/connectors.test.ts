@@ -93,7 +93,7 @@ describe("connectors", () => {
     await api("PATCH", `/api/connectors/${gh.data.id}`, { enabled: true });
     expect(hub.connectors.specsFor(atlas.id)[0].headers).toEqual({ Authorization: "Bearer github_pat_supersecret1234" });
 
-    expect(await promptFor(atlas.id)).toContain("## Your connectors");
+    expect(await promptFor(atlas.id)).toContain("## Your connected apps");
     await api("DELETE", `/api/connectors/${pg.id}/agents/${atlas.id}`);
     expect(hub.connectors.specsFor(atlas.id).map((s) => s.name)).toEqual(["github"]);
     expect((await api("DELETE", `/api/connectors/${gh.data.id}`)).status).toBe(200);

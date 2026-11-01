@@ -73,8 +73,8 @@ export function AgentDefaultsPage() {
       <OwnersOnly show={!isOwner} />
       <Section title="AI and model">
         <Card>
-          <Row label="AI tool">
-            <Select label="AI tool" value={form.harness ?? ""} disabled={!isOwner} onChange={(v) => setForm({ ...form, harness: v || null })}>
+          <Row label="Harness">
+            <Select label="Harness" value={form.harness ?? ""} disabled={!isOwner} onChange={(v) => setForm({ ...form, harness: v || null })}>
               <option value="">Pick for each agent</option>
               {CHOICES.map((h) => (
                 <option key={h.id} value={h.id}>
@@ -88,7 +88,7 @@ export function AgentDefaultsPage() {
           </Row>
         </Card>
       </Section>
-      <Section title="Default model per AI tool">
+      <Section title="Default model per harness">
         <Card>
           {CHOICES.map((h) => (
             <Row key={h.id} label={h.label}>

@@ -66,7 +66,7 @@ struct ConnectResultSheet: View {
   private func signIn(_ c: AppConnector) -> some View {
     MarketSheet(title: "Connect \(c.name)", busy: action.busy) {
       CardGroup {
-        MarketRow(symbol: "powerplug", tile: 50, title: "Sign in to \(c.name)", subtitle: "A page opens in your browser. Choose the account and allow Wisp to use \(c.name) for your helpers.")
+        MarketRow(symbol: "powerplug", tile: 50, title: "Sign in to \(c.name)", subtitle: "A page opens in your browser. Choose the account and allow Wisp to use \(c.name) for your agents.")
       }
       Text("Wisp never sees or keeps your password.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       InlineError(error: action.error)
@@ -82,7 +82,7 @@ struct ConnectResultSheet: View {
   }
 
   private func connected(_ c: AppConnector) -> some View {
-    MarketSheet(title: "\(c.name) is connected", subtitle: c.forAll ? "Every agent can use it now." : helpers.isEmpty ? "No helper can use it yet." : "\(ShelfLogic.sentence(helpers.map(\.name))) can use it now.") {
+    MarketSheet(title: "\(c.name) is connected", subtitle: c.forAll ? "Every agent can use it now." : helpers.isEmpty ? "No agent can use it yet." : "\(ShelfLogic.sentence(helpers.map(\.name))) can use it now.") {
       MarketLabel("Who can use it")
       AgentAccessPicker(allAgents: Binding(get: { c.forAll }, set: { on in action.run { try await store.setConnectorAllAgents(c.id, on) } }),
                         isOn: { agent in Binding(get: { c.agentIds?.contains(agent.id) == true }, set: { on in action.run { try await store.attachConnector(c, agentIds: [agent.id], on: on) } }) },
@@ -140,13 +140,13 @@ struct ConnectorDetail: View {
             }.buttonStyle(.plain)
           }
           if current.auth?.signedIn == true {
-            Button { action.run { try await store.connectorSignOut(current.id) } } label: { MarketRow(symbol: "rectangle.portrait.and.arrow.right", title: "Sign out", subtitle: "Helpers stop using your account") }.buttonStyle(.plain)
+            Button { action.run { try await store.connectorSignOut(current.id) } } label: { MarketRow(symbol: "rectangle.portrait.and.arrow.right", title: "Sign out", subtitle: "Agents stop using your account") }.buttonStyle(.plain)
           }
           Button { editor = ConnectorEditorTarget(existing: current, entry: nil) } label: { MarketRow(symbol: "pencil", title: "Edit settings") }.buttonStyle(.plain)
           Button { action.run { try await store.saveConnector(current.id, ["enabled": AnyEncodable(current.enabled == false)]) } } label: {
-            MarketRow(symbol: "power", title: current.enabled == false ? "Turn on" : "Turn off", subtitle: current.enabled == false ? "On for the helpers above" : "Off for every helper")
+            MarketRow(symbol: "power", title: current.enabled == false ? "Turn on" : "Turn off", subtitle: current.enabled == false ? "On for the agents above" : "Off for every agent")
           }.buttonStyle(.plain)
-          Button { removing = true } label: { MarketRow(symbol: "trash", title: "Remove", subtitle: "Helpers will lose access to it.", danger: true) }.buttonStyle(.plain)
+          Button { removing = true } label: { MarketRow(symbol: "trash", title: "Remove", subtitle: "Agents will lose access to it.", danger: true) }.buttonStyle(.plain)
         }
       }
       InlineError(error: action.error)
@@ -154,7 +154,7 @@ struct ConnectorDetail: View {
     .connectFlow($editor, chat: $chat)
     .navigationDestination(item: $chat) { ChannelView(channel: $0.channel, draft: $0.draft) }
     .onChange(of: scenePhase) { _, phase in if phase == .active { action.run { try await store.refreshConnectors() } } }
-    .confirmationDialog("Remove \(current.name)? Helpers will lose access to it.", isPresented: $removing, titleVisibility: .visible) {
+    .confirmationDialog("Remove \(current.name)? Agents will lose access to it.", isPresented: $removing, titleVisibility: .visible) {
       Button("Remove", role: .destructive) { action.run { try await store.deleteConnector(current.id); dismiss() } }
     }
   }
@@ -178,10 +178,10 @@ struct ConnectorCatalogDetail: View {
     let labels = (entry.fields ?? []).map(\.label)
     if entry.kind == "secret" || !labels.isEmpty {
       let them = labels.count > 1 ? "them" : "it"
-      return "You enter \(labels.isEmpty ? "the key" : labels.joined(separator: ", ")) once. Wisp keeps \(them) and gives \(them) only to the helpers you pick."
+      return "You enter \(labels.isEmpty ? "the key" : labels.joined(separator: ", ")) once. Wisp keeps \(them) and gives \(them) only to the agents you pick."
     }
-    if entry.kind == "mcp-stdio" { return "\(entry.name) runs as a program on each helper's own computer.\(entry.needs.map { " It needs \($0)." } ?? "") After that you choose which helpers can use it." }
-    return "If \(entry.name) asks you to sign in, a page opens in your browser. Wisp never sees your password. After that you choose which helpers can use \(entry.name)."
+    if entry.kind == "mcp-stdio" { return "\(entry.name) runs as a program on each agent's own computer.\(entry.needs.map { " It needs \($0)." } ?? "") After that you choose which agents can use it." }
+    return "If \(entry.name) asks you to sign in, a page opens in your browser. Wisp never sees your password. After that you choose which agents can use \(entry.name)."
   }
 
   var body: some View {
@@ -195,11 +195,11 @@ struct ConnectorCatalogDetail: View {
         }
         Spacer(minLength: 0)
       }
-      Text((entry.description ?? "").isEmpty ? "Lets your helpers use \(entry.name)." : entry.description!).font(.system(size: 15)).foregroundStyle(Palette.text.opacity(0.9)).padding(.horizontal, 4)
+      Text((entry.description ?? "").isEmpty ? "Lets your agents use \(entry.name)." : entry.description!).font(.system(size: 15)).foregroundStyle(Palette.text.opacity(0.9)).padding(.horizontal, 4)
       if let trust { Text(trust.explanation).font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4) }
       MarketLabel("Before you connect")
       CardGroup {
-        MarketRow(symbol: "powerplug", title: "What helpers can do", subtitle: s.can)
+        MarketRow(symbol: "powerplug", title: "What agents can do", subtitle: s.can)
         MarketRow(symbol: "checkmark.shield", title: "Who runs it", subtitle: s.runBy)
         if let caution = s.caution { MarketRow(symbol: "exclamationmark.triangle", title: "Take care", subtitle: caution) }
       }

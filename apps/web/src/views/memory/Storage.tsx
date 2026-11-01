@@ -62,7 +62,7 @@ function Location({ storage, reload }: { storage: MemoryStorage; reload: () => v
           <div className="mt-0.5 font-mono text-[14px] break-all">{storage.path}</div>
         </div>
       )}
-      {storage.path && <p className="mt-2 px-1 text-xs text-muted">{storage.movable === false ? "Each extra organization keeps its memory in Wisp's own data folder, so it can't be moved." : fixed ? "Set by WISP_VAULT_DIR where Wisp runs, so it can only be changed there." : storage.source === "default" ? "Wisp's own data folder, the default." : "Chosen here."}</p>}
+      {storage.path && <p className="mt-2 px-1 text-xs text-muted">{storage.movable === false ? "Each extra workspace keeps its memory in Wisp's own data folder, so it can't be moved." : fixed ? "Set by WISP_VAULT_DIR where Wisp runs, so it can only be changed there." : storage.source === "default" ? "Wisp's own data folder, the default." : "Chosen here."}</p>}
       {!fixed && (
         <>
           <div className="mt-3 flex flex-wrap gap-2">

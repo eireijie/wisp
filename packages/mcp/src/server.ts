@@ -168,7 +168,7 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     "agent_create",
     {
       description:
-        "Create a new agent to work under you. Leads can do this when their team needs someone it doesn't have; agents a lead made can make sub-agents for pieces of their work. Only works when the organization switched it on (your prompt says so). The new agent joins your channel's team chart under you; then hand it work with task_delegate.",
+        "Create a new agent to work under you. Leads can do this when their team needs someone it doesn't have; agents a lead made can make sub-agents for pieces of their work. Only works when the workspace switched it on (your prompt says so). The new agent joins your channel's team chart under you; then hand it work with task_delegate.",
       inputSchema: {
         name: z.string().describe("its name, e.g. Scout"),
         role: z.string().optional().describe("what it does in a few words, e.g. Researcher"),

@@ -178,7 +178,7 @@ struct SkillInstallSheet: View {
   var body: some View {
     MarketSheet(title: title, busy: action.busy) {
       AgentAccessPicker(allAgents: $allAgents, isOn: { agent in Binding(get: { agents.contains(agent.id) }, set: { if $0 { agents.insert(agent.id) } else { agents.remove(agent.id) } }) },
-                        empty: "It goes to the organization, ready for the next one.")
+                        empty: "It goes to the workspace, ready for the next one.")
       Text("You can change this any time from the skill.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       InlineError(error: action.error)
       MarketPrimaryButton(title: title, busy: action.busy) {
@@ -214,7 +214,7 @@ struct BringAllSheet: View {
             MarketToggleRow(title: agent.name, subtitle: "@\(agent.handle)", isOn: Binding(get: { agents.contains(agent.id) }, set: { if $0 { agents.insert(agent.id) } else { agents.remove(agent.id) } }), disabled: busy != nil) { AgentAvatar(agent: agent, size: 30, showStatus: false) }
           }
         }
-        Text("You can give them to more helpers later. Apps that need a sign-in ask once, here in Wisp.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+        Text("You can give them to more agents later. Apps that need a sign-in ask once, here in Wisp.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       }
       if !later.isEmpty {
         MarketLabel("Need a key")

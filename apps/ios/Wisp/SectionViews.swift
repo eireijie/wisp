@@ -35,7 +35,7 @@ struct AgentSelection: View {
           if on { selected.insert(agent.id) } else { selected.remove(agent.id) }
         })).disabled(!allowed(agent) && !selected.contains(agent.id))
       }
-      if store.agents.isEmpty { Text("Add a helper first.").foregroundStyle(.secondary) }
+      if store.agents.isEmpty { Text("Add an agent first.").foregroundStyle(.secondary) }
     }
   }
 }

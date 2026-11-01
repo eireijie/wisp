@@ -45,7 +45,7 @@ struct NewNoteSheet: View {
           TextEditor(text: $body_).scrollContentBackground(.hidden).foregroundStyle(Palette.text).frame(minHeight: 150).padding(12)
             .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
     .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
-            .overlay(alignment: .topLeading) { if body_.isEmpty { Text("Write something your helpers should remember…").foregroundStyle(Palette.faint).padding(.horizontal, 17).padding(.vertical, 20).allowsHitTesting(false) } }
+            .overlay(alignment: .topLeading) { if body_.isEmpty { Text("Write something your agents should remember…").foregroundStyle(Palette.faint).padding(.horizontal, 17).padding(.vertical, 20).allowsHitTesting(false) } }
           InlineError(error: action.error)
         }.padding(.horizontal, 18).padding(.top, 6)
       }.scrollDismissesKeyboard(.interactively)

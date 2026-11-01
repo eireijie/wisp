@@ -20,16 +20,16 @@ describe("whatItsFor", () => {
 
 describe("helperLine", () => {
   const agents = [
-    { id: "a", name: "Everyday Helper" },
+    { id: "a", name: "Everyday Agent" },
     { id: "b", name: "Coder" },
     { id: "c", name: "Writer" },
   ];
   it("says who has it", () => {
-    expect(helperLine(agents, [])).toBe("No helper has this yet");
-    expect(helperLine(agents, ["gone"])).toBe("No helper has this yet");
-    expect(helperLine(agents, ["a"])).toBe("Everyday Helper has this");
-    expect(helperLine(agents, ["a", "b"])).toBe("Everyday Helper and Coder have this");
-    expect(helperLine(agents, ["a", "b", "c"])).toBe("Everyday Helper, Coder and 1 more have this");
+    expect(helperLine(agents, [])).toBe("No agent has this yet");
+    expect(helperLine(agents, ["gone"])).toBe("No agent has this yet");
+    expect(helperLine(agents, ["a"])).toBe("Everyday Agent has this");
+    expect(helperLine(agents, ["a", "b"])).toBe("Everyday Agent and Coder have this");
+    expect(helperLine(agents, ["a", "b", "c"])).toBe("Everyday Agent, Coder and 1 more have this");
   });
 });
 

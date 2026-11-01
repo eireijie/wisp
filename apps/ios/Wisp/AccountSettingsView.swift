@@ -22,7 +22,7 @@ struct ProfileSettingsView: View {
         Text("\(roleName) · \(store.workspace?.name ?? "Wisp")").font(.system(size: 13)).foregroundStyle(Palette.faint)
       }.padding(.vertical, 4)
       if store.role == "guest" {
-        Text("You're a guest in \(store.workspace?.name ?? "this organization"). You can chat in the teams you're added to and use the shared folder in memory. Agents, computers and people belong to the owner.")
+        Text("You're a guest in \(store.workspace?.name ?? "this workspace"). You can chat in the teams you're added to and use the shared folder in memory. Agents, computers and people belong to the owner.")
           .font(.system(size: 15)).foregroundStyle(Palette.muted).padding(16).frame(maxWidth: .infinity, alignment: .leading)
           .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
     .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))

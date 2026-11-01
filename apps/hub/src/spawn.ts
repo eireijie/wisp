@@ -29,11 +29,11 @@ export function spawnRight(hub: Hub, agent: Agent): { kind: "agent" | "sub-agent
   if (policy.leadsCreateAgents && isLead(hub, agent)) kind = "agent";
   else if (policy.subAgents && agent.settings.parentAgentId) kind = "sub-agent";
   if (!kind) {
-    if (agent.settings.parentAgentId) return { why: "making sub-agents is switched off for this organization (Settings → Agents)" };
-    return { why: policy.leadsCreateAgents ? "only leads can create agents" : "agents creating agents is switched off for this organization (Settings → Agents)" };
+    if (agent.settings.parentAgentId) return { why: "making sub-agents is switched off for this workspace (Settings → Agents)" };
+    return { why: policy.leadsCreateAgents ? "only leads can create agents" : "agents creating agents is switched off for this workspace (Settings → Agents)" };
   }
   if (depth + 1 > MAX_MADE_DEPTH) return { why: `agents can only be made ${MAX_MADE_DEPTH} levels down, and you're at the bottom` };
-  if (agentMadeCount(hub, agent.workspaceId) >= policy.maxAgentMade) return { why: `the organization already has ${policy.maxAgentMade} agents made by agents, its limit (Settings → Agents)` };
+  if (agentMadeCount(hub, agent.workspaceId) >= policy.maxAgentMade) return { why: `the workspace already has ${policy.maxAgentMade} agents made by agents, its limit (Settings → Agents)` };
   return { kind, depth: depth + 1 };
 }
 

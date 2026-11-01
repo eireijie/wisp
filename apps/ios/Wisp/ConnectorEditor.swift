@@ -79,7 +79,7 @@ struct ConnectorEditor: View {
       if let summary {
         MarketLabel("Before you connect")
         CardGroup {
-          MarketRow(symbol: "powerplug", title: "What helpers can do", subtitle: summary.can)
+          MarketRow(symbol: "powerplug", title: "What agents can do", subtitle: summary.can)
           MarketRow(symbol: "checkmark.shield", title: "Who runs it", subtitle: summary.runBy)
           if let caution = summary.caution { MarketRow(symbol: "exclamationmark.triangle", title: "Take care", subtitle: caution) }
         }

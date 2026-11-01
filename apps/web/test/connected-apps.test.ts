@@ -16,9 +16,9 @@ describe("connectSummary", () => {
     expect(s.caution).toBeNull();
   });
   it("says a verified third party is not the app's maker", () => {
-    const s = connectSummary({ entry: entry({ id: "com.acme/gmail", name: "Gmail helper", publisher: "com.acme", brand: "acme", domain: "acme.com" }), install });
+    const s = connectSummary({ entry: entry({ id: "com.acme/gmail", name: "Gmail agent", publisher: "com.acme", brand: "acme", domain: "acme.com" }), install });
     expect(s.runBy).toContain("Run by com.acme (acme.com), not by Wisp");
-    expect(s.runBy).toContain("doesn't mean Gmail helper's own maker endorses it");
+    expect(s.runBy).toContain("doesn't mean Gmail agent's own maker endorses it");
   });
   it("warns plainly for an unverified server", () => {
     const s = connectSummary({ entry: entry({ id: "io.github.bob/gmail", name: "Gmail", publisher: "bob", brand: "bob", domain: null, verified: false }), install });

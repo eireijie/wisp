@@ -63,8 +63,8 @@ export function OrgList({ onDone, onNewOrg }: { onDone: () => void; onNewOrg?: (
 
   const row = "w-full flex items-center gap-3 min-h-11 px-3.5 rounded-xl text-left text-body hover:bg-hover";
   return (
-    <div role="menu" aria-label="Switch organization" className="py-1.5">
-      <div className="px-3.5 pt-1 pb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Organizations</div>
+    <div role="menu" aria-label="Switch workspace" className="py-1.5">
+      <div className="px-3.5 pt-1 pb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Workspaces</div>
       {list.map((o) => {
         const isCurrent = o.current || o.id === me.workspace.id;
         return (
@@ -84,7 +84,7 @@ export function OrgList({ onDone, onNewOrg }: { onDone: () => void; onNewOrg?: (
       <div className="h-px bg-line mx-2 my-1.5" />
       <button role="menuitem" onClick={() => (onNewOrg ? onNewOrg() : setNewOrg(true))} className={row}>
         <Plus size={20} strokeWidth={1.7} className="text-muted" />
-        <span className="flex-1">New organization</span>
+        <span className="flex-1">New workspace</span>
       </button>
       <div className={cx(row, "hover:bg-transparent pointer-events-none")}>
         <Link2 size={20} strokeWidth={1.7} className="text-muted" />
@@ -136,7 +136,7 @@ export function NewOrgDialog({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
-    <Modal title="New organization" onClose={onClose}>
+    <Modal title="New workspace" onClose={onClose}>
       <form
         className="space-y-4"
         onSubmit={async (e) => {
@@ -152,7 +152,7 @@ export function NewOrgDialog({ onClose }: { onClose: () => void }) {
           }
         }}
       >
-        <p className="text-sm text-muted">A separate place with its own agents, teams and memory. You can switch between organizations any time.</p>
+        <p className="text-sm text-muted">A separate place with its own agents, teams and memory. You can switch between workspaces any time.</p>
         <Field label="Name">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Studio" maxLength={60} />
         </Field>
@@ -192,7 +192,7 @@ export function JoinOrgDialog({ onClose }: { onClose: () => void }) {
           }
         }}
       >
-        <p className="text-sm text-muted">Paste the invite link someone sent you, or its code. You'll keep the organizations you're already in.</p>
+        <p className="text-sm text-muted">Paste the invite link someone sent you, or its code. You'll keep the workspaces you're already in.</p>
         <Field label="Invite link or code">
           <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="https://…/#/join/…" />
         </Field>

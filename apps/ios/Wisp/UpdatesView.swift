@@ -160,7 +160,7 @@ struct AgentRuntimesView: View {
   @Environment(Store.self) private var store
   @State private var action = FormAction()
   var body: some View {
-    SettingsPage("Agent runtimes", id: "runtimes") {
+    SettingsPage("Harness setup", id: "runtimes") {
       CardLabel("On this device")
       CardGroup {
         ForEach(store.nodes.filter(\.usable)) { node in NavigationLink { DeviceDetail(node: node) } label: { RowLabel(title: node.name) } }

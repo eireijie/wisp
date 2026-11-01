@@ -159,10 +159,10 @@ function RoleSection({ node: n, onChange }: { node: NodeInfo; onChange: () => vo
       </div>
       <div className="flex items-center gap-3 pt-1">
         <span className="flex-1">
-          <span className="block text-sm font-medium">{n.mine ? "Share with the organization" : n.shared ? "Shared" : "Private"}</span>
-          <span className="block text-xs text-muted">{n.mine ? "Let others in the organization add agents and VMs here" : n.shared ? "Anyone in the organization can add agents and VMs here." : `Only ${n.ownerName ?? "its owner"} can add agents and VMs here.`}</span>
+          <span className="block text-sm font-medium">{n.mine ? "Share with the workspace" : n.shared ? "Shared" : "Private"}</span>
+          <span className="block text-xs text-muted">{n.mine ? "Let others in the workspace add agents and VMs here" : n.shared ? "Anyone in the workspace can add agents and VMs here." : `Only ${n.ownerName ?? "its owner"} can add agents and VMs here.`}</span>
         </span>
-        {n.mine ? <Toggle on={n.shared} onChange={(shared) => void patch({ shared })} label="Let others in the organization add agents and VMs here" /> : n.shared ? <Users size={16} className="text-muted" /> : <Lock size={16} className="text-muted" />}
+        {n.mine ? <Toggle on={n.shared} onChange={(shared) => void patch({ shared })} label="Let others in the workspace add agents and VMs here" /> : n.shared ? <Users size={16} className="text-muted" /> : <Lock size={16} className="text-muted" />}
       </div>
     </section>
   );

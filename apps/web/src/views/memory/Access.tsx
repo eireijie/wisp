@@ -91,7 +91,7 @@ export function AccessRulesDialog({ onClose }: { onClose: () => void }) {
       <div className="rounded-3xl bg-card px-4 py-3.5">
         <p className="font-medium text-body">How these rules work</p>
         <p className="mt-1 text-[13px] text-muted leading-relaxed">
-          Everyone shares the Shared folder. Each helper has a private folder. A rule on a folder or note changes who can read or write it. A rule for one helper beats one for its team or all helpers.
+          Everyone shares the Shared folder. Each agent has a private folder. A rule on a folder or note changes who can read or write it. A rule for one helper beats one for its team or all helpers.
         </p>
       </div>
       {error && <p className="mt-3 text-sm text-bad">{error}</p>}
@@ -99,7 +99,7 @@ export function AccessRulesDialog({ onClose }: { onClose: () => void }) {
       <Cards>
         {groupsShown.filter((s) => s.kind === "all_agents" || s.kind === "team" || s.kind === "role").map((s) => row(s, <GroupMark />, subjectLabel(s, agents, members)))}
         {agents.map((a) => row({ kind: "agent", id: a.id }, <AgentAvatar agent={a} size={34} interactive={false} />, a.name))}
-        {!agents.length && !groupsShown.length && <p className="px-4 py-3 text-sm text-muted">No helpers yet.</p>}
+        {!agents.length && !groupsShown.length && <p className="px-4 py-3 text-sm text-muted">No agents yet.</p>}
       </Cards>
       <Overline>People</Overline>
       <Cards>
@@ -263,7 +263,7 @@ function RuleEditor({
       {isAgent && atLeast(level, "read") && (
         <div className="mt-3 rounded-3xl bg-card px-4 min-h-14 py-2 flex items-center gap-3">
           <span className="flex-1">
-            <span className="block text-body">Always remind this helper of this note</span>
+            <span className="block text-body">Always remind this agent of this note</span>
             <span className="block text-xs text-muted">Loads at startup</span>
           </span>
           <button role="switch" aria-checked={startup} disabled={!canChange} onClick={() => setStartup(!startup)} className={cx("w-[52px] h-8 rounded-full p-1 transition-colors shrink-0", startup ? "bg-info" : "bg-chip")}>

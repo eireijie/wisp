@@ -319,7 +319,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   app.post("/api/invites", async (req, reply) => {
     const c = need(req, reply, { owner: true });
     if (!c) return;
-    if (!featureOn(store, c.workspaceId, "invite")) return reply.code(403).send({ error: "Inviting people is switched off for this organization. Turn on the Invite people mod first." });
+    if (!featureOn(store, c.workspaceId, "invite")) return reply.code(403).send({ error: "Inviting people is switched off for this workspace. Turn on the Invite people mod first." });
     const body = parse(z.object({ role: ROLE.default("member"), days: z.number().int().min(1).max(30).default(7) }), req.body, reply);
     if (!body) return;
     const code = crypto.randomBytes(18).toString("base64url");

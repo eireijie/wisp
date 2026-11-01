@@ -81,10 +81,10 @@ enum Readiness {
   static func checks(agents: [Agent], devices: [ReadyDevice]?) -> [Check] {
     func unknown(_ id: String, _ label: String) -> Check { Check(id: id, status: .unknown, label: label) }
     guard let agent = pickHelper(agents, devices: devices) else {
-      return [Check(id: "helper", status: .bad, label: "You have a helper", fix: "Make one. It takes a few minutes.", to: .makeHelper),
+      return [Check(id: "helper", status: .bad, label: "You have an agent", fix: "Make one. It takes a few minutes.", to: .makeHelper),
               unknown("device", "It has a device to work on"), unknown("online", "That device is on and connected"), unknown("harness", "Its AI is installed there")]
     }
-    var out = [Check(id: "helper", status: .ok, label: "You have a helper: \(agent.name)")]
+    var out = [Check(id: "helper", status: .ok, label: "You have an agent: \(agent.name)")]
     if runsOutside(agent.harness) {
       out.append(Check(id: "device", status: .ok, label: "\(agent.name) runs outside Wisp and needs no device here"))
       return out

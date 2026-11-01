@@ -30,12 +30,11 @@ const SECTIONS: { id: AgentTab; label: string; body: string; icon: ReactNode }[]
   { id: "soul", label: "Personality", body: "How it talks and what it values", icon: <Sparkles size={16} /> },
   { id: "instructions", label: "Instructions", body: "How it should work", icon: <ScrollText size={16} /> },
   { id: "model", label: "Model", body: "Model, effort and fast mode", icon: <Cpu size={16} /> },
-  { id: "device", label: "Device", body: "Where its harness runs", icon: <Server size={16} /> },
-  { id: "computer", label: "Computer", body: "Which computer it uses", icon: <Monitor size={16} /> },
+  { id: "computer", label: "Computer", body: "Where it runs and which computer it uses", icon: <Monitor size={16} /> },
   { id: "background", label: "Background", body: "What it does while you're away", icon: <Radar size={16} /> },
   { id: "routines", label: "Routines", body: "Tasks it does on a schedule", icon: <ListChecks size={16} /> },
   { id: "permissions", label: "Permissions", body: "What it may do without asking", icon: <Shield size={16} /> },
-  { id: "connect", label: "Connect", body: "Apps and connectors", icon: <Plug size={16} /> },
+  { id: "connect", label: "Connect", body: "Connected apps", icon: <Plug size={16} /> },
   { id: "runs", label: "Activity", body: "Everything it's done lately", icon: <Activity size={16} /> },
 ];
 

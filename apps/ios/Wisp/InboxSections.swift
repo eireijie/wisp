@@ -395,8 +395,8 @@ struct ReadinessSection: View {
     let bad = checks.first { $0.status == .bad }
     let done = checks.filter { $0.status == .ok }.count
     if store.agents.isEmpty {
-      card(agent: nil, title: "Your helper isn't ready yet", sub: "Next: make your first agent", done: 0, total: max(checks.count, 4)) {
-        if store.canManage { Button("Make a helper") { open(.addAgent) }.buttonStyle(CardPill(tone: .primary)) }
+      card(agent: nil, title: "Your agent isn't ready yet", sub: "Next: make your first agent", done: 0, total: max(checks.count, 4)) {
+        if store.canManage { Button("Make an agent") { open(.addAgent) }.buttonStyle(CardPill(tone: .primary)) }
       }
     } else if let agent, let bad {
       card(agent: agent, title: title(agent, bad, devices), sub: bad.fix ?? Readiness.ready(agent, devices: devices).problem ?? "Not ready yet", done: done, total: checks.count) {
@@ -458,7 +458,7 @@ struct ReadinessSection: View {
 
   @ViewBuilder private func primaryFix(_ bad: Readiness.Check, _ agent: Agent) -> some View {
     switch bad.to {
-    case .makeHelper: if store.canManage { Button("Make a helper") { open(.addAgent) }.buttonStyle(CardPill(tone: .primary)) }
+    case .makeHelper: if store.canManage { Button("Make an agent") { open(.addAgent) }.buttonStyle(CardPill(tone: .primary)) }
     case .chooseDevice(let id): if let a = store.agent(id) { Button("Choose a device") { open(.agent(a)) }.buttonStyle(CardPill(tone: .primary)) }
     case .chooseModel(let id): if let a = store.agent(id) { Button("Change its AI") { open(.agent(a)) }.buttonStyle(CardPill(tone: .primary)) }
     case .signIn(let id): if let a = store.agent(id) { Button("Sign in") { open(a.settings?.runIn == "computer" && a.computerId != nil ? .agent(a) : .harnesses) }.buttonStyle(CardPill(tone: .primary)) }

@@ -95,7 +95,7 @@ export function connectorUnsupportedReason(harnessId: string, kind: ConnectorKin
   return harnessProtocol(harnessId) === "mcp" ? `${label} connects through wisp-mcp, so it can't use connected apps here` : `${label} can't use connected apps yet`;
 }
 
-export const CONNECTOR_HELP = "Pick a helper that can use connected apps, or make one with Claude Code or Codex.";
+export const CONNECTOR_HELP = "Pick an agent that can use connected apps, or make one with Claude Code or Codex.";
 
 /** One value a catalog connector asks for. */
 export interface CatalogField {

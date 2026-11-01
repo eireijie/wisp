@@ -133,7 +133,7 @@ final class AgentParityTests: XCTestCase {
     let devices = try Wire.decoder.decode([ScannedDevice].self, from: Data(json.utf8))
     XCTAssertEqual(devices.filter(\.usable).map(\.id), ["n1"])
     let found = try XCTUnwrap(devices[0].discovered?.first)
-    XCTAssertEqual(found.summary, "Helper · has a soul · 2 notes")
+    XCTAssertEqual(found.summary, "Helper · has a personality · 2 notes")
     var agent = try Wire.decoder.decode(Agent.self, from: Data(agentJSON.utf8))
     XCTAssertFalse(AgentImportLogic.alreadyHere(found, on: devices[0], agents: [agent]))
     agent.harness = "hermes"; agent.name = "Hermes"

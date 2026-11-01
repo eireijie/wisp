@@ -128,7 +128,7 @@ export function VoicePicker({ agent, value, onChange, onLevel }: { agent: Agent;
   const languages = useMemo(() => [...new Set(voices.map((v) => v.lang))].sort((a, b) => languageLabel(a, language).localeCompare(languageLabel(b, language))), [voices, language]);
   const filtered = useMemo(() => filterVoices(voices, { query, lang: activeLang }), [voices, query, activeLang]);
 
-  const auto: Choice = { id: "", label: `Automatic for ${agent.name}`, detail: "A voice picked for this helper" };
+  const auto: Choice = { id: "", label: `Automatic for ${agent.name}`, detail: "A voice picked for this agent" };
   const asChoice = (v: VoiceInfo): Choice => ({ id: v.voiceURI, label: v.name, detail: languageLabel(v.lang, language) });
   const selected = value?.[engine] ?? "";
   let choices: Choice[];

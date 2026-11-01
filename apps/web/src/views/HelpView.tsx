@@ -11,7 +11,7 @@ const ISSUES_URL = `${GITHUB_URL}/issues`;
 
 const SECTIONS = [
   { id: "setup", title: "Finish setup" },
-  { id: "helper", title: "My helper isn't answering" },
+  { id: "helper", title: "My agent isn't answering" },
   { id: "examples", title: "What can Wisp do?" },
   { id: "words", title: "Words you'll see" },
   { id: "report", title: "Report a problem" },
@@ -27,15 +27,15 @@ const EXAMPLES = [
 ];
 
 const GLOSSARY: [string, string, { label: string; to: string }?][] = [
-  ["Agent (helper)", "An AI helper you give work to, like a teammate. It has a name, remembers things, and works on a device."],
-  ["Harness", "The AI program a helper runs on, like Claude Code or Codex. You pick it once when you make a helper."],
-  ["Device", "A computer of yours with Wisp installed. Helpers do their work there."],
-  ["Computer", "A desktop a helper can see and use, either a virtual one on your device or your own screen."],
-  ["Memory", "Notes Wisp keeps about you and your work, so helpers don't need to be told twice. You can read and fix them."],
-  ["Skill", "Something a helper has learned how to do, like a recipe it can follow again."],
-  ["Routine", "A job a helper does on its own, on a schedule or when something happens."],
-  ["Team", "A group of helpers that work on something together. Each team has its own, under Team settings."],
-  ["Connected app", "A service you link to Wisp, like Gmail, so helpers can use it for you."],
+  ["Agent", "An AI agent you give work to, like a teammate. It has a name, remembers things, and works on a device."],
+  ["Harness", "The AI program an agent runs on, like Claude Code or Codex. You pick it once when you make an agent."],
+  ["Device", "A computer of yours with Wisp installed. Agents do their work there."],
+  ["Computer", "A desktop an agent can see and use, either a virtual one on your device or your own screen."],
+  ["Memory", "Notes Wisp keeps about you and your work, so agents don't need to be told twice. You can read and fix them."],
+  ["Skill", "Something an agent has learned how to do, like a recipe it can follow again."],
+  ["Routine", "A job an agent does on its own, on a schedule or when something happens."],
+  ["Team", "A group of agents that work on something together. Each team has its own, under Team settings."],
+  ["Connected app", "A service you link to Wisp, like Gmail, so agents can use it for you."],
   ["Connection code (token)", "A one-time code that links a computer to this Wisp. It's shown once when you add a device."],
   ["AI tokens", "How AI services measure and charge for work: more text, more tokens."],
 ];
@@ -141,7 +141,7 @@ function HelperSection() {
   const devices = useDevices();
   const checks = helperChecklist(agents, devices);
   return (
-    <Section id="helper" title="My helper isn't answering">
+    <Section id="helper" title="My agent isn't answering">
       {devices === null && (
         <p className="text-sm text-faint" role="status">
           Checking your devices…

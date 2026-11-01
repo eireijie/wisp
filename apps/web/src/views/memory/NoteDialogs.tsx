@@ -103,7 +103,7 @@ export function NewNoteDialog({ initial, initialName = "", folders, onClose, onC
         <Overline>Where to keep it</Overline>
         <FolderChoice value={dir} onChange={setDir} folders={folders} />
         <Overline>Note</Overline>
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write something your helpers should remember…" aria-label="Note" rows={5} className="w-full rounded-3xl border border-control-line bg-control px-4 py-3 text-body outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30 resize-none" />
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write something your agents should remember…" aria-label="Note" rows={5} className="w-full rounded-3xl border border-control-line bg-control px-4 py-3 text-body outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30 resize-none" />
         {error && <p className="mt-3 text-sm text-bad">{error}</p>}
       </form>
     </MemoryDialog>

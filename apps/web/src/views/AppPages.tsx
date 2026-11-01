@@ -11,9 +11,9 @@ export type AppItem = { key: string; name: string; description: string; category
 /** How signing in or setting up works for this kind of app, in a sentence. */
 export function howToConnect(name: string, kind: ConnectorKind, fieldLabels: string[], needs?: string): string {
   if (kind === "secret" || fieldLabels.length)
-    return `You enter ${fieldLabels.length ? fieldLabels.join(", ") : "the key"} once. Wisp keeps ${fieldLabels.length > 1 ? "them" : "it"} and gives ${fieldLabels.length > 1 ? "them" : "it"} only to the helpers you pick.`;
-  if (kind === "mcp-stdio") return `${name} runs as a program on each helper's own computer.${needs ? ` It needs ${needs}.` : ""} After that you choose which helpers can use it.`;
-  return `If ${name} asks you to sign in, a page opens in your browser. Wisp never sees your password. After that you choose which helpers can use ${name}.`;
+    return `You enter ${fieldLabels.length ? fieldLabels.join(", ") : "the key"} once. Wisp keeps ${fieldLabels.length > 1 ? "them" : "it"} and gives ${fieldLabels.length > 1 ? "them" : "it"} only to the agents you pick.`;
+  if (kind === "mcp-stdio") return `${name} runs as a program on each agent's own computer.${needs ? ` It needs ${needs}.` : ""} After that you choose which agents can use it.`;
+  return `If ${name} asks you to sign in, a page opens in your browser. Wisp never sees your password. After that you choose which agents can use ${name}.`;
 }
 
 /** An app's page: who stands behind it, what you're agreeing to, and how connecting works. */
@@ -46,7 +46,7 @@ export function AppDetail({ app, have, canEdit, onConnect, onManage }: { app: Ap
           ))}
       </header>
 
-      <p className="px-1 text-body leading-relaxed text-ink/90">{app.description || `Lets your helpers use ${app.name}.`}</p>
+      <p className="px-1 text-body leading-relaxed text-ink/90">{app.description || `Lets your agents use ${app.name}.`}</p>
 
       {registry && registry.installs.length > 1 && (
         <section className="space-y-2">
@@ -106,7 +106,7 @@ export function ConnectSignIn({ connector, onClose, onSignIn }: { connector: Con
 export function Connected({ connector, agents, onClose, onPick, onTry }: { connector: Connector; agents: Agent[]; onClose: () => void; onPick: () => void; onTry: () => void }) {
   const names = (connector.allAgents ? agents.map((a) => a.id) : connector.agentIds).map((id) => agents.find((a) => a.id === id)?.name).filter((n): n is string => !!n);
   return (
-    <Dlg title={`${connector.name} is connected`} sub={connector.allAgents ? "All agents can use it now." : names.length ? `${sentence(names)} can use it now.` : "No helper can use it yet."} onClose={onClose}>
+    <Dlg title={`${connector.name} is connected`} sub={connector.allAgents ? "All agents can use it now." : names.length ? `${sentence(names)} can use it now.` : "No agent can use it yet."} onClose={onClose}>
       <Panel>
         <Item icon={<Tile size={40}><Users size={20} strokeWidth={1.7} /></Tile>} title="Pick who can use it" sub={connector.allAgents ? "All agents" : names.length ? names.join(", ") : "No one yet"} onClick={onPick} />
         {names.length > 0 && <Item icon={<Tile size={40}><MessageSquare size={20} strokeWidth={1.7} /></Tile>} title="Try it in a chat" sub={`Ask ${names[0]} to use ${connector.name}`} onClick={onTry} />}
@@ -160,7 +160,7 @@ export function ManageApp({ connector: c, agents, canEdit, onClose, onChanged, o
       {c.auth?.error && <p className="px-1 text-sm text-bad">{c.auth.error}</p>}
 
       <section className="space-y-2">
-        <Label>Helpers who can use it</Label>
+        <Label>Agents who can use it</Label>
         <AgentPicker agents={agents} value={c.agentIds} onChange={(ids) => void pick(ids)} disabled={!canEdit || busy !== null} allAgents={{ on: !!c.allAgents, onChange: (on) => void change(() => api("PATCH", `/api/connectors/${c.id}`, { allAgents: on })) }} />
       </section>
       {error && <p className="text-sm text-bad">{error}</p>}
@@ -171,10 +171,10 @@ export function ManageApp({ connector: c, agents, canEdit, onClose, onChanged, o
           <Panel>
             {row(<RefreshCw size={20} strokeWidth={1.7} />, "Refresh", "Check the connection", onChanged)}
             {c.kind === "mcp-http" && row(<LogIn size={20} strokeWidth={1.7} />, c.auth?.signedIn ? "Sign in again" : "Sign in", "Opens the app's sign-in page", onSignIn)}
-            {c.auth?.signedIn && row(<LogOut size={20} strokeWidth={1.7} />, "Sign out", "Helpers stop using your account", onSignOut)}
+            {c.auth?.signedIn && row(<LogOut size={20} strokeWidth={1.7} />, "Sign out", "Agents stop using your account", onSignOut)}
             {row(<Pencil size={20} strokeWidth={1.7} />, "Edit settings", "Name, values and how it starts", onEdit)}
-            {row(<Power size={20} strokeWidth={1.7} />, c.enabled ? "Turn off" : "Turn on", c.enabled ? "Off for every helper" : "On for the helpers above", onToggle)}
-            {row(<Trash2 size={20} strokeWidth={1.7} className="text-bad" />, "Remove", "Helpers will lose access to it.", onRemove, true)}
+            {row(<Power size={20} strokeWidth={1.7} />, c.enabled ? "Turn off" : "Turn on", c.enabled ? "Off for every agent" : "On for the agents above", onToggle)}
+            {row(<Trash2 size={20} strokeWidth={1.7} className="text-bad" />, "Remove", "Agents will lose access to it.", onRemove, true)}
           </Panel>
         </section>
       )}

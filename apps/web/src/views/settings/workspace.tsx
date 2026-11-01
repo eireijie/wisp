@@ -42,8 +42,8 @@ export function GeneralPage() {
       >
         <Card>
           <label className="px-[18px] min-h-[54px] flex items-center gap-4">
-            <span className="text-body w-40 shrink-0">Organization name</span>
-            <input className="h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-body disabled:text-muted" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwner} maxLength={60} required aria-label="Organization name" />
+            <span className="text-body w-40 shrink-0">Workspace name</span>
+            <input className="h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-body disabled:text-muted" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwner} maxLength={60} required aria-label="Workspace name" />
           </label>
           <Row label="Hub address">
             <span className="text-sm text-muted break-all max-w-[240px] text-right">{shareOrigin(access).replace(/^https?:\/\//, "")}</span>
@@ -74,16 +74,16 @@ function DeleteOrgSection() {
     listOrgs().then(setOrgs);
   }, []);
   const current = orgs?.find((o) => o.current);
-  // a hub without organizations, or still loading
+  // a hub without workspaces, or still loading
   if (!orgs || !current) return null;
   return (
-    <Section title="Delete organization" description="Removes its agents, teams, messages, devices, computers and memory for everyone in it. This can't be undone.">
+    <Section title="Delete workspace" description="Removes its agents, teams, messages, devices, computers and memory for everyone in it. This can't be undone.">
       {current.canDelete ? (
         <Button variant="danger" onClick={() => setOpen(true)}>
           <Trash2 size={14} /> Delete {current.name}
         </Button>
       ) : (
-        <p className="text-sm text-muted">{orgs.length > 1 ? "This is the first organization on this Wisp, so it can't be deleted." : "This is your only organization. Make or join another one before deleting it."}</p>
+        <p className="text-sm text-muted">{orgs.length > 1 ? "This is the first workspace on this Wisp, so it can't be deleted." : "This is your only workspace. Make or join another one before deleting it."}</p>
       )}
       {open && <DeleteOrg org={current} onClose={() => setOpen(false)} />}
     </Section>
@@ -111,7 +111,7 @@ function DeleteOrg({ org, onClose }: { org: Org; onClose: () => void }) {
         }}
       >
         <p className="text-sm text-muted">
-          {org.agents} agent{org.agents === 1 ? "" : "s"}, every team and all of its memory are deleted, and {org.members > 1 ? `the ${org.members - 1} other ${org.members === 2 ? "person" : "people"} in it lose access` : "nobody else is affected"}. You'll move to another organization.
+          {org.agents} agent{org.agents === 1 ? "" : "s"}, every team and all of its memory are deleted, and {org.members > 1 ? `the ${org.members - 1} other ${org.members === 2 ? "person" : "people"} in it lose access` : "nobody else is affected"}. You'll move to another workspace.
         </p>
         <Field label={`Type ${org.name} to confirm`}>
           <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" required />
@@ -122,7 +122,7 @@ function DeleteOrg({ org, onClose }: { org: Org; onClose: () => void }) {
             Cancel
           </Button>
           <Button variant="danger" disabled={busy || typed.trim() !== org.name}>
-            {busy ? "Deleting…" : "Delete organization"}
+            {busy ? "Deleting…" : "Delete workspace"}
           </Button>
         </div>
       </form>
@@ -444,10 +444,10 @@ export function AgentsPolicyPage() {
       setError((e as Error).message);
     }
   };
-  if (!p) return <PageHeader title="Agents">{error ?? "Loading…"}</PageHeader>;
+  if (!p) return <PageHeader title="Permissions">{error ?? "Loading…"}</PageHeader>;
   return (
     <>
-      <PageHeader title="Agents" />
+      <PageHeader title="Permissions" />
       <OwnersOnly show={!isOwner} />
       <div className="mb-3 h-4">
         <SavedNote shown={saved} />
@@ -814,7 +814,7 @@ export function ConnectionsPage() {
   ];
   return (
     <>
-      <PageHeader title="Connections" />
+      <PageHeader title="Outside agents" />
       {error && <p className="mb-4 text-sm text-bad">{error}</p>}
       {groups.map(([title, items]) => (
         <Section key={title} title={title}>
@@ -929,7 +929,7 @@ export function DataPage() {
             )}
           </>
         ) : (
-          <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">Ask an organization owner to back up the hub.</p>
+          <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">Ask a workspace owner to back up the hub.</p>
         )}
       </Section>
       <Section title="What is not in it">

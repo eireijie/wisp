@@ -30,15 +30,15 @@ struct NativeSettingsView: View {
       if store.canManage {
         CardLabel("Agents")
         CardGroup {
-          NavigationLink { AgentPolicyView() } label: { RowLabel(title: "Agents policy") }.accessibilityIdentifier("settings-agents")
+          NavigationLink { AgentPolicyView() } label: { RowLabel(title: "Permissions") }.accessibilityIdentifier("settings-agents")
           NavigationLink { AgentDefaultsView() } label: { RowLabel(title: "Agent defaults") }.accessibilityIdentifier("settings-agent-defaults")
-          NavigationLink { ConnectionsSettingsView() } label: { RowLabel(title: "Connections") }.accessibilityIdentifier("settings-connections")
+          NavigationLink { ConnectionsSettingsView() } label: { RowLabel(title: "Outside agents") }.accessibilityIdentifier("settings-connections")
           NavigationLink { MemoryStorageView() } label: { RowLabel(title: "Memory storage") }.accessibilityIdentifier("settings-memory-storage")
           NavigationLink { ModelsSettingsView() } label: { RowLabel(title: "Models") }.accessibilityIdentifier("settings-models")
           NavigationLink { HarnessesView() } label: { RowLabel(title: "Harnesses") }.accessibilityIdentifier("settings-harnesses")
           NavigationLink { SkillsView() } label: { RowLabel(title: "Skills") }.accessibilityIdentifier("settings-skills")
           NavigationLink { LoginsView() } label: { RowLabel(title: "Logins") }.accessibilityIdentifier("settings-logins")
-          NavigationLink { AgentRuntimesView() } label: { RowLabel(title: "Agent runtimes") }.accessibilityIdentifier("settings-runtimes")
+          NavigationLink { AgentRuntimesView() } label: { RowLabel(title: "Harness setup") }.accessibilityIdentifier("settings-runtimes")
         }
       }
       if !guest {
@@ -46,15 +46,14 @@ struct NativeSettingsView: View {
         CardGroup {
           Button { store.route = .device(id: nil) } label: { RowLabel(title: "Computers and devices") }.buttonStyle(.plain).accessibilityIdentifier("settings-computers")
           NavigationLink { DevicesSettingsView() } label: { RowLabel(title: "Away from home") }.accessibilityIdentifier("settings-devices")
-          if store.canManage { NavigationLink { ComputerSettingsView() } label: { RowLabel(title: "Agent computers") }.accessibilityIdentifier("settings-agent-computers") }
-          if store.isOwner { NavigationLink { AccessView() } label: { RowLabel(title: "Access") }.accessibilityIdentifier("settings-access") }
+          if store.canManage { NavigationLink { ComputerSettingsView() } label: { RowLabel(title: "Computers") }.accessibilityIdentifier("settings-agent-computers") }
           NavigationLink { MobileSettingsView() } label: { RowLabel(title: "Mobile") }.accessibilityIdentifier("settings-mobile")
           Button { store.route = .inbox } label: { RowLabel(title: "Approvals") }.buttonStyle(.plain).accessibilityIdentifier("settings-approvals")
         }
       }
       CardLabel("More")
       CardGroup {
-        if !guest { NavigationLink { DataExportView() } label: { RowLabel(title: "Data and export") }.accessibilityIdentifier("settings-data") }
+        if !guest { NavigationLink { DataExportView() } label: { RowLabel(title: "Data") }.accessibilityIdentifier("settings-data") }
         NavigationLink { UpdatesView() } label: { RowLabel(title: "About") }.accessibilityIdentifier("settings-about")
       }
     }
@@ -113,7 +112,7 @@ struct WorkspaceSettingsView: View {
     SettingsPage("Workspace", id: "workspace") {
       if !store.isOwner { OwnersOnlyNote() }
       CardGroup {
-        FieldRow(title: "Organization name", text: $name, id: "workspace-name").disabled(!store.isOwner)
+        FieldRow(title: "Workspace name", text: $name, id: "workspace-name").disabled(!store.isOwner)
         ValueRow(title: "Hub address", value: store.api?.base.host() ?? store.api?.base.absoluteString ?? "")
         ValueRow(title: "Your role", value: roleName)
       }
@@ -140,13 +139,13 @@ struct WorkspaceSettingsView: View {
 
   @ViewBuilder private var deleteSection: some View {
     if let org = current {
-      CardLabel("Delete organization")
+      CardLabel("Delete workspace")
       CardHint("Removes its agents, teams, messages, devices, computers and memory for everyone in it. This can't be undone.")
       if org.canDelete == true {
-        NavigationLink { DeleteOrgView(org: org) } label: { Text("Delete organization").frame(maxWidth: .infinity) }
+        NavigationLink { DeleteOrgView(org: org) } label: { Text("Delete workspace").frame(maxWidth: .infinity) }
           .buttonStyle(.pill(.destructive)).accessibilityIdentifier("workspace-delete")
       } else {
-        CardHint(store.orgList.count > 1 ? "This is the first organization on this Wisp, so it can't be deleted." : "Your only organization can't be deleted. Make or join another one first.")
+        CardHint(store.orgList.count > 1 ? "This is the first workspace on this Wisp, so it can't be deleted." : "Your only workspace can't be deleted. Make or join another one first.")
       }
     }
   }
@@ -167,7 +166,7 @@ struct DeleteOrgView: View {
       CardGroup { FieldRow(title: "Type the name", text: $typed, prompt: org.name, id: "delete-org-name") }
       CardHint("Type \(org.name) to confirm.")
       StatusLine(error: action.error)
-      Button("Delete organization") { action.run { try await store.deleteOrg(org, typed: typed.trimmed) } }
+      Button("Delete workspace") { action.run { try await store.deleteOrg(org, typed: typed.trimmed) } }
         .buttonStyle(.pill(.danger)).disabled(action.busy || typed.trimmed != org.name).accessibilityIdentifier("delete-org-confirm")
       Button("Cancel") { dismiss() }.buttonStyle(.pill(.ghost))
     }

@@ -62,7 +62,7 @@ struct AddComputerView: View {
           }.pickerStyle(.segmented)
 
           if chatOnly {
-            Text("The helper can chat, write and look things up without a desktop of its own. Nothing will be created. To set this, open the agent's page and choose Computer.").font(.system(size: 15)).foregroundStyle(Palette.muted)
+            Text("The agent can chat, write and look things up without a desktop of its own. Nothing will be created. To set this, open the agent's page and choose Computer.").font(.system(size: 15)).foregroundStyle(Palette.muted)
           } else {
             if kind != .orgo {
               CardCaption("Where should it live?")

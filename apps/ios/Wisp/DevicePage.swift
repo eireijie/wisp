@@ -178,8 +178,8 @@ struct DeviceDetail: View {
       }
       Toggle(isOn: Binding(get: { n.shared == true }, set: { on in action.run { try await store.updateNode(n.id, ["shared": AnyEncodable(on)]) } })) {
         VStack(alignment: .leading, spacing: 2) {
-          Text("Share with the organization").font(.system(size: 15)).foregroundStyle(Palette.text)
-          Text("Let others in \(store.workspace?.name ?? "the organization") add agents and VMs here").font(.system(size: 13)).foregroundStyle(Palette.faint)
+          Text("Share with the workspace").font(.system(size: 15)).foregroundStyle(Palette.text)
+          Text("Let others in \(store.workspace?.name ?? "the workspace") add agents and VMs here").font(.system(size: 13)).foregroundStyle(Palette.faint)
         }
       }.tint(Palette.blue).disabled(!editable || action.busy).accessibilityIdentifier("device-shared")
     } header: { Text("What this device does for agents") }

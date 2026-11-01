@@ -28,7 +28,7 @@ struct AgentWhoPage: View {
       if canSet && !locked {
         CardGroup {
           ChoiceRow(title: "Only me", selected: mode == "me") { mode = "me" }
-          ChoiceRow(title: "Anyone", subtitle: "Everyone in \(store.workspace?.name ?? "this organization")", selected: mode == "anyone") { mode = "anyone" }
+          ChoiceRow(title: "Anyone", subtitle: "Everyone in \(store.workspace?.name ?? "this workspace")", selected: mode == "anyone") { mode = "anyone" }
           ChoiceRow(title: "Picked people", selected: mode == "people") { mode = "people" }
         }.disabled(action.busy)
         if mode == "people" {

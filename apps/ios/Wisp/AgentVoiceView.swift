@@ -68,7 +68,7 @@ struct AgentVoicePicker: View {
       return AgentVoices.choices(engine: engine, agent: agent, selected: selected, recommended: recommended, all: voices, language: name)
     }
     let filtered = AgentVoices.filter(voices, query: query, lang: activeLang)
-    var result = [VoiceChoice(id: "", label: "Automatic for \(agent.name)", detail: "A voice picked for this helper")]
+    var result = [VoiceChoice(id: "", label: "Automatic for \(agent.name)", detail: "A voice picked for this agent")]
     result += filtered.prefix(60).map { VoiceChoice(id: $0.id, label: $0.name, detail: name($0.lang)) }
     return result
   }

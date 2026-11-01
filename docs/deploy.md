@@ -24,7 +24,7 @@ Data is stored in `/data` in the container (`./data` with the compose file):
 
 | Path | Contents |
 | --- | --- |
-| `data/wisp.db` | SQLite: users, channels, messages, agents, tasks |
+| `data/wisp.db` | SQLite: users, teams, messages, agents, tasks |
 | `data/vault/` | The memory vault: a git repository of markdown files (unless you [chose another folder](#memory-and-obsidian)) |
 | `data/files/` | Uploaded files, stored by content hash |
 
@@ -32,7 +32,7 @@ Back up the whole folder, and the memory folder too if you moved it. The vault i
 
 ## Run Wisp in the cloud
 
-To keep Wisp and your agents running when your computers are off, put it on a server you rent. Agents you make in setup live on that server. You sign in to their AI tools from Wisp, and those sign-ins stay on the server. The Wisp project doesn't host anything or take payment for it. The server is in **your own** cloud account, and the provider bills you directly.
+To keep Wisp and your agents running when your computers are off, put it on a server you rent. Agents you make in setup live on that server. You sign in to their harnesses from Wisp, and those sign-ins stay on the server. The Wisp project doesn't host anything or take payment for it. The server is in **your own** cloud account, and the provider bills you directly.
 
 ### From the desktop app (Hetzner)
 
@@ -50,9 +50,9 @@ The app creates an Ubuntu 24.04 server named `wisp-xxxxxx` (labelled `managed-by
 
 ### What the server runs
 
-[`docker/cloud-init.yaml`](../docker/cloud-init.yaml) installs Docker and runs three containers from `/opt/wisp/compose.yaml`: the hub (`ghcr.io/eireijie/wisp`, data in `/opt/wisp/data`), a device from the same image where agents run (their AI tools, sign-ins and files in `/opt/wisp/device`), and [Caddy](https://caddyserver.com) on ports 80 and 443.
+[`docker/cloud-init.yaml`](../docker/cloud-init.yaml) installs Docker and runs three containers from `/opt/wisp/compose.yaml`: the hub (`ghcr.io/eireijie/wisp`, data in `/opt/wisp/data`), a device from the same image where agents run (their harnesses, sign-ins and files in `/opt/wisp/device`), and [Caddy](https://caddyserver.com) on ports 80 and 443.
 
-The device can use the server's Docker to start agents' computers, which gives agents running directly on it control of the server. Only you can put agents on it unless you share it. Some AI tools (Gemini CLI, Qwen Code and others) only sign in on their own screen: over SSH, run `cd /opt/wisp && docker compose exec device gemini`. To also run agents on your own computer, add it from **Settings → Devices**. HTTPS works without a domain:
+The device can use the server's Docker to start agents' computers, which gives agents running directly on it control of the server. Only you can put agents on it unless you share it. Some harnesses (Gemini CLI, Qwen Code and others) only sign in on their own screen: over SSH, run `cd /opt/wisp && docker compose exec device gemini`. To also run agents on your own computer, add it from **Settings → Devices**. HTTPS works without a domain:
 
 - `https://<server IP>`, with a Let's Encrypt certificate for the IP address itself. These come only on Let's Encrypt's six-day "shortlived" profile, and Caddy renews them automatically.
 - `https://<ip-with-dashes>.sslip.io` as a second address, for example `https://203-0-113-7.sslip.io`. [sslip.io](https://sslip.io) answers any such name with the IP inside it. All sslip.io names share Let's Encrypt's weekly limit, so it's only the fallback.
@@ -290,6 +290,6 @@ Each agent's model, reasoning effort and access level are set in Wisp (agent →
 | Can edit files (default) | `--permission-mode acceptEdits` | `sandbox_mode = "workspace-write"` |
 | Full access | `--permission-mode bypassPermissions` | `sandbox_mode = "danger-full-access"` |
 
-**For harnesses running directly on a device, full access requires `--allow-full-access`.** The device owner opts in, not the hub; without it, agents set to full access run with edit access and say so in the channel. Harnesses running inside a VM have full access there unless set to read only.
+**For harnesses running directly on a device, full access requires `--allow-full-access`.** The device owner opts in, not the hub; without it, agents set to full access run with edit access and say so in the chat. Harnesses running inside a VM have full access there unless set to read only.
 
 Agents work in `~/.wisp/agents/<handle>/` on their device, the folder shared with their VM, or a task's checkout when working on a repository task.

@@ -82,7 +82,7 @@ export function MemoryHome({
     <div className="h-full overflow-y-auto @container">
       <div className="max-w-[1000px] mx-auto px-4 md:px-10 pt-2 md:pt-6 pb-32 md:pb-12">
         {actions && <div className="hidden md:flex items-center justify-end gap-2 mb-2">{actions}</div>}
-        <h2 className="t-title">What your team remembers</h2>
+        <h2 className="t-title">What your agents remember</h2>
         <div className="relative mt-4">
           <Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-faint" />
           <input
@@ -170,7 +170,7 @@ export function MemoryHome({
               <p className="text-sm text-muted px-1">Loading…</p>
             ) : recent.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-line p-6 text-center text-sm text-muted space-y-3">
-                <p>Nothing written yet. Notes you and your helpers write show up here.</p>
+                <p>Nothing written yet. Notes you and your agents write show up here.</p>
                 {onNew && (
                   <button onClick={onNew} className="inline-flex items-center gap-1.5 text-ink font-medium hover:underline">
                     <FilePlus size={15} /> Write the first note
