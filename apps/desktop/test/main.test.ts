@@ -341,6 +341,7 @@ describe("the window setup opens for a VM's sign-in", () => {
   it("is allowed, so setup stays where it is, and only ever shows Wisp", async () => {
     const f = fixture(false, { mode: "remote", hubUrl: "https://hub", device: false });
     await f.ready();
+    await vi.waitFor(() => expect(f.windows[0].loadURL).toHaveBeenCalledWith("https://hub/"));
     const window = f.windows[0];
     const open = window.webContents.setWindowOpenHandler.mock.calls[0][0];
     expect(open({ url: "about:blank" })).toEqual({ action: "allow" });
