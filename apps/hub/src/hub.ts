@@ -1508,7 +1508,7 @@ export class Hub {
     const found = store.message(triggerId);
     // at the top of a DM or team, the agent sees only this chat: a new one starts after a quiet break
     const chat = !background && !threadId && !run?.discussionId ? found?.conversationId : undefined;
-    const chatStart = chat ? store.message(chat)?.createdAt : undefined;
+    const chatStart = chat ? store.chatStart(chat) : undefined;
     const history = background
       ? []
       : (chat ? store.conversationMessages(chat, CONTEXT_MESSAGES + 1) : store.messages(channelId, { threadId, limit: run?.discussionId ? 100 : CONTEXT_MESSAGES })).filter((m) => m.id !== triggerId && m.author.id !== "system");
@@ -1517,7 +1517,7 @@ export class Hub {
       ? store
           .contextsOf(chat)
           .slice(0, 2)
-          .map((id) => ({ at: store.message(id)?.createdAt, messages: store.conversationMessages(id, CONTEXT_MESSAGES).filter((m) => m.author.id !== "system") }))
+          .map((id) => ({ at: store.chatStart(id), messages: store.conversationMessages(id, CONTEXT_MESSAGES).filter((m) => m.author.id !== "system") }))
           .filter((e) => e.at && e.messages.length)
       : [];
     const hasOlder = !!chatStart && store.messages(channelId, { before: chatStart, limit: 1 }).length > 0;

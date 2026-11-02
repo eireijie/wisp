@@ -138,6 +138,36 @@ describe("chats split after a quiet break", () => {
     expect(slow.reply.conversationId).toBe(slow.sent.conversationId);
   });
 
+  it("puts a late reply in the chat going on now when the person already moved on, bringing its own chat back", async () => {
+    let posted: { id: string; conversationId?: string } | undefined;
+    onReply = async (_agent, input) => {
+      if (!input.prompt.includes("Summarize the quarter")) return "ok";
+      // hours of work, and meanwhile the person started a new chat
+      age(CONVERSATION_GAP_MS + 60_000);
+      posted = hub.store.insertMessage({ channelId: dm().id, author: { kind: "user", id: me }, body: "Also, what's for lunch?" });
+      return "Here's the quarter summary.";
+    };
+    const slow = await say("Summarize the quarter");
+    const reply = hub.store.withReactions([slow.reply])[0];
+    expect(posted!.conversationId).toBe(posted!.id);
+    expect(reply.conversationId).toBe(posted!.id);
+    expect(reply.context?.conversationId).toBe(slow.sent.conversationId);
+    // and the chat going on now keeps going
+    const next = hub.store.insertMessage({ channelId: dm().id, author: { kind: "user", id: me }, body: "thanks" });
+    expect(next.conversationId).toBe(posted!.id);
+  });
+
+  it("dates an earlier chat by its first message that's left", async () => {
+    const first = hub.store.insertMessage({ channelId: dm().id, author: { kind: "user", id: me }, body: "x" });
+    age(CONVERSATION_GAP_MS + 60_000);
+    const second = hub.store.insertMessage({ channelId: dm().id, author: { kind: "user", id: me }, body: "y" });
+    const third = hub.store.insertMessage({ channelId: dm().id, author: { kind: "user", id: me }, body: "z", contextId: first.conversationId });
+    hub.store.deleteMessage(first.conversationId!);
+    const startedAt = hub.store.chatStart(first.conversationId!);
+    expect(startedAt === undefined || startedAt < second.createdAt).toBe(true);
+    expect(third.conversationId).toBe(second.id);
+  });
+
   it("links a check-back after a quiet break to the chat it came from", async () => {
     onReply = async (agent) => {
       await agent.chatStatus({ status: "waiting", summary: "tell the hotel the arrival time" });
@@ -186,6 +216,10 @@ describe("messages from before chats split", () => {
     add.run("b", null, "2026-11-01T09:30:00.000Z");
     add.run("t", "b", "2026-11-01T20:00:00.000Z");
     add.run("c", null, "2026-11-01T17:00:00.000Z");
+    db.close();
+    db = openDb(file);
+    // a new message after an upgrade cut short: the rest are still filled in on the next start
+    db.prepare("UPDATE messages SET conversation_id = NULL WHERE id = 'c'").run();
     db.close();
     db = openDb(file);
     const rows = Object.fromEntries((db.prepare("SELECT id, conversation_id FROM messages").all() as { id: string; conversation_id: string | null }[]).map((r) => [r.id, r.conversation_id]));

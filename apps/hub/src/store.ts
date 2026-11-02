@@ -837,11 +837,20 @@ export class Store {
   insertMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; conversationId?: string | null; contextId?: string | null }): Message {
     const msg: Message = { id: id("msg"), channelId: m.channelId, threadId: m.threadId ?? null, author: m.author, body: m.body, parts: m.parts ?? [], hop: m.hop ?? 0, createdAt: now(), ...(m.replyToId ? { replyToId: m.replyToId } : {}) };
     // the top of a DM or team splits into chats after a quiet break; threads don't
+    let contextId = m.contextId ?? null;
     if (!msg.threadId) {
       const latest = this.latestWritten(msg.channelId);
-      msg.conversationId = m.conversationId || (msg.author.id === "system" ? (latest?.conversationId ?? msg.id) : conversationFor(latest, msg));
+      const natural = msg.author.id === "system" ? (latest?.conversationId ?? msg.id) : conversationFor(latest, msg);
+      // a reply to an earlier request stays in that request's chat, unless someone has written in a
+      // newer chat since: then it lands in the chat going on now and brings its own back with it
+      const current = latest && (latest.conversationId || latest.id);
+      if (m.conversationId && (!latest || current === m.conversationId)) msg.conversationId = m.conversationId;
+      else {
+        msg.conversationId = natural;
+        if (m.conversationId) contextId = m.conversationId;
+      }
     }
-    const contextId = msg.conversationId && m.contextId && m.contextId !== msg.conversationId ? m.contextId : null;
+    if (!msg.conversationId || contextId === msg.conversationId) contextId = null;
     this.db
       .prepare("INSERT INTO messages (id, channel_id, thread_id, author_kind, author_id, body, parts_json, hop, created_at, reply_to_id, conversation_id, context_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
       .run(msg.id, msg.channelId, msg.threadId, msg.author.kind, msg.author.id, msg.body, JSON.stringify(msg.parts), msg.hop, msg.createdAt, msg.replyToId ?? null, msg.conversationId ?? null, contextId);
@@ -852,6 +861,11 @@ export class Store {
   latestWritten(channelId: string): { id: string; createdAt: string; authorId: string; conversationId: string | null } | undefined {
     const r = this.db.prepare("SELECT id, created_at, author_id, conversation_id FROM messages WHERE channel_id = ? AND thread_id IS NULL AND author_id != 'system' ORDER BY created_at DESC, rowid DESC LIMIT 1").get(channelId) as { id: string; created_at: string; author_id: string; conversation_id: string | null } | undefined;
     return r && { id: r.id, createdAt: r.created_at, authorId: r.author_id, conversationId: r.conversation_id };
+  }
+
+  /** When a chat started: its first message that's still there (the very first may have been deleted). */
+  chatStart(conversationId: string): string | undefined {
+    return (this.db.prepare("SELECT MIN(created_at) AS at FROM messages WHERE conversation_id = ?").get(conversationId) as { at: string | null }).at ?? undefined;
   }
 
   /** The last messages of one chat, oldest first. */
@@ -954,8 +968,8 @@ export class Store {
     const { contextId, ...rest } = m;
     let out: Message = rest;
     if (contextId) {
-      const start = this.db.prepare("SELECT created_at FROM messages WHERE id = ?").get(contextId) as { created_at: string } | undefined;
-      if (start) out = { ...out, context: { conversationId: contextId, at: start.created_at } };
+      const at = this.chatStart(contextId);
+      if (at) out = { ...out, context: { conversationId: contextId, at } };
     }
     if (!out.replyToId) return out;
     const q = this.message(out.replyToId);

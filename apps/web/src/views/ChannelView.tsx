@@ -760,6 +760,12 @@ function flashMessage(id: string): boolean {
   return true;
 }
 
+/** Show where an earlier chat starts: its first message still on screen, or the chat opened at its first message. */
+function openChat(channelId: string, chat: string) {
+  const first = Array.from(document.querySelectorAll<HTMLElement>("[data-chat]")).find((x) => x.dataset.chat === chat)?.dataset.messageId;
+  if (!flashMessage(first ?? chat)) go({ view: "chat", channelId, threadId: null, messageId: chat });
+}
+
 /** Press-and-hold and swipe both listen to the same touches. */
 function mergeTouch(a: Partial<Record<"onTouchStart" | "onTouchMove" | "onTouchEnd" | "onTouchCancel", (e: React.TouchEvent) => void>>, b: typeof a) {
   const both = (k: keyof typeof a) => (e: React.TouchEvent) => {
@@ -917,6 +923,7 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
   return (
     <div
       data-message-id={m.id}
+      data-chat={m.conversationId}
       {...touch}
       onContextMenu={(e) => {
         press.onContextMenu?.(e);
@@ -981,7 +988,7 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
         {!m.deletedAt && m.parts.some((p) => p.type === "checkback") && (
           <CheckbackLabel
             from={m.context ? chatName(m.context.at, (d) => clockTime(d, clock)) : undefined}
-            onFrom={m.context ? () => void (flashMessage(m.context!.conversationId) || go({ view: "chat", channelId: m.channelId, threadId: null, messageId: m.context!.conversationId })) : undefined}
+            onFrom={m.context ? () => openChat(m.channelId, m.context!.conversationId) : undefined}
           />
         )}
         {m.deletedAt ? (

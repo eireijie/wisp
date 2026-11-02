@@ -64,13 +64,14 @@ export function MessageMenu({ actions, reacted, onReact, at, source, preview, mi
   const [box, setBox] = useState<{ left: number; top: number; origin: string; shift: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const rect = useMemo(() => source?.getBoundingClientRect() ?? null, [source]);
-  const close = (after?: () => void) => {
+  const opened = useRef(Date.now());
+  /** `keepFocus`: an action that moves focus itself (Reply focuses the message box) */
+  const close = (keepFocus = false) => {
     if (closing) return;
     setClosing(true);
     setTimeout(() => {
       onClose();
-      after?.();
-      if (!after) (source?.closest<HTMLElement>("[tabindex]") ?? source)?.focus({ preventScroll: true });
+      if (!keepFocus) (source?.closest<HTMLElement>("[tabindex]") ?? source)?.focus({ preventScroll: true });
     }, 140);
   };
 
@@ -100,12 +101,12 @@ export function MessageMenu({ actions, reacted, onReact, at, source, preview, mi
 
   // the message being lifted leaves its place in the chat while the menu shows it
   useEffect(() => {
-    if (!lift || !source) return;
+    if (!lift || !source || !preview) return;
     source.style.visibility = "hidden";
     return () => {
       source.style.visibility = "";
     };
-  }, [lift, source]);
+  }, [lift, source]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // focus goes into the menu, so arrows, letters and Escape work right away
   useEffect(() => {
@@ -114,16 +115,23 @@ export function MessageMenu({ actions, reacted, onReact, at, source, preview, mi
   }, [!!box]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    // a phone's browser bar or keyboard changes the height; only a new width moves things
+    let width = window.innerWidth;
+    const resized = () => window.innerWidth !== width && ((width = window.innerWidth), close());
     const away = () => close();
-    window.addEventListener("resize", away);
+    window.addEventListener("resize", resized);
     window.addEventListener("blur", away);
     return () => {
-      window.removeEventListener("resize", away);
+      window.removeEventListener("resize", resized);
       window.removeEventListener("blur", away);
     };
   });
 
-  const run = (a: MessageAction) => close(a.run);
+  // right in the click, so Copy may use the clipboard (Safari allows it only there)
+  const run = (a: MessageAction) => {
+    a.run();
+    close(a.id !== "copy" && a.id !== "pin");
+  };
   const onKeyDown = (e: React.KeyboardEvent) => {
     const items = Array.from(ref.current?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? []);
     const taps = Array.from(ref.current?.querySelectorAll<HTMLElement>("[data-taps] button") ?? []);
@@ -169,7 +177,10 @@ export function MessageMenu({ actions, reacted, onReact, at, source, preview, mi
               type="button"
               aria-label={`React ${emoji}`}
               aria-pressed={reacted.includes(emoji)}
-              onClick={() => close(() => onReact(emoji))}
+              onClick={() => {
+                onReact(emoji);
+                close();
+              }}
               style={{ animationDelay: `${40 + k * 30}ms` }}
               className={cx("m-tap grid place-items-center leading-none outline-none focus-visible:bg-hover hover:bg-hover", lift ? "size-10 rounded-full text-[21px]" : "h-[34px] w-9 rounded-lg text-[18px]", reacted.includes(emoji) && "bg-accent-soft")}
             >
@@ -217,7 +228,8 @@ export function MessageMenu({ actions, reacted, onReact, at, source, preview, mi
         onTouchStart={() => close()}
         onContextMenu={(e) => {
           e.preventDefault();
-          close();
+          // a phone's own long-press menu event can land here just after the menu opened
+          if (Date.now() - opened.current > 300) close();
         }}
       />
       {menu}

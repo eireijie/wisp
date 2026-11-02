@@ -247,8 +247,8 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     const parts: MessagePart[] = files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name }));
     if (checkingBack || body.replies.length) parts.push({ type: "checkback", replies: body.replies });
     // checking back on something brings back the chat it came from, even after a quiet break
-    const due = run?.kind === "background" ? hub.background.followupsOf(run.id) : [];
-    const from = due.find((f) => f.messageId && f.channelId === channel.id)?.messageId;
+    const due = (run?.kind === "background" ? hub.background.followupsOf(run.id) : []).filter((f) => f.channelId === channel.id);
+    const from = due.find((f) => f.messageId)?.messageId;
     const contextId = due.length ? ((from && store.message(from)?.conversationId) || store.latestWritten(channel.id)?.conversationId || null) : null;
     const msg = hub.postMessage({ channelId: channel.id, author: c.actor, body: body.text, parts, route: false, onBehalfOf: userId, contextId });
     if (run?.kind === "background") hub.loops.wrote(run.id, msg.id);
