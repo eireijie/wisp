@@ -47,7 +47,11 @@ afterAll(async () => {
 const work = (id: string, handle: string, extra: Partial<TeamStep> = {}): Partial<TeamStep> => ({ id, roleId: "", kind: "do", action: id, agentId: agents[handle].id, next: null, nexts: [], inputs: [], x: 0, y: 0, ...extra });
 const sched = (id: string, nexts: string[], extra: Partial<TeamStep> = {}): Partial<TeamStep> => ({ id, roleId: "", kind: "schedule", action: "", next: nexts[0] ?? null, nexts, inputs: [], schedule: "0 9 * * 1", timezone: "UTC", prompt: "Write this week's report.", x: 0, y: 0, ...extra });
 const make = async (name: string, steps: Partial<TeamStep>[]) => {
-  const r = await api("POST", "/api/channels", { name, settings: { team: { nodes: [], edges: [], roles: [], steps } } });
+  // a team needs two agents: when the steps use fewer, a bench role (no step) holds another one
+  const used = new Set(steps.map((x) => x.agentId).filter(Boolean));
+  const spare = used.size >= 2 ? null : Object.values(agents).find((a) => !used.has(a.id));
+  const roles = spare ? [{ id: "bench", name: "Bench", description: "", agentId: spare.id }] : [];
+  const r = await api("POST", "/api/channels", { name, settings: { team: { nodes: [], edges: [], roles, steps } } });
   expect(r.status, JSON.stringify(r.data)).toBe(200);
   return r.data as { id: string };
 };

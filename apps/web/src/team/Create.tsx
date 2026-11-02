@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { ArrowRight, ChevronLeft, Hash, LayoutGrid, Loader2, Lock, PenLine, Sparkles, Workflow } from "lucide-react";
-import { TEAM_TEMPLATES, teamProblem, type Agent, type ChannelTeam, type FlowLine, type Section, type TeamDraft, type TeamTemplate } from "@wisp/core";
+import { TEAM_TEMPLATES, MIN_TEAM_AGENTS, teamProblem, teamSizeProblem, type Agent, type ChannelTeam, type FlowLine, type Section, type TeamDraft, type TeamTemplate } from "@wisp/core";
 import { api } from "../api.ts";
 import { go } from "../router.ts";
 import { useStore } from "../store.ts";
@@ -12,12 +12,16 @@ import { TeamBuilder } from "./Builder.tsx";
 import { HowLines, MiniChart, useFlowLines } from "./How.tsx";
 import { NewAgentForTeam } from "./NewAgent.tsx";
 import { TemplateBrowser } from "./Templates.tsx";
-import { TeamGhosts, SeedGhost } from "./parts.tsx";
+import { TeamGhosts } from "./parts.tsx";
+import { startNewAgent } from "../components/ChatList.tsx";
 import { emptyTeam, fillTemplate, stepProblems, teamAgentIds, teamFromSteps, withChart } from "./flow.ts";
 
 const slug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
 
 type Page = "name" | "start" | "templates" | "describe" | "builder" | "review" | "chart";
+
+/** Shown wherever a team can't be made yet for want of agents. */
+const NEEDS_AGENTS = `Pick at least ${MIN_TEAM_AGENTS} agents`;
 
 const TRIES = ["One builds, one reviews", "Research, then I approve", "Triage, reply, check"];
 
@@ -43,7 +47,8 @@ export function NewTeamFlow({ onClose, sectionId = null, onBrowse, SectionPick, 
   const [newAgent, setNewAgent] = useState(false);
   const id = slug(name);
   const exists = channels.some((c) => c.name === id);
-  const valid = !!id && !exists;
+  const needMore = agents.length < MIN_TEAM_AGENTS;
+  const valid = !!id && !exists && !needMore;
 
   async function create(settingsTeam: ChannelTeam | null) {
     if (busy) return;
@@ -85,29 +90,41 @@ export function NewTeamFlow({ onClose, sectionId = null, onBrowse, SectionPick, 
           }}
         >
           <p className="text-sm text-muted">Step 1 of 2 · Name and description</p>
-          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-            <span className="grid size-[84px] shrink-0 place-items-center rounded-3xl bg-card">
-              <SeedGhost seed={id || "new team"} size={64} />
-            </span>
-            <div className="w-full min-w-0 flex-1 space-y-2.5">
-              <div className="rounded-xl border border-line bg-card px-4 py-2.5">
-                <label htmlFor="team-name" className="block text-xs text-muted">
-                  Name
-                </label>
-                <div className="flex items-center gap-1">
-                  <Hash size={15} className="text-faint" aria-hidden />
-                  <input id="team-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="release-crew" autoCapitalize="none" autoCorrect="off" className="w-full bg-transparent text-body outline-none placeholder:text-faint" />
-                </div>
-              </div>
-              {id && (exists || id !== name) && <p className={cx("px-2 text-xs", exists ? "text-bad" : "text-faint")}>{exists ? `#${id} already exists.` : id}</p>}
-              <div className="rounded-xl border border-line bg-card px-4 py-2.5">
-                <label htmlFor="team-topic" className="block text-xs text-muted">
-                  What is it for?
-                </label>
-                <textarea id="team-topic" value={topic} onChange={(e) => setTopic(e.target.value)} rows={2} maxLength={250} placeholder="Ship releases on time, checked before they go out." className="block w-full resize-none bg-transparent text-body outline-none placeholder:text-faint" />
-              </div>
-              <p className="px-2 text-xs text-faint">Agents on the team read this so they know what the team is for.</p>
+          {needMore && (
+            <div role="status" className="rounded-xl bg-card p-4 text-sm">
+              <p>
+                A team needs at least {MIN_TEAM_AGENTS} agents, and you have {agents.length === 0 ? "none" : agents.length}.
+              </p>
+              <button
+                type="button"
+                className="mt-1 text-accent-text hover:underline"
+                onClick={() => {
+                  onClose();
+                  startNewAgent();
+                }}
+              >
+                Make {agents.length === 0 ? "an agent" : "another agent"}
+              </button>
             </div>
+          )}
+          <div className="space-y-2.5">
+            <div className="rounded-xl border border-line bg-card px-4 py-2.5">
+              <label htmlFor="team-name" className="block text-xs text-muted">
+                Name
+              </label>
+              <div className="flex items-center gap-1">
+                <Hash size={15} className="text-faint" aria-hidden />
+                <input id="team-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="release-crew" autoCapitalize="none" autoCorrect="off" className="w-full bg-transparent text-body outline-none placeholder:text-faint" />
+              </div>
+            </div>
+            {id && (exists || id !== name) && <p className={cx("px-2 text-xs", exists ? "text-bad" : "text-faint")}>{exists ? `#${id} already exists.` : id}</p>}
+            <div className="rounded-xl border border-line bg-card px-4 py-2.5">
+              <label htmlFor="team-topic" className="block text-xs text-muted">
+                What is it for?
+              </label>
+              <textarea id="team-topic" value={topic} onChange={(e) => setTopic(e.target.value)} rows={2} maxLength={250} placeholder="Ship releases on time, checked before they go out." className="block w-full resize-none bg-transparent text-body outline-none placeholder:text-faint" />
+            </div>
+            <p className="px-2 text-xs text-faint">Agents on the team read this so they know what the team is for.</p>
           </div>
           <MoreOptions>
             <div className="space-y-3 rounded-2xl bg-card p-4">
@@ -179,9 +196,6 @@ export function NewTeamFlow({ onClose, sectionId = null, onBrowse, SectionPick, 
                 Draw who hands work to whom (a plain chart)
               </button>
             </MoreOptions>
-            <button type="button" disabled={busy} onClick={() => void create(null)} className="min-h-10 px-2 text-body text-muted hover:text-ink disabled:opacity-50">
-              Skip, set it up later
-            </button>
           </div>
         </div>
       </Modal>
@@ -221,7 +235,7 @@ export function NewTeamFlow({ onClose, sectionId = null, onBrowse, SectionPick, 
   if (page === "review") return <Review slug={id} topic={topic} team={team} busy={busy} error={error} onBack={() => setPage("builder")} onCreate={createStepped} />;
 
   // a plain chart of who hands work to whom
-  const problem = teamProblem(chart);
+  const problem = teamProblem(chart) ?? (teamSizeProblem(chart) && NEEDS_AGENTS);
   return (
     <Modal title={`#${id}: its team`} label={`The team for #${id}`} onClose={onClose} className="sm:max-w-5xl!">
       <div className="space-y-4">
@@ -269,7 +283,7 @@ function Describe({ slug: id, onBack, onEdit, onCreate, busy, error }: { slug: s
   const team = useMemo(() => (draft?.steps?.length ? teamFromSteps(draft.steps) : null), [draft]);
   const localLines = useFlowLines(team ?? emptyTeam());
   const lines: FlowLine[] = draft?.lines ?? localLines;
-  const problem = team ? (draft?.problem ?? stepProblems(team).lines[0] ?? null) : null;
+  const problem = team ? (draft?.problem ?? stepProblems(team).lines[0] ?? (teamSizeProblem(team) && NEEDS_AGENTS)) : null;
 
   const build = async () => {
     const mine = ++token.current;
@@ -407,7 +421,7 @@ function Describe({ slug: id, onBack, onEdit, onCreate, busy, error }: { slug: s
 /** A last look before the team is made: its name, how it works, and a way back to the flowchart. */
 function Review({ slug: id, topic, team, busy, error, onBack, onCreate }: { slug: string; topic: string; team: ChannelTeam; busy: boolean; error: string | null; onBack: () => void; onCreate: () => void }) {
   const lines = useFlowLines(team);
-  const problem = stepProblems(team).lines[0] ?? null;
+  const problem = stepProblems(team).lines[0] ?? (teamSizeProblem(team) && NEEDS_AGENTS);
   return (
     <Modal title="Ready to create" onClose={onBack} className="sm:max-w-[640px]!">
       <div className="space-y-5">

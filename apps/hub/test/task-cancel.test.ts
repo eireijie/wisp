@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
+import { makeRoomAs } from "./room.ts";
 
 let dir: string;
 let base: string;
@@ -20,6 +21,9 @@ async function api<T = any>(method: string, url: string, body?: unknown, token =
   const text = await res.text();
   return { status: res.status, data: (text ? JSON.parse(text) : null) as T };
 }
+
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = (body: Parameters<typeof makeRoomAs>[3], token = owner) => makeRoomAs(hub, base, token, body);
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-cancel-"));
@@ -39,7 +43,7 @@ afterAll(async () => {
 
 describe("cancelling a task", () => {
   it("cancels the queued run, fails the task and refuses a second cancel", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "work" })).data;
+    const ch = (await room({ name: "work" })).data;
     const task = (await api("POST", "/api/tasks", { to: "atlas", title: "Tidy up", brief: "now", channelId: ch.id })).data;
     const before = hub.store.db.prepare("SELECT status FROM runs WHERE trigger_message_id = ?").get(task.threadId) as { status: string } | undefined;
     expect(before?.status).toBe("queued");

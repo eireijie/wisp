@@ -61,7 +61,7 @@ describe("team charts", () => {
   });
 
   it("are checked when a channel is created, and everyone on one joins the channel", async () => {
-    const bad = await api("POST", "/api/channels", { name: "nolead", settings: { team: { nodes: [node(ada.id)], edges: [] } } });
+    const bad = await api("POST", "/api/channels", { name: "nolead", settings: { team: { nodes: [node(ada.id), node(bo.id)], edges: [{ from: ada.id, to: bo.id }] } } });
     expect(bad.status).toBe(400);
     expect(bad.data.error).toMatch(/lead/);
     const ch = (await api("POST", "/api/channels", { name: "build", topic: "Ship the app", settings: { team: { nodes: [node(ada.id, true), node(bo.id)], edges: [{ from: ada.id, to: bo.id }] } } })).data;
@@ -123,7 +123,7 @@ describe("a channel with several leads", () => {
 
 describe("sub-threads", () => {
   it("lets a reply in a thread start a thread of its own, with the parent's talk in the prompt", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "nested", settings: { team: { nodes: [node(ada.id, true)], edges: [] } } })).data;
+    const ch = (await api("POST", "/api/channels", { name: "nested", settings: { team: { nodes: [node(ada.id, true), node(bo.id)], edges: [{ from: ada.id, to: bo.id }] } } })).data;
     const root = await post(ch.id, "build the login page");
     const reply = await post(ch.id, "use passkeys", root.id);
     expect(reply.threadId).toBe(root.id);
