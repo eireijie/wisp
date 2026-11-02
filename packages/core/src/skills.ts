@@ -610,7 +610,7 @@ Start each note with front matter:
 \`\`\`
 ---
 type: decision        # person, project, topic, decision, journal or reference
-source: "#general, 2026-10-17"   # where it came from: a channel, a link, a file
+source: "#launch, 2026-10-17"   # where it came from: a channel, a link, a file
 related: ["[[acme]]", "[[pricing]]"]
 ---
 \`\`\`

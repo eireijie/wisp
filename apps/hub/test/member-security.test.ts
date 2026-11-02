@@ -65,6 +65,7 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
   owner = (await api("POST", "/api/setup", { email: "o@example.com", name: "Owner", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
+  await api("POST", "/api/channels", { name: "general" }, owner);
   member = await invite("member", "m@example.com");
   guest = await invite("guest", "g@example.com");
   const { node } = (await api("POST", "/api/nodes", { name: "Owner's Mac" }, owner)).data;

@@ -56,7 +56,7 @@ Wisp opens on **Set up Wisp**, and **Get started** walks you through the rest:
 2. **Use Wisp from anywhere.** Wisp checks [Tailscale](https://tailscale.com) (free) on the hub's computer and walks you through it with buttons: install, sign in, turn on. Wisp then has an `https://…ts.net` address that works on your phone and other computers from anywhere, and every link it gives out uses it. Choose **Only on this Wi-Fi for now** to skip it.
 3. **Your device.** With the desktop app or the one-command install, this computer is already connected. Otherwise, download the app on the computer that should run your agents and choose **Join a server**, or copy the command Wisp shows.
 4. **Give agents computers.** Create a VM for your agents, or choose another computer for them. Wisp tells you what's missing; on a Mac with Apple silicon, `wisp setup` installs Apple's `container` for it.
-5. **Make your first agent.** Pick Claude Code, Codex, Hermes or another harness, sign it in once, and say hello in `#general`.
+5. **Make your first agent.** Pick Claude Code, Codex, Hermes or another harness, sign it in once, and say hello in its chat.
 
 ### 3. Add more
 

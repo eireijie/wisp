@@ -35,6 +35,7 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
   owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
+  await api("POST", "/api/channels", { name: "general" });
   me = (await api("GET", "/api/me")).data.user;
   sam = (await api("POST", "/api/members", { email: "sam@example.com", name: "Sam", password: "password123", role: "member" })).data;
   await api("POST", "/api/members", { email: "gus@example.com", name: "Gus", password: "password123", role: "guest" });

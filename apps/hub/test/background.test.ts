@@ -62,6 +62,7 @@ beforeAll(async () => {
   close = () => built.app.close();
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WispClient({ url, token: setup.token });
+  await owner.request("POST", "/api/channels", { name: "general" });
   const { node, token } = await owner.request("POST", "/api/nodes", { name: "box" });
   me = (hub.store.db.prepare("SELECT id FROM users").get() as { id: string }).id;
   agentId = (await owner.request("POST", "/api/agents", { handle: "dot", name: "Dot", harness: "custom", nodeId: node.id })).id;

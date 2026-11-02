@@ -827,7 +827,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
             </div>
             <ConnectionInstructions token={token} harness={harness} />
             <div className="rounded-xl border border-line p-4 text-sm text-muted">
-              Once connected, ask it to introduce itself in #general and save selected notes with <code className="text-ink">memory_write</code>. Its local profile and skills aren't imported automatically.
+              Once connected, ask it to introduce itself and save selected notes with <code className="text-ink">memory_write</code>. Its local profile and skills aren't imported automatically.
             </div>
             <div className="flex justify-end gap-2">
               {!onCreated && (

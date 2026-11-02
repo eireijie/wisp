@@ -15,7 +15,7 @@ export interface MemoryItem {
   title: string;
   /** who wrote it: "@atlas" or a person's name */
   by: string | null;
-  /** where it came from, e.g. "#general" */
+  /** where it came from, e.g. "#launch" */
   source: string | null;
   /** message it came from, for linking back */
   messageId: string | null;

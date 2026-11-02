@@ -23,6 +23,7 @@ beforeAll(async () => {
 
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WispClient({ url, token: setup.token });
+  await owner.request("POST", "/api/channels", { name: "general" });
   const agent = await owner.request("POST", "/api/agents", { handle: "scout", name: "Scout", harness: "claude-code" });
   await owner.request("POST", "/api/agents", { handle: "helper", name: "Helper", harness: "codex" });
   agentId = agent.id;
