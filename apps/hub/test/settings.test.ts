@@ -186,7 +186,7 @@ describe("workspace settings", () => {
   });
 
   it("sets what agents ask about first, how far they can ping each other, and new agents' access", async () => {
-    expect((await api("GET", "/api/settings/agents")).data).toEqual({ askBefore: ["send", "spend", "delete", "post", "signup", "share"], maxHops: 6, maxRunsPerMinute: 20, defaultAccess: "edit", leadsCreateAgents: false, subAgents: false, maxAgentMade: 10, learnSkills: true });
+    expect((await api("GET", "/api/settings/agents")).data).toEqual({ askBefore: ["send", "spend", "delete", "post", "signup", "share"], maxHops: 6, maxRunsPerMinute: 20, defaultAccess: "edit", leadsCreateAgents: false, subAgents: false, maxAgentMade: 10, learnSkills: true, autoMemory: true });
     await api("PUT", "/api/settings/agents", { askBefore: ["spend", "signup"], maxHops: 2, defaultAccess: "read-only" });
     const agent = (await api("POST", "/api/agents", { handle: "nova", name: "Nova", harness: "custom" })).data;
     expect(agent.settings.access).toBe("read-only");

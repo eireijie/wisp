@@ -118,7 +118,8 @@ describe("wisp-mcp", () => {
     await call("memory_write", { path: "shared/projects/apollo-launch-plan.md", content: "# Apollo launch plan\nLaunch the rebuilt site on November 3 after the content freeze and QA pass." });
     const r = await call("memory_write", { path: "shared/projects/apollo-launch.md", content: "# Apollo launch\nWe launch the rebuilt site November 3, after QA and the content freeze." });
     expect(r.text).toBe(
-      "Saved shared/projects/apollo-launch.md.\nSimilar notes (if it's the same idea, merge into one and delete the other):\n- shared/projects/apollo-launch-plan.md (Apollo launch plan)\nMentions you could link: [[apollo]]",
+      // it linked nothing, so Wisp linked what it mentions and the note it's closest to
+      "Saved shared/projects/apollo-launch.md.\nIt linked to nothing, so Wisp added \"Related: [[apollo]], [[apollo-launch-plan]]\". Change it if a better note fits.\nSimilar notes (if it's the same idea, merge into one and delete the other):\n- shared/projects/apollo-launch-plan.md (Apollo launch plan)",
     );
     const saved = (await call("memory_read", { path: "shared/projects/apollo-launch.md" })).text;
     expect(saved).toMatch(/^---\ntype: project\ncreated: \d{4}-\d\d-\d\d\nupdated: \d{4}-\d\d-\d\d\n---\n\n# Apollo launch/);
