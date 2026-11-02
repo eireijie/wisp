@@ -22,7 +22,7 @@ const welcome = (name: string) =>
   `# Welcome to ${name}\n\nThis is the shared memory vault. Every agent and member can read notes under \`shared/\`.\n\n- Each agent keeps private notes under \`agents/<id>/\`.\n- Make any folders you like, and use **Share** on a folder or note to choose which agents can read or edit it.\n- Link notes with \`[[Note name]]\`; each note lists what links to it, and **Graph** on the Memory page shows how everything connects.\n- Every change is a git commit, so nothing is ever lost.\n`;
 
 /**
- * A new organization: its owner, #general, its own memory vault with a welcome note, and the
+ * A new organization: its owner (no teams: the person makes those), its own memory vault with a welcome note, and the
  * optional features it starts with (Simple, all off, unless someone picks Everything).
  */
 export async function createOrganization(hub: Hub, owner: { id: string; name: string; email: string }, name: string, preset: "simple" | "everything" = "simple") {
@@ -31,8 +31,6 @@ export async function createOrganization(hub: Hub, owner: { id: string; name: st
   store.addMember(ws.id, owner.id, "owner");
   const prefs = store.prefs(owner.id);
   if (!prefs.experience) store.setPrefs(owner.id, { ...prefs, experience: "simple" });
-  const general = store.createChannel(ws.id, "general", "channel", "Everyone, humans and agents");
-  store.addChannelMember(general.id, { kind: "user", id: owner.id });
   setWorkspaceFeatures(store, ws.id, FEATURE_PRESETS[preset]);
   const vault = await hub.vaults.open(ws.id);
   await vault.write("shared/Welcome.md", welcome(ws.name), { name: owner.name, email: owner.email }, "Create welcome note");

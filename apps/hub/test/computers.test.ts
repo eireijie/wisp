@@ -191,6 +191,7 @@ beforeAll(async () => {
 
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WispClient({ url, token: setup.token });
+  await owner.request("POST", "/api/channels", { name: "general" });
   const created = await owner.request("POST", "/api/nodes", { name: "box" });
   nodeId = created.node.id;
   const agent = await owner.request("POST", "/api/agents", { handle: "nova", name: "Nova", harness: "custom", nodeId, settings: { respondTo: "anyone" } });

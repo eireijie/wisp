@@ -40,6 +40,7 @@ beforeAll(async () => {
   await start();
   const setup = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", workspaceName: "Home" }, "")).data;
   owner = setup.token;
+  await api("POST", "/api/channels", { name: "general" });
   firstOrg = setup.workspace.id;
 });
 
@@ -219,7 +220,7 @@ describe("organizations", () => {
   let second: { id: string; name: string };
   let secondToken: string;
 
-  it("makes a new organization with its owner, #general, the simple features and its own memory", async () => {
+  it("makes a new organization with its owner, no teams, the simple features and its own memory", async () => {
     const r = await api("POST", "/api/orgs", { name: "Side project" });
     expect(r.status).toBe(200);
     second = r.data.org;
@@ -232,7 +233,7 @@ describe("organizations", () => {
 
     const me = (await api("GET", "/api/me", undefined, secondToken)).data;
     expect(me).toMatchObject({ role: "owner", workspace: { id: second.id, name: "Side project" }, features: FEATURE_PRESETS.simple });
-    expect((await api<any[]>("GET", "/api/channels", undefined, secondToken)).data.map((c) => c.name)).toEqual(["general"]);
+    expect((await api<any[]>("GET", "/api/channels", undefined, secondToken)).data.map((c) => c.name)).toEqual([]);
     expect((await api<any[]>("GET", "/api/agents", undefined, secondToken)).data).toEqual([]);
     expect((await api<any[]>("GET", "/api/vault/notes", undefined, secondToken)).data.map((n) => n.path)).toEqual(["shared/Welcome.md"]);
     expect(hub.vault(second.id).root).toBe(path.join(dir, "orgs", second.id, "vault"));
@@ -281,6 +282,7 @@ describe("organizations", () => {
 
   it("lets someone already signed in join another organization with an invite", async () => {
     await api("PUT", "/api/features", { invite: true }, secondToken);
+    await api("POST", "/api/channels", { name: "general" }, secondToken);
     const inv = (await api("POST", "/api/invites", { role: "member" }, secondToken)).data;
     const sam = await login("sam@example.com");
     expect((await api("POST", "/api/invites/join", { code: "bogus" }, sam)).status).toBe(404);

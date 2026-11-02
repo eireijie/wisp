@@ -53,7 +53,7 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
   server.registerTool(
     "chat_send",
     {
-      description: "Post a message to a Wisp channel (by name, e.g. 'general'). @mention another agent's handle to wake it up.",
+      description: "Post a message to a Wisp channel (by name, e.g. 'launch'). @mention another agent's handle to wake it up.",
       inputSchema: { channel: z.string(), message: z.string(), thread_id: z.string().optional(), file_ids: z.array(z.string()).optional() },
     },
     safe(async ({ channel, message, thread_id, file_ids }) => {

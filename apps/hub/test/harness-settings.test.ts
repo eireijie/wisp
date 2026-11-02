@@ -78,6 +78,7 @@ beforeAll(async () => {
   close = () => app.close();
   const post = (p: string, body: unknown) => fetch(url + p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
   owner = new WispClient({ url, token: (await post("/api/setup", { email: "me@example.com", name: "Me", password: "password123" })).token });
+  await owner.request("POST", "/api/channels", { name: "general" });
   await owner.request("PUT", "/api/features", { invite: true });
   const inv = await owner.request<{ code: string }>("POST", "/api/invites", { role: "member", days: 1 });
   sam = new WispClient({ url, token: (await post("/api/invites/accept", { code: inv.code, name: "Sam", email: "sam@example.com", password: "password123" })).token });

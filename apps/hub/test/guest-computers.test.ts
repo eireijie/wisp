@@ -29,6 +29,7 @@ beforeAll(async () => {
   ({ app, hub } = await buildHub({ dataDir: dir, setupCode: false }));
   const setup = await api("POST", "/api/setup", "", { email: "owner@example.com", name: "Owner", password: "password123", features: "everything" });
   owner = setup.json().token;
+  await api("POST", "/api/channels", owner, { name: "general" });
   users.owner = (await api("GET", "/api/me")).json().user.id;
   for (const role of ["guest", "member"] as const) {
     const email = `${role}@example.com`;

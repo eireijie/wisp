@@ -348,6 +348,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
    * The person a caller works for: a person themselves; an agent, whoever asked it for what it's
    * doing now, or else whoever made the token it connected with (a device's own token: its owner).
    */
+  /** With no team to post in, an agent's task for another agent goes to the requester's DM with it. */
+  const requesterDm = (c: Caller, agentId: string) => {
+    const who = requesterOf(c);
+    return who && store.role(c.workspaceId, who) ? store.dmChannel(c.workspaceId, who, agentId) : undefined;
+  };
   const requesterOf = (c: Caller): string | null => {
     if (c.actor.kind === "user") return c.actor.id;
     const running = hub.currentRun(c.actor.id);
@@ -1656,7 +1661,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
           ? store.channel(forTeam.channelId)
           : c.actor.kind === "user"
             ? store.dmChannel(c.workspaceId, c.actor.id, target.id)
-            : store.channelByName(c.workspaceId, "general");
+            : requesterDm(c, target.id);
     if (!ch) return reply.code(404).send({ error: "channel not found" });
     const threadId = onChart && running?.threadId && store.message(running.threadId)?.channelId === ch.id ? running.threadId : null;
     return delegate({ workspaceId: c.workspaceId, author: c.actor, from: c.actor, target, title: body.title, brief: body.brief, channelId: ch.id, fileIds: body.fileIds, hop: running ? running.hop + 1 : 0, parentId: parent?.id ?? null, threadId, onBehalfOf: requesterOf(c) });
@@ -2001,8 +2006,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (participants.length < 2) return reply.code(400).send({ error: "a discussion needs at least two agents" });
     const moderator = body.moderator ? agentRef(body.moderator) : store.agent(c.actor.kind === "agent" && participants.includes(c.actor.id) ? c.actor.id : (team?.leadId ?? participants[0]));
     if (!moderator) return reply.code(404).send({ error: "moderator not found" });
-    const channel = body.channelId ? channelVisible(c, body.channelId) : team ? store.channel(team.channelId) : store.channelByName(c.workspaceId, "general");
-    if (!channel) return reply.code(404).send({ error: "channel not found" });
+    const channel = body.channelId ? channelVisible(c, body.channelId) : team ? store.channel(team.channelId) : undefined;
+    if (!channel) return reply.code(404).send({ error: body.channelId ? "channel not found" : "a discussion needs a team or channel to happen in; make one first" });
     const requester = requesterOf(c);
     for (const a of [...participants, moderator.id]) {
       const agent = store.agent(a)!;
