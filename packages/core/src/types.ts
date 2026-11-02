@@ -92,6 +92,22 @@ export interface AgentSettings {
   parentAgentId?: string;
   /** how many agents up the chain it was made: 1 = by a lead, 2 = a sub-agent of that one, … */
   madeDepth?: number;
+  /** its first chat with the person it works for: the hello Wisp wrote for it, then a few questions (hub greeting.ts) */
+  setup?: AgentSetup;
+}
+
+/** A new agent getting to know the person it works for, in their DM. */
+export interface AgentSetup {
+  userId: string;
+  channelId: string;
+  startedAt: string;
+  /** the hello Wisp wrote for it */
+  greetingId?: string;
+  /** what the person wrote back, one per question, in order */
+  answers: string[];
+  /** the message that gave the last answer: its reply wraps up the setup */
+  lastAnswerId?: string;
+  done: boolean;
 }
 
 /**

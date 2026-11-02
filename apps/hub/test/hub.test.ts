@@ -224,7 +224,7 @@ describe("hub", () => {
   it("DMs route to the agent without a mention", async () => {
     const dm = (await api("POST", `/api/dm/${nova.id}`)).data;
     await api("POST", `/api/channels/${dm.id}/messages`, { body: "private question" });
-    const reply = await waitFor(async () => (await api<{ messages: Message[] }>("GET", `/api/channels/${dm.id}/messages`)).data.messages.find((m) => m.author.id === nova.id));
+    const reply = await waitFor(async () => (await api<{ messages: Message[] }>("GET", `/api/channels/${dm.id}/messages`)).data.messages.find((m) => m.author.id === nova.id && m.body.includes("heard")));
     expect(reply.body).toBe("nova heard: private question");
   });
 
@@ -921,7 +921,8 @@ describe("agent context", () => {
   it("shows the model, effort, context window and permissions you're talking to", async () => {
     const dm = (await api("POST", `/api/dm/${atlas.id}`)).data;
     await api("POST", `/api/channels/${dm.id}/messages`, { body: "hello" });
-    await waitFor(async () => (await api<{ messages: Message[] }>("GET", `/api/channels/${dm.id}/messages`)).data.messages.find((m) => m.author.id === atlas.id));
+    // past atlas's hello, which Wisp wrote when it was made
+    await waitFor(async () => (await api<{ messages: Message[] }>("GET", `/api/channels/${dm.id}/messages`)).data.messages.find((m) => m.author.id === atlas.id && m.body.includes("heard")));
     const ctx = (await api("GET", `/api/agents/${atlas.id}/context?channel=${dm.id}`)).data;
     expect(ctx).toMatchObject({ harness: "claude-code", model: "fake-1", modelIsDefault: true, effort: "medium", effortIsDefault: true, access: "edit", contextUsed: 4321, contextWindow: 200000 });
     expect(ctx.lastRunAt).toBeTruthy();

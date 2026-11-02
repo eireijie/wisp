@@ -10,6 +10,7 @@ import { HARNESSES, runsInVm, type Agent, type Connector, type DiscoveredAgent, 
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go } from "../router.ts";
+import { openDm } from "../openDm.ts";
 import type { NodeInfo } from "./AgentSettings.tsx";
 import { computerKindLabel, usableDevices } from "../devices.ts";
 import { defaultComputer, resolveComputer, vmOnDevice, withComputer, type ComputerChoice } from "../agentComputer.ts";
@@ -402,7 +403,8 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
         onCreated(a);
       } else {
         onClose();
-        go({ view: "agents", agentId: a.id, tab: "overview" });
+        // straight to its chat, where it has already said hello
+        await openDm(a.id);
       }
     } catch (err) {
       setError((err as Error).message);
@@ -1212,7 +1214,7 @@ export function ImportAgent({
                 useStore.getState().refreshComputers(),
               ]);
               onClose();
-              go({ view: "agents", agentId: a.id, tab: "overview" });
+              await openDm(a.id);
             } catch (err) {
               setError((err as Error).message);
             } finally {

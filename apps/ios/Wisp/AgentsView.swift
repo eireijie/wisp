@@ -53,9 +53,14 @@ struct AgentsView: View {
       }
       .background(Palette.ground.ignoresSafeArea())
       .toolbar(.hidden, for: .navigationBar)
-      .sheet(isPresented: $adding) { AddAgent { path.append($0) } }
+      // a new agent has already said hello in its DM, so that's where you land
+      .sheet(isPresented: $adding) { AddAgent { agent in Task { await openNew(agent) } } }
       .chatDestinations()
     }
+  }
+
+  private func openNew(_ agent: Agent) async {
+    if let ch = try? await store.dm(with: agent) { path.append(ch) } else { path.append(agent) }
   }
 
   /** the dashed tile after the last agent */
