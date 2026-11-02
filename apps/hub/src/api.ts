@@ -509,6 +509,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const list = store.channels(c.workspaceId).filter((ch) => channelVisible(c, ch.id) && (ch.kind === "channel" || store.isMember(ch.id, c.actor)));
     const ids = list.map((ch) => ch.id);
     const counts = store.memberCounts(ids);
+    const agentsIn = store.agentMemberIds(ids);
     const reads = c.actor.kind === "user" ? store.readState(c.actor.id, ids) : {};
     const prefs = c.actor.kind === "user" ? store.channelPrefs(c.actor.id) : {};
     const pins = store.pinnedIds(ids);
@@ -521,6 +522,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       last: lasts[ch.id] ?? null,
       joined: store.isMember(ch.id, c.actor),
       memberCount: counts[ch.id] ?? 0,
+      agentIds: (agentsIn[ch.id] ?? []).slice(0, 8),
       unread: reads[ch.id]?.unread ?? 0,
       lastReadAt: reads[ch.id]?.lastReadAt ?? null,
       notify: prefs[ch.id]?.notify ?? "default",

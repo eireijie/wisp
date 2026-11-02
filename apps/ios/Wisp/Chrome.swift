@@ -202,7 +202,7 @@ struct CardCaption: View {
 struct TeamGhosts: View {
   @Environment(Store.self) private var store
   var agents: [Agent]
-  /** keeps the ghost of a team with nobody on it the same from run to run */
+  /** unused now that a team with nobody on it shows a plain icon; kept so callers compile */
   var seed: String
   var size: CGFloat = 32
   var iconFileId: String? = nil
@@ -215,7 +215,10 @@ struct TeamGhosts: View {
       if let iconFileId, failedIcon != iconFileId { icon(iconFileId) }
       else if agents.count >= 2 { overlapped }
       else if let agent = agents.first { AgentAvatar(agent: agent, size: size, showStatus: false) }
-      else { GhostView(look: nil, seed: seed, size: size) }
+      else {
+        Image(systemName: "person.2.fill").font(.system(size: size * 0.4)).foregroundStyle(Palette.muted)
+          .frame(width: size, height: size).background(Palette.faint.opacity(0.18), in: Circle())
+      }
     }
     .frame(width: size * 1.14, height: size, alignment: .topLeading)
     .accessibilityHidden(true)

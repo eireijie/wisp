@@ -50,6 +50,16 @@ export function teamOf(channel: Pick<Channel, "id" | "workspaceId" | "name" | "k
   };
 }
 
+/**
+ * The agents a team's icon shows, in order: the chart's agents (leads first), then any other agent
+ * in the channel. Empty only when no agent is in it at all.
+ */
+export function teamIconAgentIds(channel: Pick<Channel, "settings"> & { agentIds?: string[] }): string[] {
+  const nodes = channel.settings?.team?.nodes ?? [];
+  const charted = [...nodes.filter((n) => n.lead), ...nodes.filter((n) => !n.lead)].map((n) => n.agentId);
+  return [...new Set([...charted, ...(channel.agentIds ?? [])])];
+}
+
 /** Every channel's team. */
 export function channelTeams(channels: Parameters<typeof teamOf>[0][]): Team[] {
   return channels.map(teamOf).filter((t): t is Team => !!t);

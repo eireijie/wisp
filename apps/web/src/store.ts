@@ -37,6 +37,8 @@ export interface Member {
 export interface ChannelInfo extends Channel {
   joined: boolean;
   memberCount: number;
+  /** the agents in it, in the order they joined (the first few); missing from older hubs */
+  agentIds?: string[];
   /** new top-level messages since you last read; always 0 for a channel you muted */
   unread: number;
   lastReadAt: string | null;

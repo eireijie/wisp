@@ -417,8 +417,7 @@ struct ChatRow: View {
   }
 
   private func teamAgents(_ c: Channel) -> [Agent] {
-    guard let team = c.team(agents: store.agents) else { return [] }
-    return team.nodes.sorted { ($0.lead ? 0 : 1) < ($1.lead ? 0 : 1) }.compactMap { store.agent($0.agentId) }
+    c.iconAgents(store.agents)
   }
 
   /** an agent is replying in this team right now */

@@ -306,6 +306,15 @@ describe("editing and deleting messages", () => {
     expect((await api("DELETE", `/api/messages/${msg.id}`)).status).toBe(409);
   });
 
+  it("lists the agents in a channel in the order they joined, for its icon", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "icons" })).data;
+    const nova = (await api("POST", "/api/agents", { handle: "nova-icon", name: "Nova", harness: "custom" })).data;
+    await api("PUT", `/api/channels/${ch.id}/members/agent/${nova.id}`);
+    await api("PUT", `/api/channels/${ch.id}/members/agent/${atlas.id}`);
+    hub.store.db.prepare("INSERT INTO channel_members (channel_id, member_kind, member_id) VALUES (?, 'agent', 'agt_deleted')").run(ch.id);
+    expect((await channelNamed("icons")).agentIds).toEqual([nova.id, atlas.id]);
+  });
+
   it("counts only members who still exist, matching the member list", async () => {
     const ch = (await api("POST", "/api/channels", { name: "headcount" })).data;
     const gone = (await api("POST", "/api/agents", { handle: "gone", name: "Gone", harness: "custom" })).data;
