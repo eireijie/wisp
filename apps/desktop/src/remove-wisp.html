@@ -30,7 +30,7 @@
   .card { background: var(--card); border-radius: 10px; overflow: hidden; }
   .row { display: flex; gap: 12px; align-items: flex-start; padding: 11px 14px; border-top: 1px solid var(--line); }
   .row:first-child { border-top: 0; }
-  .row > span:first-of-type { flex: 1; min-width: 0; }
+  .row > span:not(.i) { flex: 1; min-width: 0; }
   input[type="checkbox"] { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }
   .s { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; overflow-wrap: anywhere; white-space: pre-line; }
   .note { margin: 12px 2px 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
@@ -108,7 +108,7 @@
     render = showList;
     const lost = scan.items.filter((i) => i.group === "lost");
     const rest = scan.items.filter((i) => i.group === "rest");
-    const kept = `${scan.tailscale ? "Wisp's Tailscale address turns off with the hub. " : ""}${scan.kept.join(", ").replace(/^./, (c) => c.toUpperCase())} stay.`;
+    const kept = `${scan.tailscale && picked.has(scan.tailscaleWith) ? "Wisp's Tailscale address turns off with the hub. " : ""}${scan.kept.join(", ").replace(/^./, (c) => c.toUpperCase())} stay.`;
     app.replaceChildren(
       el("div", { className: "scroll" },
         el("h1", { textContent: "Remove Wisp from this computer" }),
@@ -140,7 +140,7 @@
     app.replaceChildren(
       el("div", { className: "scroll" },
         el("h1", { textContent: "Remove these for good?" }),
-        el("div", { className: "card list", style: "margin-top:14px" }, ...chosen.map((i) => el("div", { className: i.group === "lost" ? "red" : "", textContent: i.id === "data" ? `Chats, memory and files. ${i.detail}` : i.id === "vms" ? `${i.label.replace("Agent computers · ", "")} agent computers and everything on them` : i.detail ? `${i.label}: ${i.detail}` : i.label })), scan.tailscale && picked.has("services") ? el("div", { textContent: "Wisp's Tailscale address" }) : null),
+        el("div", { className: "card list", style: "margin-top:14px" }, ...chosen.map((i) => el("div", { className: i.group === "lost" ? "red" : "", textContent: i.id === "data" ? `Chats, memory and files. ${i.detail}` : i.id === "vms" ? `${i.label.replace("Agent computers · ", "")} agent computer${i.label.endsWith(" 1") ? "" : "s"} and everything on them` : i.detail ? `${i.label}: ${i.detail}` : i.label })), scan.tailscale && picked.has(scan.tailscaleWith) ? el("div", { textContent: "Wisp's Tailscale address" }) : null),
         hasData && !backedUp ? el("div", { className: "red", style: "margin-top:12px;font-size:13px" }, "You haven't saved a backup. ", button("Save one", showList, "link")) : null,
         ...warnings().map((w) => { w.className = "sub"; return w; }),
         el("label", { className: "type" }, `Type ${scan.word} to confirm`, input),

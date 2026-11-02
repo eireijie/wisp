@@ -131,7 +131,8 @@ function createRemoval({
 
   const runningBundle = () => {
     if (!packaged || platform !== "darwin") return null;
-    const m = execPath.match(/^(.*\/(?:Wisp|Warren)\.app)\/Contents\/MacOS\/[^/]+$/);
+    // electron-builder names the bundle wisp.app
+    const m = execPath.match(/^(.*\/(?:wisp|warren)\.app)\/Contents\/MacOS\/[^/]+$/i);
     if (!m || m[1].startsWith("/Volumes/") || m[1].includes("/AppTranslocation/")) return null;
     return m[1];
   };
@@ -289,7 +290,8 @@ function createRemoval({
     const commands = at.commands.filter((file) => (platform === "win32" ? exists(file) : isLink(file)));
     const states = at.stateDirs.filter(exists);
     const installs = at.installDirs.filter((dir) => exists(dir) && (isLink(dir) || isCheckout(dir)));
-    const bundles = [...new Set([...at.bundles, runningBundle()].filter(Boolean))].filter((b) => exists(b) && allowed(b));
+    // on a Mac's usual disk /Applications/Wisp.app and /Applications/wisp.app are one folder
+    const bundles = [...new Map([...at.bundles, runningBundle()].filter(Boolean).map((b) => [b.toLowerCase(), b])).values()].filter((b) => exists(b) && allowed(b));
     const appFiles = at.appFiles.filter(exists);
     const image = runningAppImage();
     const removeApp = uninstaller();
@@ -327,8 +329,11 @@ function createRemoval({
     if (hub.dataDir && !data.includes(hub.dataDir) && !data.some((dir) => under(hub.dataDir, dir))) kept.push(`the data folder at ${short(hub.dataDir)}`);
     if (hub.wispDir && !installs.includes(hub.wispDir)) kept.push(`the Wisp folder at ${short(hub.wispDir)}`);
 
-    plan = { services, vms, images, commands, states, installs, data, bundles, appFiles, image, removeApp, hasLocalHub: !!hub.localHub, items };
-    return { items, manual, tailscale: tailscale.serving, kept };
+    // the hub goes with its service, or with the app when the app is what runs it
+    const hubService = services.some((s) => /^(ai\.(wisp|warren)\.hub|wisp|warren|(Wisp|Warren) hub)$/.test(s.name));
+    const tailscaleWith = hubService ? "services" : hub.localHub ? "app" : null;
+    plan = { tailscaleWith, services, vms, images, commands, states, installs, data, bundles, appFiles, image, removeApp, items };
+    return { items, manual, tailscale: tailscale.serving && !!tailscaleWith, tailscaleWith, kept };
   }
 
   /** The ticked ids that exist; what relies on a service takes the service with it, as the window shows. */
@@ -381,9 +386,7 @@ function createRemoval({
       if (failed.length) throw Object.assign(new Error(failed.join("\n")), { failedCount: failed.length, total: list.length });
     };
 
-    // the hub goes with its service, or with the app when the app is what runs it
-    const hubService = plan.services.some((s) => /^(ai\.(wisp|warren)\.hub|wisp|warren|(Wisp|Warren) hub)$/.test(s.name));
-    if (hubService ? picked.has("services") : picked.has("app") && plan.hasLocalHub) await step("tailscale", "Turning off Tailscale address…", "Tailscale address turned off", tailscaleOff);
+    if (plan.tailscaleWith && picked.has(plan.tailscaleWith)) await step("tailscale", "Turning off Tailscale address…", "Tailscale address turned off", tailscaleOff);
     if (picked.has("services")) await step("services", "Removing services…", "Services removed", () => each(plan.services, removeService));
     if (picked.has("vms")) {
       const ids = [...plan.vms.container.map((id) => ["container", id]), ...plan.vms.docker.map((id) => ["docker", id])];

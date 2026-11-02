@@ -3,9 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 const { LIST, WORD, createRemoval, locations, helperScript } = createRequire(import.meta.url)("../src/removal.cjs");
 
+vi.setConfig({ testTimeout: 60_000 }); // each test starts many small processes
 const repo = path.resolve(__dirname, "../../..");
 const script = fs.readFileSync(path.join(repo, "uninstall.sh"), "utf8");
 const roots: string[] = [];
@@ -177,6 +178,10 @@ describe("the allow-list", () => {
     r.write(path.join(r.home, "Downloads/Wisp.app/Contents/Info.plist"), "ai.wisp.desktop");
     const packaged = r.make({ packaged: true, execPath: path.join(r.home, "Downloads/Wisp.app/Contents/MacOS/Wisp") });
     expect(packaged.guard(path.join(r.home, "Downloads/Wisp.app"))).toBeTruthy();
+    r.write(path.join(r.root, "Applications/wisp.app/Contents/Info.plist"), "ai.wisp.desktop");
+    const lower = r.make({ packaged: true, execPath: path.join(r.root, "Applications/wisp.app/Contents/MacOS/Wisp") });
+    expect(lower.guard(path.join(r.root, "Applications/wisp.app"))).toBeTruthy();
+    expect((await lower.scan({})).items.find((i: any) => i.id === "app").detail.match(/wisp\.app/gi)).toHaveLength(1);
     const onDisk = r.make({ packaged: true, execPath: "/Volumes/Wisp/Wisp.app/Contents/MacOS/Wisp" });
     expect((await onDisk.scan({})).manual.map((m: any) => m.label)).toContain("This copy of the app");
     expect(() => onDisk.guard("/Volumes/Wisp/Wisp.app")).toThrow(/Refused/);
@@ -266,6 +271,17 @@ describe("Tailscale", () => {
     await removal.scan({});
     await removal.start(["commands", "vms"], WORD);
     expect(off(r.calls())).toEqual([]);
+  });
+
+  it("goes with the app when the app runs the hub, and stays for a device-only service", async () => {
+    const r = computer();
+    for (const name of [...LIST.launchAgents, ...LIST.systemdUnits]) if (!/node/.test(name)) { fs.rmSync(path.join(r.home, "Library/LaunchAgents", `${name}.plist`), { force: true }); fs.rmSync(path.join(r.home, ".config/systemd/user", `${name}.service`), { force: true }); }
+    const removal = await realSpawnless(r);
+    await removal.scan({ localHub: true });
+    await removal.start(["services"], WORD);
+    expect(off(r.calls())).toEqual([]);
+    await removal.start(["app"], WORD);
+    expect(off(r.calls()).length).toBe(2);
   });
 
   it.each([
