@@ -54,7 +54,7 @@ struct TeamInfoPage: View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
         Button { choosingIcon = true } label: {
-          TeamGhosts(agents: (team?.nodes ?? []).compactMap { store.agent($0.agentId) }, seed: current.name, size: 40, iconFileId: current.settings?.iconFileId)
+          TeamGhosts(agents: current.iconAgents(store.agents), seed: current.name, size: 40, iconFileId: current.settings?.iconFileId)
             .frame(minHeight: 44)
             .allowsHitTesting(false)
             .contentShape(Rectangle())
@@ -98,7 +98,7 @@ struct TeamInfoPage: View {
     .onChange(of: current.memberCount) { Task { await load() } }
     .onChange(of: current.pinnedIds) { Task { await load() } }
     .sheet(isPresented: $notify) { NotifySheet(channel: current) }
-    .sheet(isPresented: $choosingIcon) { TeamIconSheet(channel: current, agents: (team?.nodes ?? []).compactMap { store.agent($0.agentId) }) }
+    .sheet(isPresented: $choosingIcon) { TeamIconSheet(channel: current, agents: current.iconAgents(store.agents)) }
     .sheet(isPresented: $context) {
       NavigationStack { ContextAccessSheet(channel: current, agents: agentMembers).toolbar(.hidden, for: .navigationBar) }
     }

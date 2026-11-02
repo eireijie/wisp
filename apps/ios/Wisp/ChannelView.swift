@@ -197,8 +197,7 @@ struct ChannelView: View {
 
   /** teams show their first two agents on the name pill */
   private var teamAgents: [Agent] {
-    guard let team = current.team(agents: store.agents) else { return [] }
-    return team.nodes.sorted { ($0.lead ? 0 : 1) < ($1.lead ? 0 : 1) }.compactMap { store.agent($0.agentId) }
+    current.iconAgents(store.agents)
   }
 
   /** the top of a chat: a glass back circle, the name on a pill with the ghost, and a ... circle */
@@ -585,8 +584,7 @@ struct EmptyChannel: View {
         .font(.system(size: 13)).foregroundStyle(Palette.muted)
       } else {
         let team = channel.team(agents: store.agents)
-        let agents = (team?.nodes ?? []).compactMap { store.agent($0.agentId) }
-        TeamGhosts(agents: agents, seed: channel.name, size: 64, iconFileId: channel.settings?.iconFileId)
+        TeamGhosts(agents: channel.iconAgents(store.agents), seed: channel.name, size: 64, iconFileId: channel.settings?.iconFileId)
         Text(channel.name).font(.system(size: 20, weight: .semibold))
         Text(intro(team)).font(.system(size: 15)).foregroundStyle(Palette.muted)
         if channel.archivedAt == nil {

@@ -241,12 +241,13 @@ struct InboxSections: View {
       InboxHead(title: "Teams")
       CardGroup {
         ForEach(teams) { t in
+          let teamChannel = store.channels.first { $0.id == t.channelId }
           let members = (t.members ?? []).compactMap { store.agent($0.agentId) }
           let busy = members.first { $0.status == .busy }
           let teamBusy = store.tasks.contains { $0.teamId == t.id && $0.status == "in_progress" }
           Button { if let ch = store.channels.first(where: { $0.id == t.channelId }) { open(.chat(ch)) } } label: {
             HStack(spacing: 12) {
-              TeamGhosts(agents: members, seed: t.name, size: 40, iconFileId: store.channels.first { $0.id == t.channelId }?.settings?.iconFileId)
+              TeamGhosts(agents: teamChannel?.iconAgents(store.agents) ?? members, seed: t.name, size: 40, iconFileId: teamChannel?.settings?.iconFileId)
               VStack(alignment: .leading, spacing: 3) {
                 Text(t.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
                 Text(busy != nil || teamBusy ? "Working\(busy.map { " · \($0.name) is on it" } ?? "")" : "Quiet")
@@ -334,8 +335,7 @@ struct InboxSections: View {
     return HStack(spacing: 12) {
       if c.isDM, let a = store.dmAgent(c) { SoloGhost(agent: a, size: 40) }
       else {
-        let team = store.teams.first { $0.channelId == c.id }
-        TeamGhosts(agents: (team?.members ?? []).compactMap { store.agent($0.agentId) }, seed: c.name, size: 40, iconFileId: c.settings?.iconFileId)
+        TeamGhosts(agents: c.iconAgents(store.agents), seed: c.name, size: 40, iconFileId: c.settings?.iconFileId)
       }
       VStack(alignment: .leading, spacing: 3) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {

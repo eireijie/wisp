@@ -690,6 +690,22 @@ export class Store {
     });
   }
 
+  /** The agents in each channel, in the order they joined: what a team's icon shows when its chart doesn't name them. */
+  agentMemberIds(channelIds: string[]): Record<string, string[]> {
+    if (!channelIds.length) return {};
+    const rows = this.db
+      .prepare(
+        `SELECT m.channel_id, m.member_id FROM channel_members m JOIN channels c ON c.id = m.channel_id
+         WHERE m.channel_id IN (${channelIds.map(() => "?").join(",")}) AND m.member_kind = 'agent'
+           AND EXISTS (SELECT 1 FROM agents a WHERE a.id = m.member_id AND a.workspace_id = c.workspace_id)
+         ORDER BY m.rowid`,
+      )
+      .all(...channelIds) as { channel_id: string; member_id: string }[];
+    const out: Record<string, string[]> = {};
+    for (const r of rows) (out[r.channel_id] ??= []).push(r.member_id);
+    return out;
+  }
+
   /** Members per channel: only people still in the workspace and agents that still exist, like the member list. */
   memberCounts(channelIds: string[]): Record<string, number> {
     if (!channelIds.length) return {};

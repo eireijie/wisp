@@ -412,7 +412,7 @@ function Review({ slug: id, topic, team, busy, error, onBack, onCreate }: { slug
     <Modal title="Ready to create" onClose={onBack} className="sm:max-w-[640px]!">
       <div className="space-y-5">
         <div className="flex items-center gap-4">
-          <TeamGhosts agentIds={teamAgentIds(team)} seed={id} size={56} />
+          <TeamGhosts agentIds={teamAgentIds(team)} size={56} />
           <div className="min-w-0">
             <div className="t-title truncate">{id}</div>
             {topic && <div className="text-body text-muted">{topic}</div>}

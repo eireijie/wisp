@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { BellOff, Check, ChevronDown, FolderPlus, Ghost, MessageSquarePlus, Pin, Plus, Search, Users, X } from "lucide-react";
-import type { Agent, Section } from "@wisp/core";
+import { teamIconAgentIds, type Agent, type Section } from "@wisp/core";
 import { api } from "../api.ts";
-import { useStore, useTeams, usePrefs, type ChannelInfo } from "../store.ts";
+import { useStore, usePrefs, type ChannelInfo } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
 import { openDm } from "../openDm.ts";
 import { AgentAvatar, Menu, cx, clockTime } from "./ui.tsx";
@@ -60,15 +60,14 @@ export function shortTime(at: number, clock: "auto" | "12h" | "24h"): string {
 /** A team's chosen image, else its first two agents' ghosts overlapped; one ghost for a chat with an agent. */
 export function ChatAvatar({ chat, size, ghostsOnly = false }: { chat: Pick<Chat, "kind" | "agent" | "channel">; size: number; ghostsOnly?: boolean }) {
   const agents = useStore((s) => s.agents);
-  const teams = useTeams();
   const image = useTeamImage(chat.kind === "team" && !ghostsOnly ? chat.channel?.settings?.iconFileId : null);
   if (chat.kind === "dm") return <AgentAvatar agent={chat.agent ?? undefined} size={size} live />;
   if (image.loading) return <span className="inline-block shrink-0 rounded-full bg-chip" style={{ width: size, height: size }} aria-hidden />;
   if (image.url) return <img src={image.url} alt="" className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
-  const team = teams.find((t) => t.channelId === chat.channel?.id);
-  const members = (team?.members ?? []).map((m) => agents.find((a) => a.id === m.agentId)).filter((a): a is Agent => !!a);
-  // nobody on the team yet: a ghost of the team's own, the same each time
-  if (members.length < 2) return <AgentAvatar agent={members[0] ?? ({ name: chat.channel?.name ?? "team", harness: "" } as Pick<Agent, "name" | "harness">)} size={size} live={!!members[0]} />;
+  const members = (chat.channel ? teamIconAgentIds(chat.channel) : []).map((id) => agents.find((a) => a.id === id)).filter((a): a is Agent => !!a);
+  // nobody on the team yet: a plain team icon, never somebody's ghost
+  if (!members.length) return <span className="grid shrink-0 place-items-center rounded-full bg-chip text-muted" style={{ width: size, height: size }} aria-hidden><Users size={size * 0.5} strokeWidth={1.8} /></span>;
+  if (members.length === 1) return <AgentAvatar agent={members[0]} size={size} live />;
   const small = Math.round(size * 0.72);
   return (
     <span className="relative inline-block shrink-0" style={{ width: size * 1.1, height: size }} aria-hidden>
