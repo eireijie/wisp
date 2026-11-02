@@ -83,6 +83,7 @@ extension Store {
       channel.notify = channels[i].notify
       channel.starred = channels[i].starred
       channel.memberCount = channels[i].memberCount
+      channel.agentIds = channels[i].agentIds
       channel.pinnedIds = channels[i].pinnedIds
       channels[i] = channel
     }

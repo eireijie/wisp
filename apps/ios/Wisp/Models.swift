@@ -101,6 +101,8 @@ struct Channel: Codable, Identifiable, Hashable {
   var sectionId: String?
   var joined: Bool?
   var memberCount: Int?
+  /** the agents in it, in the order they joined (the first few); nil from older hubs */
+  var agentIds: [String]?
   var unread: Int?
   var lastReadAt: String?
   var createdAt: String

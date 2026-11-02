@@ -202,7 +202,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
           </button>
           {!phone && (
             <>
-              <TeamGhosts agentIds={teamAgentIds(team)} seed={name} size={34} />
+              <TeamGhosts agentIds={teamAgentIds(team)} size={34} />
               <div className="min-w-0">
                 <div className="truncate text-body font-medium leading-tight">{name}</div>
                 <div className="text-[13px] text-muted">How the team works</div>

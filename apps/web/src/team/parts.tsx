@@ -213,11 +213,11 @@ export function SeedGhost({ seed, size }: { seed: string; size: number }) {
   return <Ghost look={look} size={size} animate={false} label={seed} />;
 }
 
-/** The ghosts of a team's agents, two overlapped; a ghost of the team's own when nobody is on it yet. */
-export function TeamGhosts({ agentIds, seed, size }: { agentIds: string[]; seed: string; size: number }) {
+/** The ghosts of a team's agents, two overlapped; a plain team icon when nobody is on it yet. */
+export function TeamGhosts({ agentIds, size }: { agentIds: string[]; size: number }) {
   const agents = useStore((s) => s.agents);
   const members = agentIds.map((id) => agents.find((a) => a.id === id)).filter((a): a is Agent => !!a);
-  if (!members.length) return seed ? <SeedGhost seed={seed} size={size} /> : <Users size={size * 0.5} className="text-muted" aria-hidden />;
+  if (!members.length) return <span className="grid shrink-0 place-items-center rounded-full bg-chip text-muted" style={{ width: size, height: size }} aria-hidden><Users size={size * 0.5} strokeWidth={1.8} /></span>;
   const small = Math.round(size * 0.72);
   return (
     <span className="relative inline-block shrink-0" style={{ width: members[1] ? size * 1.1 : size, height: size }} aria-hidden>

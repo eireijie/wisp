@@ -164,6 +164,14 @@ extension ChannelTeam {
 }
 
 extension Channel {
+  /** whose ghosts the team icon shows: the chart's agents (leads first), then anyone else in the channel */
+  func iconAgents(_ agents: [Agent]) -> [Agent] {
+    let nodes = settings?.team?.nodes ?? []
+    let ids = (nodes.filter(\.lead) + nodes.filter { !$0.lead }).map(\.agentId) + (agentIds ?? [])
+    var seen = Set<String>()
+    return ids.filter { seen.insert($0).inserted }.compactMap { id in agents.first { $0.id == id } }
+  }
+
   /** the team, without agents that are gone */
   func team(agents: [Agent]) -> ChannelTeam? {
     guard let team = settings?.team else { return nil }
