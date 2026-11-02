@@ -119,6 +119,7 @@ beforeAll(async () => {
 
   const setup = await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", features: "everything", workspaceName: "Test" }, "");
   token = setup.data.token;
+  await api("POST", "/api/channels", { name: "general" });
   general = (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === "general").id;
 
   const n = await api("POST", "/api/nodes", { name: "box" });
@@ -262,10 +263,13 @@ describe("hub", () => {
     const asAtlas = { "x-wisp-agent": atlas.id };
     const task = (await api("POST", "/api/tasks", { to: "nova", title: "Run tests", brief: "run the suite" }, nodeToken, asAtlas)).data;
     expect(task.status).toBe("open");
-    await waitFor(async () => (await channelMessages(task.threadId)).find((m) => m.author.id === nova.id));
+    // no team around: it goes to the requester's chat with nova, not a channel
+    expect(task.channelId).not.toBe(general);
+    const inChat = async () => (await api<{ messages: Message[] }>("GET", `/api/channels/${task.channelId}/messages?thread=${task.threadId}`)).data.messages;
+    await waitFor(async () => (await inChat()).find((m) => m.author.id === nova.id));
     const done = await api("PATCH", `/api/tasks/${task.id}`, { status: "done", result: "all green" }, nodeToken, { "x-wisp-agent": nova.id });
     expect(done.data.status).toBe("done");
-    const report = await waitFor(async () => (await channelMessages(task.threadId)).find((m) => m.body.includes("all green")));
+    const report = await waitFor(async () => (await inChat()).find((m) => m.body.includes("all green")));
     expect(report.body).toContain("@atlas");
   });
 
@@ -575,7 +579,7 @@ describe("discussions", () => {
     const notices = async (d: { channelId: string; threadId: string }) => (await channelMessagesIn(d.channelId, d.threadId)).flatMap((m) => m.parts.filter((p) => p.type === "notice").map((p) => (p as { text: string }).text));
     // no device at all: as offline as it gets
     const dozy = (await api("POST", "/api/agents", { handle: "dozy", name: "Dozy", harness: "codex" })).data;
-    const d = (await api<any>("POST", "/api/discussions", { topic: "Lunch", participants: ["@nova", "@dozy"], moderator: "@dozy", rounds: 1 })).data;
+    const d = (await api<any>("POST", "/api/discussions", { topic: "Lunch", participants: ["@nova", "@dozy"], channelId: general, moderator: "@dozy", rounds: 1 })).data;
     const done = await waitFor(async () => {
       const x = (await api<any>("GET", `/api/discussions/${d.id}`)).data;
       return x.status === "done" ? x : undefined;
@@ -585,7 +589,7 @@ describe("discussions", () => {
     expect(runsFor(d.threadId).every((r) => r.type === "run" && r.run.agentId === nova.id)).toBe(true);
 
     const dozier = (await api("POST", "/api/agents", { handle: "dozier", name: "Dozier", harness: "codex" })).data;
-    const nobody = (await api<any>("POST", "/api/discussions", { topic: "Naps", participants: ["@dozy", "@dozier"] })).data;
+    const nobody = (await api<any>("POST", "/api/discussions", { topic: "Naps", participants: ["@dozy", "@dozier"], channelId: general })).data;
     expect(nobody.status).toBe("cancelled");
     expect(await notices(nobody)).toEqual(["@dozy, @dozier are offline, so the discussion stopped before round 1. Start it again when they're back."]);
     await api("DELETE", `/api/agents/${dozy.id}`);
@@ -594,7 +598,7 @@ describe("discussions", () => {
 
   it("can be stopped, and needs two agents", async () => {
     const sleepy = (await api("POST", "/api/agents", { handle: "sleepy", name: "Sleepy", harness: "codex" })).data;
-    const d = (await api<any>("POST", "/api/discussions", { topic: "Naps", participants: ["@sleepy", "@nova"] })).data;
+    const d = (await api<any>("POST", "/api/discussions", { topic: "Naps", participants: ["@sleepy", "@nova"], channelId: general })).data;
     expect(d.status).toBe("running");
     const stopped = (await api<any>("POST", `/api/discussions/${d.id}/cancel`)).data;
     expect(stopped.status).toBe("cancelled");
