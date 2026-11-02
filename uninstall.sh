@@ -74,18 +74,24 @@ hub_port() {
 }
 tailscale_off() {
   command -v tailscale >/dev/null 2>&1 || return 0
-  command -v python3 >/dev/null 2>&1 || { echo "  If Wisp had a Tailscale address, turn it off: tailscale funnel --https=443 off && tailscale serve --https=443 off"; return 0; }
+  command -v python3 >/dev/null 2>&1 || { echo "  If Wisp had a Tailscale address, turn it off: tailscale funnel --https=8443 off; tailscale funnel --https=443 off && tailscale serve --https=443 off"; return 0; }
   # prints "only" when the address is Wisp's alone, "shared" when other paths use it too
   how=$(python3 -c '
 import json, re, sys
 def load(s): return json.loads(s[s.index("{"):])
 try:
   dns = load(sys.argv[1])["Self"]["DNSName"].rstrip(".")
-  mounts = load(sys.argv[2])["Web"][dns + ":443"]["Handlers"]
+  web = load(sys.argv[2]).get("Web", {})
+  # the public door for Grok, ChatGPT and Claude: paths on :8443 that go to the same path on this hub
+  for m, h in web.get(dns + ":8443", {}).get("Handlers", {}).items():
+    if h.get("Proxy", "").rstrip("/") == "http://127.0.0.1:" + sys.argv[3] + m: print("door " + m)
+  mounts = web[dns + ":443"]["Handlers"]
   if re.fullmatch(r"https?://(localhost|127\.0\.0\.1|\[::1\]):" + sys.argv[3] + "/?", mounts["/"]["Proxy"]): print("only" if len(mounts) == 1 else "shared")
 except Exception: pass
 ' "$(tailscale status --json 2>/dev/null)" "$(tailscale serve status --json 2>/dev/null)" "$(hub_port)")
-  case "$how" in
+  for m in $(printf '%s\n' "$how" | sed -n 's/^door //p'); do tailscale funnel --https=8443 --set-path="$m" off >/dev/null 2>&1; done
+  printf '%s\n' "$how" | grep -q '^door ' && done_ "closed Wisp's address for Grok, ChatGPT and Claude"
+  case "$(printf '%s\n' "$how" | grep -v '^door ' || true)" in
     only) tailscale funnel --https=443 off >/dev/null 2>&1; tailscale serve --https=443 off >/dev/null 2>&1; done_ "turned off Wisp's Tailscale address" ;;
     shared) tailscale serve --https=443 --set-path=/ off >/dev/null 2>&1; done_ "turned off Wisp's Tailscale address; its other paths stay" ;;
   esac

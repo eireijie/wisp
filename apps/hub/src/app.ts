@@ -100,7 +100,10 @@ export async function buildHub(opts: HubOptions) {
   });
 
   const logger = opts.logger ? { ...(opts.logger === true ? {} : opts.logger), serializers: { req: (req: { method: string; url: string; hostname?: string; ip?: string }) => ({ method: req.method, url: redactUrl(req.url), host: req.hostname, remoteAddress: req.ip }) } } : false;
-  const app = Fastify({ logger, bodyLimit: 5 * 1024 * 1024 });
+  // Tailscale Serve and Funnel, and cloudflared, reach the hub from this computer and say who the
+  // visitor really is in X-Forwarded-For; without trusting them, every visitor shares one address
+  // and one rate limit. Only this computer is trusted to say so, never the network.
+  const app = Fastify({ logger, bodyLimit: 5 * 1024 * 1024, trustProxy: "loopback" });
   const setupCode = new SetupCode(path.resolve(opts.dataDir), store.userCount() === 0, opts.setupCode ?? (envVar("SETUP_CODE") || undefined));
   // the consent and approve screens can't be framed by another site and clicked through
   app.addHook("onSend", async (_req, reply, payload) => {

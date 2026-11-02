@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { Caller } from "./api.ts";
 import { bearer, id, issueToken, now, resolveToken, sha } from "./auth.ts";
 import type { Hub } from "./hub.ts";
+import { CONNECTOR_PORT, type Reach } from "./reach.ts";
 
 /**
  * The remote MCP endpoint: `/mcp` speaks Streamable HTTP with the same tools as wisp-mcp, for
@@ -37,6 +38,9 @@ const SESSION_IDLE_MS = 60 * 60_000;
 const MAX_SESSIONS = 200;
 /** sign-in requests waiting for someone to allow them; anyone can start one, so they're capped */
 const MAX_PENDING = 500;
+/** addresses remembered for the registration limit, and apps registered but never approved */
+const MAX_REGISTRATION_KEYS = 5000;
+const MAX_UNAPPROVED_CLIENTS = 1000;
 const grantLabel = (grantId: string) => `oauth:${grantId}`;
 
 /** This hub as the caller reached it (behind a tunnel or Tailscale, its public https address). */
@@ -49,6 +53,27 @@ export function publicOrigin(req: FastifyRequest): string {
   // Tailscale Serve and Funnel only ever serve https
   if (/\.ts\.net(:\d+)?$/i.test(host)) proto = "https";
   return `${proto}://${host}`;
+}
+
+/**
+ * Who this hub says it is to an OAuth client. Through the connector door (Tailscale Funnel on
+ * CONNECTOR_PORT) that's the door's public address, even for requests that reach the same
+ * computer by its private Tailscale address, such as the consent page approving a sign-in.
+ */
+export async function oauthIssuer(req: FastifyRequest, reach: Pick<Reach, "connectorUrl">): Promise<string> {
+  const o = publicOrigin(req);
+  if (!/\.ts\.net(:\d+)?$/i.test(new URL(o).host)) return o;
+  const door = await reach.connectorUrl().catch(() => null);
+  return door && new URL(door).hostname === new URL(o).hostname ? door : o;
+}
+
+/**
+ * Where the person approves a sign-in. Behind the connector door it's the private Tailscale
+ * address, so only the paths cloud servers call are public and Wisp's own pages never are.
+ */
+function authorizeOrigin(issuer: string): string {
+  const u = new URL(issuer);
+  return u.hostname.endsWith(".ts.net") && u.port === String(CONNECTOR_PORT) ? `https://${u.hostname}` : issuer;
 }
 
 const isLoopback = (host: string) => host === "localhost" || host === "127.0.0.1" || host === "[::1]";
@@ -181,15 +206,16 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
 
   // --- metadata ------------------------------------------------------------------------------
 
-  const resourceMetadata = (req: FastifyRequest) => {
-    const o = publicOrigin(req);
+  const issuer = (req: FastifyRequest) => oauthIssuer(req, hub.reach);
+  const resourceMetadata = async (req: FastifyRequest) => {
+    const o = await issuer(req);
     return { resource: `${o}/mcp`, authorization_servers: [o], bearer_methods_supported: ["header"], scopes_supported: ["agent"], resource_name: "Wisp" };
   };
-  const serverMetadata = (req: FastifyRequest) => {
-    const o = publicOrigin(req);
+  const serverMetadata = async (req: FastifyRequest) => {
+    const o = await issuer(req);
     return {
       issuer: o,
-      authorization_endpoint: `${o}/oauth/authorize`,
+      authorization_endpoint: `${authorizeOrigin(o)}/oauth/authorize`,
       token_endpoint: `${o}/oauth/token`,
       registration_endpoint: `${o}/oauth/register`,
       response_types_supported: ["code"],
@@ -218,6 +244,9 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
     const ip = req.ip;
     const recent = (registrations.get(ip) ?? []).filter((t) => Date.now() - t < 3600_000);
     if (recent.length >= 30) return reply.code(429).send({ error: "slow_down", error_description: "too many registrations" });
+    registrations.delete(ip);
+    // strangers from many addresses can't grow the list without end either (a Map keeps insertion order)
+    while (registrations.size >= MAX_REGISTRATION_KEYS) registrations.delete(registrations.keys().next().value!);
     registrations.set(ip, [...recent, Date.now()]);
     const r = REGISTER.safeParse(req.body);
     if (!r.success) return reply.code(400).send({ error: "invalid_client_metadata", error_description: r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
@@ -225,6 +254,8 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
     if (bad) return reply.code(400).send({ error: "invalid_redirect_uri", error_description: `not allowed: ${bad}` });
     // clients nobody approved within a week go away
     db.prepare("DELETE FROM oauth_clients WHERE created_at < ? AND id NOT IN (SELECT client_id FROM oauth_grants)").run(new Date(Date.now() - 7 * 86400_000).toISOString());
+    const unapproved = (db.prepare("SELECT COUNT(*) AS n FROM oauth_clients WHERE id NOT IN (SELECT client_id FROM oauth_grants)").get() as { n: number }).n;
+    if (unapproved >= MAX_UNAPPROVED_CLIENTS) return reply.code(429).send({ error: "slow_down", error_description: "too many apps are waiting to be approved; try again later" });
     const method = r.data.token_endpoint_auth_method ?? "none";
     const clientId = id("mcpc");
     const secret = method === "none" ? null : random();
@@ -267,7 +298,7 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
       try {
         target = new URL(q.resource);
       } catch {}
-      if (!target || target.host !== new URL(publicOrigin(req)).host || target.pathname.replace(/\/+$/, "") !== "/mcp") return problem(reply, "This app asked for a different server than this Wisp.");
+      if (!target || target.host !== new URL(await issuer(req)).host || target.pathname.replace(/\/+$/, "") !== "/mcp") return problem(reply, "This app asked for a different server than this Wisp.");
     }
     const requestId = random();
     if (pending.size >= MAX_PENDING) {
@@ -319,7 +350,7 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
     pending.delete((req.params as { id: string }).id);
     const code = random();
     codes.set(code, { clientId: p.clientId, redirectUri: p.redirectUri, challenge: p.challenge, agentId: agent.id, userId: c.actor.id, workspaceId: c.workspaceId, scope: p.scope, expires: Date.now() + CODE_TTL_MS });
-    return { redirect: returnTo(p, { code, iss: publicOrigin(req) }) };
+    return { redirect: returnTo(p, { code, iss: await issuer(req) }) };
   });
 
   app.post("/api/oauth/requests/:id/deny", async (req, reply) => {
@@ -486,7 +517,7 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
     const token = bearer(req.headers.authorization);
     const p = resolveToken(db, token);
     if (!token || !p || p.kind !== "agent") {
-      const o = publicOrigin(req);
+      const o = await issuer(req);
       return reply
         .code(401)
         .header("www-authenticate", `Bearer resource_metadata="${o}/.well-known/oauth-protected-resource/mcp"${token ? ', error="invalid_token"' : ""}`)

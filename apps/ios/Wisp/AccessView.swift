@@ -8,7 +8,7 @@ struct TailscaleOutcome {
 }
 
 extension Store {
-  /** Moves Tailscale one step toward working, the same steps the web takes; `publicAccess` also turns Funnel on. */
+  /** Moves Tailscale one step toward working, the same steps the web takes; `publicAccess` also opens the door for Grok, ChatGPT and Claude (only the paths they call are public). */
   func enableTailscale(publicAccess: Bool = false) async throws -> TailscaleOutcome {
     var info = try await reach(fresh: true)
     if info.tailscale.state == "missing" { return TailscaleOutcome(info: info, open: info.download.flatMap(URL.init(string:)), ready: false) }
@@ -20,7 +20,7 @@ extension Store {
     if info.tailscale.state == "error" { throw API.Failure(status: 0, message: info.tailscale.error ?? "Tailscale couldn't connect; try again.") }
     guard info.tailscale.state == "running" else { return TailscaleOutcome(info: info, open: nil, ready: false) }
     if info.tailscale.serving != true { info = try await tailscale("serve") }
-    if publicAccess && info.tailscale.funnel != true { info = try await tailscale("funnel") }
+    if publicAccess && info.connectorOrigin == nil { info = try await tailscale("connectors") }
     if let problem = info.tailscale.error { throw API.Failure(status: 0, message: problem) }
     return TailscaleOutcome(info: info, open: nil, ready: publicAccess ? info.connectorOrigin != nil : info.publicUrl != nil)
   }
@@ -49,6 +49,7 @@ struct AccessView: View {
   @State private var hint: String?
   @State private var hintURL: URL?
   @State private var turningOff = false
+  @State private var confirmingApps = false
   @State private var action = FormAction()
 
   var body: some View {
@@ -81,6 +82,9 @@ struct AccessView: View {
     .task { await watch() }
     .confirmCard($turningOff, title: "Turn off away from home?", message: "Devices and phones that used the away address stop reaching this Wisp until you turn it back on.", confirm: "Turn off") {
       if let info { run { self.info = try await store.turnAwayOff(info); hint = "Away from home is off." } }
+    }
+    .confirmCard($confirmingApps, title: "Give Grok, ChatGPT and Claude a public address?", message: "Anyone on the internet can reach this address, but only apps you approve can use it. The rest of Wisp stays private.", confirm: "Turn on", destructive: false) {
+      toggle(true)
     }
     .confirmCard(Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), title: "Disconnect \(removing?.name ?? "this app")?", message: "It stops reaching your agents.", confirm: "Disconnect") {
       if let client = removing { action.run { try await store.disconnectMcp(client.id); clients?.removeAll { $0.id == client.id } } }
@@ -143,7 +147,7 @@ struct AccessView: View {
     let origin = info?.connectorOrigin
     CardLabel("Grok, ChatGPT and Claude")
     CardGroup {
-      ToggleRow(title: "Talk to your agents from their apps", isOn: Binding(get: { origin != nil }, set: { on in toggle(on) }), id: "access-apps").disabled(action.busy || info == nil)
+      ToggleRow(title: "Talk to your agents from their apps", isOn: Binding(get: { origin != nil }, set: { on in if on { confirmingApps = true } else { toggle(false) } }), id: "access-apps").disabled(action.busy || info == nil)
       if let origin {
         VStack(alignment: .leading, spacing: 4) {
           Text("Remote address").font(.system(size: 13)).foregroundStyle(Palette.faint)
@@ -152,6 +156,8 @@ struct AccessView: View {
         Button { UIPasteboard.general.string = "\(origin)/mcp" } label: { RowLabel(title: "Copy address", chevron: false) }.buttonStyle(.plain)
       }
     }
+    if origin != nil, info?.connectorUrl != nil { CardHint("Approve it on a device with Tailscale on.") }
+    if let blocker = info?.connectorBlocker { CardHint("\(blocker) Turn this on to give them a public address.") }
     if let clients {
       CardLabel("Connected apps")
       CardGroup {
@@ -177,6 +183,8 @@ struct AccessView: View {
         let outcome = try await store.enableTailscale(publicAccess: true)
         info = outcome.info
         if !outcome.ready { hint = "Finish setting up Tailscale, then turn this on again."; hintURL = outcome.open }
+      } else if info?.tailscale.connectors == true {
+        info = try await store.tailscale("unconnectors")
       } else if info?.tailscale.funnel == true {
         info = try await store.tailscale("unfunnel")
       } else if info?.cloudflareRunning == true {

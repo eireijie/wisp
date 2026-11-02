@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect, useState } from "react";
 import { api } from "../../api.ts";
 import { useAccessStore, type AccessInfo } from "../../access.ts";
-import { enableTailscale } from "../../components/Access.tsx";
+import { connectorBlocker, enableTailscale } from "../../components/Access.tsx";
 import { DevicesPage, McpConnections } from "./devices.tsx";
 
 vi.mock("react", async (original) => ({ ...(await original<typeof import("react")>()), useState: vi.fn(), useEffect: vi.fn() }));
@@ -50,7 +50,7 @@ function find(node: any, predicate: (node: any) => boolean): any {
     .find(Boolean);
 }
 beforeEach(() => {
-  states = [null, false, null, null];
+  states = [null, false, null, null, false];
   vi.mocked(api).mockReset();
   vi.mocked(useEffect).mockReset();
   vi.mocked(enableTailscale).mockReset();
@@ -80,13 +80,38 @@ describe("Grok, ChatGPT and Claude settings", () => {
     expect(states[2]).toBeNull();
     if (typeof cleanup === "function") cleanup();
   });
-  it("enables Funnel rather than sharing a private Serve address", async () => {
-    const tree = render({ ...info, tailscale: { ...info.tailscale, funnel: false } });
+  it("explains a private address instead of offering it, and opens the door only after a confirm", async () => {
+    const tailnetOnly = { ...info, tailscale: { ...info.tailscale, funnel: false } };
+    let tree = render(tailnetOnly);
     expect(find(tree, (n) => n.props?.text?.endsWith("/mcp"))).toBeUndefined();
+    expect(find(tree, (n) => n.type === "p" && [n.props.children].flat().join("").includes("only on your devices with Tailscale"))).toBeTruthy();
     vi.mocked(enableTailscale).mockResolvedValue(true);
     find(tree, (n) => n.props?.label === "Grok, ChatGPT and Claude").props.onChange(true);
+    expect(enableTailscale).not.toHaveBeenCalled();
+    tree = render(tailnetOnly);
+    expect(find(tree, (n) => n.type === "p" && n.props.children === "Anyone on the internet can reach this address, but only apps you approve can use it. The rest of Wisp stays private.")).toBeTruthy();
+    find(tree, (n) => n.props?.children === "Cancel").props.onClick();
+    expect(states[4]).toBe(false);
+    expect(enableTailscale).not.toHaveBeenCalled();
+    states[4] = true;
+    find(render(tailnetOnly), (n) => n.props?.children === "Turn on").props.onClick();
     await Promise.resolve();
     expect(enableTailscale).toHaveBeenCalledExactlyOnceWith(true);
+  });
+  it("shares the door's address with a note to approve on a Tailscale device, and closes just the door", async () => {
+    const door: AccessInfo = { ...info, connectorUrl: "https://wisp.tail.ts.net:8443", tailscale: { ...info.tailscale, funnel: false, connectors: true } };
+    const tree = render(door);
+    expect(find(tree, (n) => n.props?.text === "https://wisp.tail.ts.net:8443/mcp")).toBeTruthy();
+    expect(find(tree, (n) => n.props?.children === "Approve it on a device with Tailscale on.")).toBeTruthy();
+    const act = vi.fn(async () => info);
+    useAccessStore.setState({ act });
+    find(tree, (n) => n.props?.label === "Grok, ChatGPT and Claude").props.onChange(false);
+    await Promise.resolve();
+    expect(act).toHaveBeenCalledExactlyOnceWith("unconnectors");
+  });
+  it("says why apps can't connect at home", () => {
+    expect(connectorBlocker(null)).toMatch(/works only at home, so they can't reach it yet/);
+    expect(connectorBlocker(info)).toBeNull();
   });
   it("turns Funnel off when the switch is disabled", async () => {
     const act = vi.fn(async () => info);

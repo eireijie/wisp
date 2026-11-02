@@ -26,6 +26,8 @@ struct ReachInfo: Decodable {
     var dnsName: String?
     var serving: Bool?
     var funnel: Bool?
+    /** only the paths Grok, ChatGPT and Claude's servers call are public, through Funnel on port 8443 */
+    var connectors: Bool?
     var ip: String?
     var tailnet: String?
     var authUrl: String?
@@ -33,6 +35,8 @@ struct ReachInfo: Decodable {
   }
   struct Cloudflare: Decodable { var state: String; var url: String?; var error: String? }
   var publicUrl: String?
+  /** where Grok, ChatGPT and Claude connect while that door is open */
+  var connectorUrl: String?
   var lan: [String]?
   var tailscale: Tailscale
   var download: String?
@@ -49,12 +53,18 @@ struct ReachInfo: Decodable {
     if publicUrl != nil { return "On, with your public address" }
     return "Only at home for now"
   }
-  /** the https address other apps (ChatGPT, Grok, Claude) can reach, if there is one */
+  /** the https address other apps (ChatGPT, Grok, Claude) can reach, if there is one; Tailscale Serve alone is private */
   var connectorOrigin: String? {
-    let candidate = cloudflareRunning ? cloudflare?.url : (tailscale.funnel == true ? publicUrl : nil)
+    let candidate = cloudflareRunning ? cloudflare?.url : connectorUrl ?? (tailscale.funnel == true ? publicUrl : nil)
     guard let candidate, var parts = URLComponents(string: candidate), parts.scheme == "https", parts.host?.isEmpty == false else { return nil }
     parts.path = ""; parts.query = nil; parts.fragment = nil
     return parts.url?.absoluteString
+  }
+  /** why those apps can't reach this Wisp yet, the same words as the web */
+  var connectorBlocker: String? {
+    if connectorOrigin != nil { return nil }
+    let place = tailscale.serving == true ? "only on your devices with Tailscale" : "only at home"
+    return "Grok, ChatGPT and Claude connect from their own servers on the internet. Your Wisp works \(place), so they can't reach it yet."
   }
 }
 

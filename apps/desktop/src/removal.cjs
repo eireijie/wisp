@@ -262,18 +262,25 @@ function createRemoval({
       const handlers = (dns && serve?.Web?.[`${dns}:443`]?.Handlers) || {};
       const proxy = handlers["/"]?.Proxy;
       const serving = !!proxy && new RegExp(`^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\]):${hubPort()}/?$`).test(proxy);
-      return { bin, serving, others: Object.keys(handlers).filter((mount) => mount !== "/") };
+      // the public door for Grok, ChatGPT and Claude: paths on :8443 that go to the same path on this hub
+      const door = Object.entries((dns && serve?.Web?.[`${dns}:8443`]?.Handlers) || {})
+        .filter(([mount, h]) => typeof h?.Proxy === "string" && h.Proxy.replace(/\/+$/, "") === `http://127.0.0.1:${hubPort()}${mount}`)
+        .map(([mount]) => mount);
+      return { bin, serving, others: Object.keys(handlers).filter((mount) => mount !== "/"), door };
     }
-    return { bin: null, serving: false, others: [] };
+    return { bin: null, serving: false, others: [], door: [] };
   }
 
   /** Turn off only what points at this hub; another mount on the same address is somebody else's. */
   async function tailscaleOff() {
     const t = await readTailscale();
-    if (!t.serving) return null;
-    const steps = t.others.length ? [["serve", "--https=443", "--set-path=/", "off"]] : [["funnel", "--https=443", "off"], ["serve", "--https=443", "off"]];
+    if (!t.serving && !t.door.length) return null;
+    const door = t.door.map((mount) => ["funnel", "--https=8443", `--set-path=${mount}`, "off"]);
+    const steps = !t.serving ? door : t.others.length ? [...door, ["serve", "--https=443", "--set-path=/", "off"]] : [...door, ["funnel", "--https=443", "off"], ["serve", "--https=443", "off"]];
     for (const args of steps) await run(t.bin, args, 20_000);
-    if ((await readTailscale()).serving) throw new Error(`Run: tailscale ${steps.at(-1).join(" ")}`);
+    const after = await readTailscale();
+    if (after.door.length) throw new Error("Run: tailscale funnel --https=8443 off");
+    if (after.serving) throw new Error(`Run: tailscale ${steps.at(-1).join(" ")}`);
     return "Tailscale address turned off";
   }
 
@@ -333,7 +340,7 @@ function createRemoval({
     const hubService = services.some((s) => /^(ai\.(wisp|warren)\.hub|wisp|warren|(Wisp|Warren) hub)$/.test(s.name));
     const tailscaleWith = hubService ? "services" : hub.localHub ? "app" : null;
     plan = { tailscaleWith, services, vms, images, commands, states, installs, data, bundles, appFiles, image, removeApp, items };
-    return { items, manual, tailscale: tailscale.serving && !!tailscaleWith, tailscaleWith, kept };
+    return { items, manual, tailscale: (tailscale.serving || tailscale.door.length > 0) && !!tailscaleWith, tailscaleWith, kept };
   }
 
   /** The ticked ids that exist; what relies on a service takes the service with it, as the window shows. */

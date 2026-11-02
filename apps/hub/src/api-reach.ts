@@ -30,6 +30,8 @@ export function registerReachApi(app: FastifyInstance, hub: Hub, h: Helpers) {
       /** the address to give out: Tailscale's when it's on, else null (only this network) */
       publicUrl,
       cloudflare: hub.reach.cloudflare.status(),
+      /** where Grok, ChatGPT and Claude connect while Wisp's door for them is open (Tailscale Funnel, connector paths only) */
+      connectorUrl: await hub.reach.connectorUrl(),
       lan: lanAddresses(port),
       addresses: [...new Set([...(publicUrl ? [publicUrl] : []), ...reachableAddresses(null, port)])],
       tailscale: c.viewer.role === "owner" ? tailscale : { state: tailscale.state, serving: tailscale.serving, funnel: tailscale.funnel, dnsName: tailscale.dnsName },
@@ -48,7 +50,7 @@ export function registerReachApi(app: FastifyInstance, hub: Hub, h: Helpers) {
   app.post("/api/reach/tailscale", async (req, reply) => {
     const c = need(req, reply, { owner: true });
     if (!c) return;
-    const body = parse(z.object({ action: z.enum(["login", "up", "serve", "unserve", "funnel", "unfunnel"]) }), req.body, reply);
+    const body = parse(z.object({ action: z.enum(["login", "up", "serve", "unserve", "funnel", "unfunnel", "connectors", "unconnectors"]) }), req.body, reply);
     if (!body) return;
     let acted;
     try {
