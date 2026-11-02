@@ -382,6 +382,8 @@ export interface Approval {
   login?: import("./logins.ts").LoginRequest | null;
   /** set when it's an ask-me step of a team's flow: deciding it moves that request on */
   flow?: { flowId: string; stepId: string } | null;
+  /** set when an agent asks to add, replace or delete a file on a storage (the Storage mod) */
+  storage?: import("./storage.ts").StorageRequest | null;
 }
 
 /**

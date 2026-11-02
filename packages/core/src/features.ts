@@ -3,7 +3,7 @@
  * that needs setup or adds screens lives here, so a new organization starts small.
  */
 
-export const FEATURE_KEYS = ["background", "routines", "teach", "tasks", "voice", "buddy", "invite", "remoteDesktop"] as const;
+export const FEATURE_KEYS = ["background", "routines", "teach", "tasks", "voice", "buddy", "invite", "remoteDesktop", "storage"] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 export type Features = Record<FeatureKey, boolean>;
 
@@ -16,18 +16,22 @@ export const FEATURE_INFO: Record<FeatureKey, { name: string; description: strin
   buddy: { name: "Desk buddy", description: "A small ghost on your desktop that shows what your agents are up to.", group: "extras" },
   invite: { name: "Invite people", description: "Let other people into this workspace. Adds a People page and lets agents answer more than just you.", group: "extras" },
   remoteDesktop: { name: "Remote desktop", description: "Reach your devices from anywhere with RustDesk, from each device's page.", group: "extras" },
+  storage: { name: "Storage", description: "Let agents use files on your Nextcloud, NAS, Google Drive or Dropbox.", group: "extras" },
 };
+
+/** Mods that stay off until someone adds them, even for organizations from before Features. */
+const OFF_UNTIL_ADDED: readonly FeatureKey[] = ["storage"];
 
 const all = (on: boolean) => Object.fromEntries(FEATURE_KEYS.map((k) => [k, on])) as Features;
 
-/** Simple turns everything off; Everything turns it all on. */
-export const FEATURE_PRESETS = { simple: all(false), everything: all(true) } as const;
+/** Simple turns everything off; Everything turns it all on, apart from mods that need setting up first. */
+export const FEATURE_PRESETS = { simple: all(false), everything: { ...all(true), ...Object.fromEntries(OFF_UNTIL_ADDED.map((k) => [k, false])) } as Features } as const;
 
 /**
  * Organizations made before Features existed keep everything on, so nothing they use disappears;
  * new ones store an explicit set (Simple unless the person picks otherwise).
  */
 export function resolveFeatures(stored: Partial<Features> | null | undefined): Features {
-  if (!stored) return all(true);
+  if (!stored) return { ...FEATURE_PRESETS.everything };
   return { ...all(false), ...Object.fromEntries(Object.entries(stored).filter(([k, v]) => (FEATURE_KEYS as readonly string[]).includes(k) && typeof v === "boolean")) };
 }
