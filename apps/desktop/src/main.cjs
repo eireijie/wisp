@@ -17,6 +17,7 @@ const cloud = require("./cloud.cjs");
 const screenCode = require("./screen-code.cjs");
 const { reachableAddresses } = require("./addresses.cjs");
 const { Discovery, JoinClient } = require("./join.cjs");
+const { createRemoval, WORD: REMOVAL_WORD } = require("./removal.cjs");
 const { onOrigin, isPage, mainFrameUrl, isRemoteDesktopLink, isObsidianLink } = require("./trust.cjs");
 
 // links that hand off to another app on this computer: remote desktop apps, and Obsidian for the vault
@@ -174,12 +175,13 @@ function createWindow() {
     if (/^https?:/.test(url) || isExternalAppLink(url)) shell.openExternal(url);
   });
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
-    if (code === -3 || !onOrigin(url, hubOrigin)) return; // -3: aborted by a navigation
+    if (code === -3 || removing || !onOrigin(url, hubOrigin)) return; // -3: aborted by a navigation
     showSetup({ step: "unreachable", hubUrl: hubOrigin, error: desc });
   });
 }
 
 function showWindow() {
+  if (removing) return removeWin?.focus();
   if (!win) createWindow();
   if (resumeOnShow) { resumeOnShow = false; connect(); }
   if (process.platform === "darwin") app.dock?.show();
@@ -531,6 +533,183 @@ ipcMain.handle("screen-code:save", (e, input) => {
   return { ok: true };
 });
 
+// ---------------------------------------------------------------- removing Wisp from this computer
+
+/** @type {BrowserWindow | null} */
+let removeWin = null;
+let removing = false; // from the final confirmation until Done, or until the app quits
+let removalRunning = false;
+let removalResult = null;
+let removal = null;
+
+/** A folder for tests moves every path; outside the temp folder it switches the feature off. */
+function removalEngine() {
+  if (removal) return removal;
+  const root = process.env.WISP_REMOVAL_ROOT || "";
+  removal = createRemoval({
+    home: os.homedir(), appData: app.getPath("appData"), root, packaged: app.isPackaged, port: PORT, // os.homedir() follows HOME
+    env: root ? process.env : engine.env(),
+  });
+  return removal;
+}
+
+/** A signed-in request to this computer's hub; null when it can't answer. */
+async function hubGet(token, route) {
+  try {
+    const res = await fetch(new URL(route, hubOrigin), { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * This computer's person, as far as the app can tell: on a computer running the hub, its owner;
+ * on one that joined a Wisp elsewhere, whoever uses it, since only this computer changes.
+ */
+async function canRemove() {
+  try { removalEngine(); } catch { return false; }
+  if (config.mode === "remote") return true;
+  const token = await sessionToken();
+  return !!token && (await hubGet(token, "/api/me"))?.role === "owner";
+}
+
+function showRemovalWindow() {
+  if (removeWin) return removeWin.focus();
+  removeWin = new BrowserWindow({
+    width: 560,
+    height: 780,
+    minWidth: 480,
+    minHeight: 480,
+    useContentSize: true,
+    minimizable: false,
+    fullscreenable: false,
+    title: "Remove Wisp",
+    icon: ICON,
+    show: false,
+    backgroundColor: nativeTheme?.shouldUseDarkColors ? "#18181b" : "#ffffff",
+    webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true, spellcheck: false },
+  });
+  removeWin.setMenuBarVisibility(false);
+  removeWin.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  removeWin.webContents.on("will-navigate", (e) => e.preventDefault());
+  removeWin.once("ready-to-show", () => removeWin?.show());
+  removeWin.on("close", (e) => { if (removalRunning) e.preventDefault(); });
+  removeWin.on("closed", () => {
+    removeWin = null;
+    if (removalResult) finishRemoval();
+  });
+  removeWin.loadFile(path.join(__dirname, "remove-wisp.html"));
+}
+
+/** Only the app's own removal window, never a hub's page, gets past opening it. */
+const fromRemoval = (e) => !!removeWin && e.sender === removeWin.webContents && isPage(mainFrameUrl(e, removeWin) ?? "", path.join(__dirname, "remove-wisp.html"));
+const removalCall = (name, fn) => ipcMain.handle(name, (e, ...args) => (fromRemoval(e) ? fn(...args) : null));
+
+/** What the hub in the window can say about itself: who else relies on it, and what's in it. */
+async function removalContext() {
+  const local = config.mode === "local";
+  const warnings = [];
+  const facts = { localHub: local || (await engine.serviceRunning("hub").catch(() => false)) };
+  const found = engine.runtime(config.wispDir);
+  if (!found.bundled && found.wispDir) facts.wispDir = found.wispDir;
+  if (local) {
+    const token = await sessionToken();
+    const [info, memory, members, nodes] = token ? await Promise.all(["/api/settings/data", "/api/memory/storage", "/api/members", "/api/nodes"].map((route) => hubGet(token, route))) : [];
+    if (info) { facts.counts = info; facts.dataDir = info.dataDir; }
+    if (memory?.path) facts.memoryPath = memory.path;
+    if (Array.isArray(members) && Array.isArray(nodes)) {
+      const self = engine.readNodeConfig().nodeId;
+      const others = nodes.filter((n) => n.id !== self).length;
+      const people = Math.max(0, members.length - 1);
+      const uses = [others && `${others} other device${others === 1 ? "" : "s"}`, people && `${people} other ${people === 1 ? "person" : "people"}`].filter(Boolean);
+      if (uses.length) warnings.push({ bad: true, text: `This computer runs your Wisp. ${others + people === 1 ? `${uses[0]} uses it and loses access.` : `${uses.join(" and ")} use it and lose access.`}` });
+    } else warnings.push({ bad: true, text: "This computer runs your Wisp. Wisp couldn't check who else uses it. Anyone who does loses access." });
+  } else if (config.mode === "remote" && config.hubUrl) {
+    warnings.push({ text: `Your Wisp at ${hostOf(config.hubUrl)} stays as it is, with its chats and memory. This computer shows as offline there until you remove it in Devices.` });
+  }
+  if (config.cloud) warnings.push({ bad: true, text: `Your cloud server ${config.cloud.name} keeps running and Hetzner keeps billing you. Delete it in your Hetzner account if you're done with it.` });
+  return { facts, warnings };
+}
+
+removalCall("removal:scan", async () => {
+  const { facts, warnings } = await removalContext();
+  return { ...(await removalEngine().scan(facts)), warnings, word: REMOVAL_WORD };
+});
+
+/** A consistent copy of a database a running hub may have open, with the hub's own SQLite. */
+function snapshotDb(from, to) {
+  const found = engine.runtime(config.wispDir);
+  if (found.problem) throw new Error(found.problem);
+  const script = `const { createRequire } = require("node:module"); const path = require("node:path");
+    const Database = createRequire(path.join(process.argv[1], "apps", "hub", "package.json"))("better-sqlite3");
+    const db = new Database(process.argv[2], { readonly: true });
+    db.backup(process.argv[3]).then(() => db.close()).catch((err) => { console.error(err.message); process.exit(1); });`;
+  return new Promise((resolve, reject) => {
+    require("node:child_process").execFile(found.node, ["-e", script, found.wispDir, from, to], { env: engine.env(found.env), timeout: 600_000, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr).trim() || err.message)) : resolve()));
+  });
+}
+
+removalCall("removal:backup", async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(removeWin, { title: "Save a backup", buttonLabel: "Save Backup Here", properties: ["openDirectory", "createDirectory"] });
+  if (canceled || !filePaths[0]) return null;
+  try {
+    return { path: await removalEngine().backup(filePaths[0], snapshotDb) };
+  } catch (err) {
+    return { error: `The backup didn't finish: ${err.message}` };
+  }
+});
+
+removalCall("removal:start", async (ids, word) => {
+  if (removalRunning || removalResult || word !== REMOVAL_WORD || !Array.isArray(ids)) return { error: `Type ${REMOVAL_WORD} to confirm.` };
+  removing = true;
+  removalRunning = true;
+  stopWaiting();
+  clearInterval(deviceStatusTimer);
+  updater.stop();
+  win?.hide();
+  hub.stop();
+  device.stop();
+  try {
+    removalResult = await removalEngine().start(ids.filter((id) => typeof id === "string"), word, (steps) => removeWin?.webContents.send("removal:steps", steps));
+    return removalResult;
+  } catch (err) {
+    removalResult = { steps: [], app: false, setupGone: false };
+    return { error: err.message };
+  } finally {
+    removalRunning = false;
+  }
+});
+
+/** Hand over to the helper and quit; or, with the app kept, go back to a Wisp or to its start screen. */
+function finishRemoval() {
+  const result = removalResult;
+  removalResult = null;
+  if (result.app) {
+    removalEngine().finish();
+    app.quit();
+    setTimeout(() => app.exit(0), 8000).unref();
+    return;
+  }
+  removing = false;
+  if (result.setupGone) {
+    Object.assign(config, { mode: undefined, hubUrl: undefined, device: false });
+    save();
+  }
+  hubOrigin = null;
+  deviceBy = "";
+  updater.start();
+  deviceStatusTimer = setInterval(() => void readDeviceStatus(), 15_000);
+  connect();
+}
+
+removalCall("removal:finish", () => {
+  if (removalResult) removeWin?.close();
+});
+removalCall("removal:close", () => {
+  if (!removalRunning) removeWin?.close();
+});
+
 // ---------------------------------------------------------------- menus
 
 function hubLine() {
@@ -809,6 +988,10 @@ ipcMain.on("badge", (_e, n) => {
   if (process.platform === "darwin") app.dock?.setBadge(count ? String(count) : "");
 });
 ipcMain.handle("desktop:info", async () => ({ version: app.getVersion(), platform: process.platform, device: await readDeviceStatus() }));
+ipcMain.handle("removal:available", (e) => (fromHub(e) ? canRemove() : false));
+ipcMain.handle("removal:open", async (e) => {
+  if (fromHub(e) && (await canRemove())) showRemovalWindow();
+});
 ipcMain.handle("updates:status", (e) => (fromHub(e) ? updater.status() : null));
 ipcMain.handle("updates:check", (e) => (fromHub(e) ? updater.checkQuietly() : null));
 ipcMain.handle("updates:restart", (e) => (fromHub(e) ? updater.restart() : null));
@@ -837,7 +1020,8 @@ app.whenReady().then(async () => {
 app.on("activate", () => { if (startupComplete) showWindow(); });
 app.on("window-all-closed", () => {}); // stays in the menu bar
 app.on("before-quit", (event) => {
-  if (updater.installOnQuit(event)) return;
+  if (removalRunning) return event.preventDefault();
+  if (!removing && updater.installOnQuit(event)) return;
   quitting = true;
   discovery.cancel();
   joinClient.cancel();

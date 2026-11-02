@@ -9,6 +9,7 @@ import { originReach, shareOrigin, useAccess } from "../../access.ts";
 import { deleteOrg, listOrgs, type Org } from "../../orgs.ts";
 import { AgentAvatar, Button, CopyBlock, Field, IconButton, Input, Menu, Modal, Pill, UserAvatar, cx, timeAgo } from "../../components/ui.tsx";
 import { LEVEL_LABEL, folderPaths, pathLabel, subjectLabel } from "../../components/AccessDialog.tsx";
+import { RemoveWispSection } from "./RemoveWisp.tsx";
 import { Card, OwnersOnly, PageHeader, Row, SavedNote, Section, Segmented, Select, Toggle, useSavedFlash } from "./parts.tsx";
 
 const useIsOwner = () => useStore((s) => s.me)?.role === "owner";
@@ -973,6 +974,7 @@ export function DataPage() {
           </Row>
         </Card>
       </Section>
+      <RemoveWispSection />
     </>
   );
 }

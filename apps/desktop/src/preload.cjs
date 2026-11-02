@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld("wispDesktop", {
   focus: () => ipcRenderer.send("desktop:focus"),
   info: () => ipcRenderer.invoke("desktop:info"),
   connectDevice: (claim) => ipcRenderer.invoke("desktop:connect-device", claim),
+  removal: {
+    available: () => ipcRenderer.invoke("removal:available"),
+    open: () => ipcRenderer.invoke("removal:open"),
+  },
   updates: {
     status: () => ipcRenderer.invoke("updates:status"),
     check: () => ipcRenderer.invoke("updates:check"),
@@ -48,6 +52,20 @@ if (location.protocol === "file:")
     cloudKeep: () => ipcRenderer.invoke("setup:cloud-keep"),
     cloudDelete: (token, id) => ipcRenderer.invoke("setup:cloud-delete", token, id),
     onCloudStep: (fn) => ipcRenderer.on("setup:cloud-step", (_event, step) => fn(step)),
+  });
+
+if (location.protocol === "file:")
+  contextBridge.exposeInMainWorld("wispRemoval", {
+    scan: () => ipcRenderer.invoke("removal:scan"),
+    backup: () => ipcRenderer.invoke("removal:backup"),
+    start: (ids, word) => ipcRenderer.invoke("removal:start", ids, word),
+    finish: () => ipcRenderer.invoke("removal:finish"),
+    close: () => ipcRenderer.invoke("removal:close"),
+    onSteps: (fn) => {
+      const listener = (_event, steps) => fn(steps);
+      ipcRenderer.on("removal:steps", listener);
+      return () => ipcRenderer.removeListener("removal:steps", listener);
+    },
   });
 
 if (location.protocol === "file:")
