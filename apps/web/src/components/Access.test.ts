@@ -22,6 +22,7 @@ describe("public connector address", () => {
     expect(connectorOrigin(base, { protocol: "https:", hostname: "wisp.tail.ts.net", origin: base.publicUrl! })).toBeNull();
   });
   it("uses HTTPS from Funnel, Cloudflare, or an existing public domain", () => {
+    expect(connectorOrigin({ ...base, connectorUrl: "https://wisp.tail.ts.net:8443", tailscale: { ...base.tailscale, connectors: true } })).toBe("https://wisp.tail.ts.net:8443");
     expect(connectorOrigin({ ...base, tailscale: { ...base.tailscale, funnel: true } })).toBe(base.publicUrl);
     expect(connectorOrigin({ ...base, cloudflare: { state: "running", url: "https://wisp.example/", error: null } })).toBe("https://wisp.example");
     expect(connectorOrigin(null, { protocol: "https:", hostname: "wisp.example", origin: "https://wisp.example" })).toBe("https://wisp.example");
@@ -41,11 +42,11 @@ describe("public connector address", () => {
   });
 });
 describe("reach setup", () => {
-  it("turns on Serve for devices and Funnel for connected apps", async () => {
-    const act = vi.fn(async (action: string) => ({ ...base, tailscale: { ...base.tailscale, funnel: action === "funnel" } }));
+  it("turns on Serve for devices, and only the connector door for connected apps", async () => {
+    const act = vi.fn(async (action: string) => ({ ...base, connectorUrl: action === "connectors" ? "https://wisp.tail.ts.net:8443" : null, tailscale: { ...base.tailscale, connectors: action === "connectors" } }));
     useAccessStore.setState({ refresh: vi.fn(async () => ({ ...base, tailscale: { ...base.tailscale, serving: false } })), act });
     await expect(enableTailscale(true)).resolves.toBe(true);
-    expect(act.mock.calls.map(([action]) => action)).toEqual(["serve", "funnel"]);
+    expect(act.mock.calls.map(([action]) => action)).toEqual(["serve", "connectors"]);
     act.mockClear();
     await expect(enableTailscale()).resolves.toBe(true);
     expect(act.mock.calls.map(([action]) => action)).toEqual(["serve"]);

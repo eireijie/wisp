@@ -60,7 +60,7 @@ struct AgentConnect: View {
   @State private var token: String?
   @State private var apps: [ConnectedApp] = []
   @State private var appsError: String?
-  @State private var hub = ""
+  @State private var reach: ReachInfo?
   @State private var revoking: ConnectedApp?
   @State private var copiedAddress = false
   @State private var action = FormAction()
@@ -87,17 +87,22 @@ struct AgentConnect: View {
         }
       }
       CardCaption("Connect by address")
-      AgentCard {
-        Text(hub + "/mcp").font(.system(size: 14, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled)
-        Button {
-          UIPasteboard.general.string = hub + "/mcp"
-          copiedAddress = true
-          Task { try? await Task.sleep(for: .seconds(2)); copiedAddress = false }
-        } label: {
-          Label(copiedAddress ? "Copied" : "Copy address", systemImage: copiedAddress ? "checkmark" : "doc.on.doc").font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text)
-        }.buttonStyle(.plain)
+      if let origin = reach?.connectorOrigin {
+        AgentCard {
+          Text(origin + "/mcp").font(.system(size: 14, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled)
+          Button {
+            UIPasteboard.general.string = origin + "/mcp"
+            copiedAddress = true
+            Task { try? await Task.sleep(for: .seconds(2)); copiedAddress = false }
+          } label: {
+            Label(copiedAddress ? "Copied" : "Copy address", systemImage: copiedAddress ? "checkmark" : "doc.on.doc").font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text)
+          }.buttonStyle(.plain)
+        }
+        CardCaption("Add it as a custom connector in Grok, ChatGPT or Claude, then pick @\(current.handle) when you sign in.")
+      } else {
+        // a private address is never offered: the apps' servers can't reach it
+        CardCaption("\(reach?.connectorBlocker ?? "Checking this Wisp's address…") Turn it on in Settings → Away from home.")
       }
-      CardCaption("Add it as a custom connector in Grok, ChatGPT or Claude, then pick @\(current.handle) when you sign in. It needs an https address that works from anywhere.")
 
       CardCaption("Connected")
       if apps.isEmpty && appsError == nil {
@@ -121,7 +126,7 @@ struct AgentConnect: View {
       }
       AgentError(text: appsError ?? action.error)
     }
-    .task { hub = await store.shareAddress(); await loadApps() }
+    .task { reach = try? await store.reach(); await loadApps() }
     .refreshable { await loadApps() }
     .confirmationDialog("Disconnect \(revoking?.name ?? "this app")?", isPresented: Binding(get: { revoking != nil }, set: { if !$0 { revoking = nil } }), titleVisibility: .visible) {
       Button("Disconnect", role: .destructive) {

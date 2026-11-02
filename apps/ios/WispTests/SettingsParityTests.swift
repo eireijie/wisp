@@ -58,6 +58,9 @@ final class SettingsParityTests: XCTestCase {
     XCTAssertTrue(served.awayOn); XCTAssertEqual(served.summary, "On, with Tailscale"); XCTAssertNil(served.connectorOrigin, "Serve is private; only Funnel works for other apps")
     let funnel = try decode(ReachInfo.self, ##"{"publicUrl":"https://mac.tail.ts.net/","tailscale":{"state":"running","serving":true,"funnel":true}}"##)
     XCTAssertEqual(funnel.connectorOrigin, "https://mac.tail.ts.net")
+    XCTAssertEqual(served.connectorBlocker, "Grok, ChatGPT and Claude connect from their own servers on the internet. Your Wisp works only on your devices with Tailscale, so they can't reach it yet.")
+    let door = try decode(ReachInfo.self, ##"{"publicUrl":"https://mac.tail.ts.net","connectorUrl":"https://mac.tail.ts.net:8443","tailscale":{"state":"running","serving":true,"funnel":false,"connectors":true}}"##)
+    XCTAssertEqual(door.connectorOrigin, "https://mac.tail.ts.net:8443"); XCTAssertNil(door.connectorBlocker)
     let tunnel = try decode(ReachInfo.self, ##"{"publicUrl":null,"tailscale":{"state":"stopped"},"cloudflare":{"state":"running","url":"https://wisp.example.com","error":null}}"##)
     XCTAssertEqual(tunnel.summary, "On, with Cloudflare"); XCTAssertEqual(tunnel.connectorOrigin, "https://wisp.example.com")
   }

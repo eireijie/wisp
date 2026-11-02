@@ -10,13 +10,16 @@ export function awayEnabled(info: AccessInfo | null): boolean {
   return !!info?.publicUrl || info?.cloudflare?.state === "running" || onPublicAddress();
 }
 
-/** Tailscale Serve is private; only Funnel makes the address usable by external apps. */
+/**
+ * The address Grok, ChatGPT and Claude's servers can reach, or null. Tailscale Serve is private;
+ * only Funnel (Wisp's connector door, or the whole address), Cloudflare, or a public domain work.
+ */
 export function connectorOrigin(
   info: AccessInfo | null,
   loc: Pick<Location, "protocol" | "hostname" | "origin"> | undefined = typeof location === "undefined" ? undefined : location,
 ): string | null {
   const cf = info?.cloudflare;
-  const candidate = cf?.state === "running" ? cf.url : info?.tailscale.funnel ? info.publicUrl : null;
+  const candidate = cf?.state === "running" ? cf.url : info?.connectorUrl ? info.connectorUrl : info?.tailscale.funnel ? info.publicUrl : null;
   if (candidate) {
     try {
       const url = new URL(candidate);
@@ -27,8 +30,19 @@ export function connectorOrigin(
   return null;
 }
 
-/** Advance the same reach actions used by Settings, opening installation/sign-in when needed. */
-export async function enableTailscale(publicAccess = false): Promise<boolean> {
+/** Why cloud apps can't reach this Wisp yet, in plain words; null once they can. */
+export function connectorBlocker(info: AccessInfo | null): string | null {
+  if (connectorOrigin(info)) return null;
+  const where = info?.tailscale.serving ? "only on your devices with Tailscale" : "only at home";
+  return `Grok, ChatGPT and Claude connect from their own servers on the internet. Your Wisp works ${where}, so they can't reach it yet.`;
+}
+
+/**
+ * Advance the same reach actions used by Settings, opening installation/sign-in when needed.
+ * `forApps` also opens the door for Grok, ChatGPT and Claude: only the paths their servers call
+ * become public, never the rest of Wisp.
+ */
+export async function enableTailscale(forApps = false): Promise<boolean> {
   const store = useAccessStore.getState();
   let info = await store.refresh(true);
   if (!info) throw new Error("Away from home isn't available yet; update Wisp on this computer.");
@@ -45,9 +59,9 @@ export async function enableTailscale(publicAccess = false): Promise<boolean> {
   if (info.tailscale.state === "error") throw new Error(info.tailscale.error || "Tailscale couldn't connect; try again.");
   if (info.tailscale.state !== "running") return false;
   if (!info.tailscale.serving) info = await store.act("serve");
-  if (publicAccess && !info.tailscale.funnel) info = await store.act("funnel");
+  if (forApps && !connectorOrigin(info)) info = await store.act("connectors");
   if (info.tailscale.error) throw new Error(info.tailscale.error);
-  return publicAccess ? !!connectorOrigin(info) : !!info.publicUrl;
+  return forApps ? !!connectorOrigin(info) : !!info.publicUrl;
 }
 
 export function AccessPanel({ compact: _compact = false }: { compact?: boolean }) {

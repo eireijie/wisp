@@ -9,6 +9,8 @@ export interface TailscaleInfo {
   dnsName: string | null;
   serving: boolean;
   funnel: boolean;
+  /** only the paths Grok, ChatGPT and Claude's servers call are public, through Funnel on port 8443 */
+  connectors?: boolean;
   ip?: string | null;
   tailnet?: string | null;
   canHttps?: boolean;
@@ -20,6 +22,8 @@ export interface TailscaleInfo {
 export interface AccessInfo {
   /** Tailscale's https address when it serves this hub; null means only this network */
   publicUrl: string | null;
+  /** where Grok, ChatGPT and Claude connect while that door is open (missing on older hubs) */
+  connectorUrl?: string | null;
   lan: string[];
   tailscale: TailscaleInfo;
   download: string;

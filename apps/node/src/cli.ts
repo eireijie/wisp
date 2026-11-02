@@ -471,9 +471,9 @@ async function service(action: string | undefined, kind: string | undefined) {
     if (k === "hub") {
       const reach = new Reach(Number(process.env.PORT ?? 4747));
       const t = await reach.tailscale(true).catch(() => null);
-      if (t?.serving) {
+      if (t?.serving || t?.connectors) {
         const after = await reach.act("unserve").catch(() => null);
-        console.log(after && !after.serving ? "Turned off Wisp's Tailscale address." : "Turn off Wisp's Tailscale address yourself: tailscale funnel --https=443 off && tailscale serve --https=443 off");
+        console.log(after && !after.serving && !after.connectors ? "Turned off Wisp's Tailscale address." : "Turn off Wisp's Tailscale address yourself: tailscale funnel --https=443 off && tailscale serve --https=443 off");
       }
     }
     return;

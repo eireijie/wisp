@@ -17,12 +17,14 @@ let close: () => Promise<void>;
 let owner: WispClient;
 let ownerToken: string;
 let agentId: string;
+let built: Awaited<ReturnType<typeof buildHub>>;
 
 const REDIRECT = "http://127.0.0.1:6274/oauth/callback";
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-remote-mcp-"));
-  const { app } = await buildHub({ dataDir: dir, setupCode: false });
+  built = await buildHub({ dataDir: dir, setupCode: false });
+  const { app } = built;
   await app.listen({ port: 0, host: "127.0.0.1" });
   url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();
@@ -257,5 +259,62 @@ describe("remote MCP", () => {
     await mcp.connect(new StreamableHTTPClientTransport(new URL(url + "/mcp"), { requestInit: { headers: { authorization: `Bearer ${token}` } } }));
     expect(text(await mcp.callTool({ name: "chat_channels", arguments: {} }))).toContain("general");
     await mcp.close();
+  });
+});
+
+describe("through the door for Grok, ChatGPT and Claude", () => {
+  const HOST = "box.tail1234.ts.net";
+  const DOOR = `https://${HOST}:8443`;
+  // Tailscale is a stand-in: the door is open on this made-up computer
+  beforeAll(() => {
+    built.hub.reach.connectorUrl = async () => DOOR;
+  });
+  const inject = (o: { method?: "GET" | "POST"; url: string; host: string; payload?: unknown; token?: string; form?: boolean }) =>
+    built.app.inject({
+      method: o.method ?? "GET",
+      url: o.url,
+      headers: { host: o.host, "x-forwarded-for": "203.0.113.9", ...(o.token ? { authorization: `Bearer ${o.token}` } : {}), ...(o.form ? { "content-type": "application/x-www-form-urlencoded" } : {}) },
+      payload: o.form ? new URLSearchParams(o.payload as Record<string, string>).toString() : (o.payload as object),
+      remoteAddress: "127.0.0.1",
+    });
+
+  it("names the public door to cloud servers, and the private address for the person's approval", async () => {
+    const as = (await inject({ url: "/.well-known/oauth-authorization-server", host: `${HOST}:8443` })).json();
+    expect(as).toMatchObject({ issuer: DOOR, authorization_endpoint: `https://${HOST}/oauth/authorize`, token_endpoint: `${DOOR}/oauth/token`, registration_endpoint: `${DOOR}/oauth/register` });
+    expect((await inject({ url: "/.well-known/oauth-protected-resource/mcp", host: `${HOST}:8443` })).json()).toMatchObject({ resource: `${DOOR}/mcp`, authorization_servers: [DOOR] });
+    const denied = await inject({ method: "POST", url: "/mcp", host: `${HOST}:8443`, payload: {} });
+    expect(denied.headers["www-authenticate"]).toBe(`Bearer resource_metadata="${DOOR}/.well-known/oauth-protected-resource/mcp"`);
+  });
+
+  it("signs in end to end with the consent page on the private address", async () => {
+    const verifier = crypto.randomBytes(32).toString("base64url");
+    const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
+    const reg = await inject({ method: "POST", url: "/oauth/register", host: `${HOST}:8443`, payload: { client_name: "Grok", redirect_uris: ["https://grok.com/oauth/callback"] } });
+    expect(reg.statusCode).toBe(201);
+    const clientId = reg.json().client_id;
+    const q = new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: "https://grok.com/oauth/callback", code_challenge: challenge, code_challenge_method: "S256", state: "s1", resource: `${DOOR}/mcp` });
+    const auth = await inject({ url: `/oauth/authorize?${q}`, host: HOST });
+    expect(auth.statusCode).toBe(302);
+    expect(auth.headers.location).toMatch(new RegExp(`^https://${HOST.replace(/\./g, "\\.")}/#/authorize/`));
+    const requestId = String(auth.headers.location).split("/authorize/")[1];
+    const approved = await inject({ method: "POST", url: `/api/oauth/requests/${requestId}/approve`, host: HOST, token: ownerToken, payload: { agentId } });
+    const back = new URL(approved.json().redirect);
+    // RFC 9207: the app checks this against the issuer it fetched
+    expect(back.searchParams.get("iss")).toBe(DOOR);
+    const tok = await inject({ method: "POST", url: "/oauth/token", host: `${HOST}:8443`, form: true, payload: { grant_type: "authorization_code", client_id: clientId, code: back.searchParams.get("code")!, redirect_uri: "https://grok.com/oauth/callback", code_verifier: verifier } });
+    expect(tok.statusCode).toBe(200);
+    expect(tok.json().access_token).toMatch(/^wr_agent_/);
+  });
+
+  it("limits registrations per visitor, as Tailscale reports them, not per Tailscale", async () => {
+    const register = (ip: string, remoteAddress = "127.0.0.1") =>
+      built.app.inject({ method: "POST", url: "/oauth/register", headers: { host: `${HOST}:8443`, "x-forwarded-for": ip }, payload: { redirect_uris: ["https://grok.com/cb"] }, remoteAddress });
+    for (let i = 0; i < 30; i++) expect((await register("198.51.100.1")).statusCode).toBe(201);
+    expect((await register("198.51.100.1")).statusCode).toBe(429);
+    // someone else coming through the same Funnel isn't held back by that
+    expect((await register("198.51.100.2")).statusCode).toBe(201);
+    // and a stranger on the network can't claim to be someone new to dodge the limit
+    for (let i = 0; i < 30; i++) await register(`192.0.2.${i}`, "192.168.1.50");
+    expect((await register("192.0.2.200", "192.168.1.50")).statusCode).toBe(429);
   });
 });

@@ -7,7 +7,7 @@ import { useStore } from "../../store.ts";
 import { useDevices } from "../../devices.ts";
 import { href } from "../../router.ts";
 import { AddDeviceDialog } from "../../components/AddDevice.tsx";
-import { AwayFromHome, awayEnabled, connectorOrigin, enableTailscale } from "../../components/Access.tsx";
+import { AwayFromHome, awayEnabled, connectorBlocker, connectorOrigin, enableTailscale } from "../../components/Access.tsx";
 import { Button, CopyBlock } from "../../components/ui.tsx";
 import { Card, Row, Toggle } from "./parts.tsx";
 
@@ -116,10 +116,12 @@ export function DevicesPage() {
 
 export function McpConnections({ info, allowed }: { info: AccessInfo | null; allowed: boolean }) {
   const origin = connectorOrigin(info);
+  const owner = useStore((s) => s.me?.role === "owner");
   const [clients, setClients] = useState<McpClient[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     setClients(null);
     if (!allowed) return;
@@ -144,6 +146,7 @@ export function McpConnections({ info, allowed }: { info: AccessInfo | null; all
     };
   }, [allowed]);
   const toggle = async (on: boolean) => {
+    setConfirming(false);
     setBusy(true);
     setError(null);
     setHint(null);
@@ -151,7 +154,8 @@ export function McpConnections({ info, allowed }: { info: AccessInfo | null; all
       if (on) {
         const ready = await enableTailscale(true);
         if (!ready) setHint("Finish setting up Tailscale, then turn this on again.");
-      } else if (info?.tailscale.funnel) await useAccessStore.getState().act("unfunnel");
+      } else if (info?.tailscale.connectors) await useAccessStore.getState().act("unconnectors");
+      else if (info?.tailscale.funnel) await useAccessStore.getState().act("unfunnel");
       else if (info?.cloudflare?.state === "running") {
         await api("POST", "/api/reach/cloudflare", { action: "stop" });
         await useAccessStore.getState().refresh(true);
@@ -184,14 +188,33 @@ export function McpConnections({ info, allowed }: { info: AccessInfo | null; all
           </span>
         }
       >
-        <Toggle label="Grok, ChatGPT and Claude" on={!!origin} disabled={!allowed || busy} onChange={(value) => void toggle(value)} />
+        <Toggle label="Grok, ChatGPT and Claude" on={!!origin || confirming} disabled={!owner || busy} onChange={(value) => (value ? setConfirming(true) : confirming ? setConfirming(false) : void toggle(false))} />
       </Row>
       <div className="px-4 pt-3 space-y-3">
         {origin && (
           <>
             <CopyBlock text={`${origin}/mcp`} />
             <p className="text-xs text-muted">In Grok: Connectors → Add custom connector → paste.</p>
+            {info?.connectorUrl && origin === new URL(info.connectorUrl).origin && <p className="text-xs text-muted">Approve it on a device with Tailscale on.</p>}
           </>
+        )}
+        {!origin && !confirming && (
+          <p className="text-sm text-muted">
+            {connectorBlocker(info)} {owner ? "Turn this on to give them a public address." : "Ask the owner of this Wisp to turn this on."}
+          </p>
+        )}
+        {confirming && (
+          <div role="alertdialog" aria-label="Turn on a public address" className="space-y-3">
+            <p className="text-sm">Anyone on the internet can reach this address, but only apps you approve can use it. The rest of Wisp stays private.</p>
+            <div className="flex gap-2">
+              <Button variant="primary" disabled={busy} onClick={() => void toggle(true)}>
+                Turn on
+              </Button>
+              <Button disabled={busy} onClick={() => setConfirming(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
         )}
         {clients !== null && (
           <div className="pt-3">

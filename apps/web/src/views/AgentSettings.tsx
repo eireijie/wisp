@@ -3,7 +3,8 @@ import { Activity, BookOpen, ChevronLeft, Radar, Ghost, Zap, Cpu, Eye, FileText,
 import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from "@wisp/core";
 import { soulPath, soulTemplate } from "@wisp/core/src/soul.ts";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
-import { originReach, shareOrigin, useAccess } from "../access.ts";
+import { useAccess } from "../access.ts";
+import { connectorBlocker, connectorOrigin } from "../components/Access.tsx";
 import { ApiError, api } from "../api.ts";
 import { useStore, useTeams } from "../store.ts";
 import { go, guardLeaving, href, mayLeave, type AgentTab } from "../router.ts";
@@ -1120,7 +1121,9 @@ function ConnectPanel({ agent, nodes }: { agent: FullAgent; nodes: NodeInfo[] })
 
 /** The hub's remote MCP address, for Grok, ChatGPT and Claude connectors, and the apps connected as this agent. */
 function RemoteMcp({ agent }: { agent: FullAgent }) {
-  useAccess();
+  const info = useAccess();
+  // a private address (Tailscale without its public door, or home Wi-Fi) is never offered: the apps' servers can't reach it
+  const origin = connectorOrigin(info);
   const [apps, setApps] = useState<{ id: string; name: string; approvedBy: string | null; lastUsed: string | null; createdAt: string }[]>([]);
   const load = useCallback(() => {
     api<typeof apps>("GET", `/api/agents/${agent.id}/apps`).then(setApps, () => {});
@@ -1131,10 +1134,11 @@ function RemoteMcp({ agent }: { agent: FullAgent }) {
       <h3 className="font-semibold flex items-center gap-2">
         <Plug size={16} /> Connect by URL
       </h3>
-      <CopyBlock text={`${shareOrigin()}/mcp`} />
-      {originReach(shareOrigin()) !== "anywhere" && (
+      {origin ? (
+        <CopyBlock text={`${origin}/mcp`} />
+      ) : (
         <p className="text-xs text-muted">
-          They need an https address that works from anywhere: <a className="underline" href={href({ view: "settings", page: "access" })}>Settings → Access</a>
+          {connectorBlocker(info)} <a className="underline" href={href({ view: "settings", page: "devices" })}>Settings → Devices</a>
         </p>
       )}
       {apps.length > 0 && (

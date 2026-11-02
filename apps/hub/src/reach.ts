@@ -15,6 +15,8 @@ import path from "node:path";
  * machine without Tailscale just reports it as missing.
  */
 
+export type TailscaleAction = "login" | "up" | "serve" | "unserve" | "funnel" | "unfunnel" | "connectors" | "unconnectors";
+
 export type TailscaleState = "missing" | "needs-login" | "stopped" | "starting" | "running" | "error";
 
 export interface TailscaleStatus {
@@ -29,11 +31,25 @@ export interface TailscaleStatus {
   /** https://<dnsName> is proxied to this hub, privately (serve) or publicly too (funnel) */
   serving: boolean;
   funnel: boolean;
+  /**
+   * the cloud-app door is open: only the connector paths, on CONNECTOR_PORT, are public through
+   * Funnel, while the rest of Wisp (sign-in, the app itself) stays on the private address
+   */
+  connectors: boolean;
   /** the sign-in page, while one is pending */
   authUrl: string | null;
   /** why the last command failed, in plain words */
   error: string | null;
 }
+
+/**
+ * What Grok, ChatGPT and Claude's servers call: the MCP endpoint, its OAuth metadata, and the
+ * registration and token endpoints. The consent page isn't here; it opens in the person's own
+ * browser, on the private address.
+ */
+export const CONNECTOR_PATHS = ["/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration", "/oauth/register", "/oauth/token"] as const;
+/** Funnel only allows 443, 8443 and 10000; 443 stays Wisp's private address. */
+export const CONNECTOR_PORT = 8443;
 
 export type Run = (bin: string, args: string[], timeoutMs: number) => Promise<{ code: number; stdout: string; stderr: string }>;
 
@@ -86,10 +102,13 @@ export function readStatus(status: unknown, serve: unknown, port: number): Omit<
   const caps = new Set([...Object.keys(self.CapMap ?? {}), ...(self.Capabilities ?? [])]);
   const dnsName = self.DNSName ? self.DNSName.replace(/\.$/, "") : null;
   // serve config: Web["<host>:443"].Handlers["/"].Proxy = "http://127.0.0.1:<port>", AllowFunnel["<host>:443"] = true
-  const cfg = (serve ?? {}) as { Web?: Record<string, { Handlers?: Record<string, { Proxy?: string }> }>; AllowFunnel?: Record<string, boolean> };
+  const cfg = (serve ?? {}) as ServeConfig;
   const key = dnsName ? `${dnsName}:443` : null;
   const proxy = key ? cfg.Web?.[key]?.Handlers?.["/"]?.Proxy : undefined;
   const serving = !!proxy && new RegExp(`(localhost|127\\.0\\.0\\.1|\\[::1\\]):${port}/?$`).test(proxy);
+  const door = dnsName ? `${dnsName}:${CONNECTOR_PORT}` : null;
+  const handlers = door ? cfg.Web?.[door]?.Handlers ?? {} : {};
+  const connectors = !!door && !!cfg.AllowFunnel?.[door] && CONNECTOR_PATHS.every((p) => ownsPath(handlers[p]?.Proxy, port, p));
   return {
     state,
     dnsName: state === "needs-login" ? null : dnsName,
@@ -99,8 +118,21 @@ export function readStatus(status: unknown, serve: unknown, port: number): Omit<
     canFunnel: caps.has("funnel"),
     serving,
     funnel: serving && !!(key && cfg.AllowFunnel?.[key]),
+    connectors,
     authUrl: s.AuthURL || null,
   };
+}
+
+type ServeConfig = { Web?: Record<string, { Handlers?: Record<string, { Proxy?: string }> }>; AllowFunnel?: Record<string, boolean> };
+
+/** A serve handler that proxies `path` to this hub. */
+const ownsPath = (proxy: string | undefined, port: number, path: string) => !!proxy && proxy.replace(/\/+$/, "") === `http://127.0.0.1:${port}${path}`;
+
+/** Anything on CONNECTOR_PORT that isn't Wisp's own connector paths (someone else's use of that port). */
+export function otherUseOfConnectorPort(serve: unknown, dnsName: string | null, port: number): string | null {
+  if (!dnsName) return null;
+  const handlers = (serve as ServeConfig | null)?.Web?.[`${dnsName}:${CONNECTOR_PORT}`]?.Handlers ?? {};
+  return Object.entries(handlers).find(([p, h]) => !(CONNECTOR_PATHS as readonly string[]).includes(p) || !ownsPath(h.Proxy, port, p))?.[0] ?? null;
 }
 
 /** A failed tailscale command in plain words, with the fix when it's a known one. */
@@ -108,12 +140,16 @@ export function explainTailscaleError(stderr: string, platform = process.platfor
   const t = stderr.trim();
   if (/access denied|permission denied|must be root|operator/i.test(t))
     return platform === "linux" ? "Wisp isn't allowed to change Tailscale on this computer. Run this once in a terminal, then try again: sudo tailscale set --operator=$USER" : "Wisp isn't allowed to change Tailscale on this computer. Open the Tailscale app and try again.";
+  if (/funnel.*(not enabled|not allowed|disabled|attribute|not available)/i.test(t)) {
+    const link = t.match(/https:\/\/login\.tailscale\.com\/f\/funnel\S*/)?.[0];
+    if (link) return `Funnel is off for your tailnet. Turn it on, then try again: ${link}`;
+  }
   if (/serve.*not enabled|not enabled on your tailnet/i.test(t)) {
     const link = t.match(/https:\/\/login\.tailscale\.com\/\S+/)?.[0] ?? "https://login.tailscale.com/admin/dns";
     return `Tailscale Serve is off for your tailnet. Turn it on, then try again: ${link}`;
   }
   if (/HTTPS.*(not enabled|disabled)|enable HTTPS/i.test(t)) return "HTTPS certificates are off for your tailnet. Turn on HTTPS in the Tailscale admin console (DNS → HTTPS Certificates), then try again: https://login.tailscale.com/admin/dns";
-  if (/funnel.*(not enabled|not allowed|disabled|attribute)/i.test(t)) return "Funnel isn't allowed on your tailnet yet. Allow it in the Tailscale admin console, then try again: https://login.tailscale.com/admin/acls";
+  if (/funnel.*(not enabled|not allowed|disabled|attribute|not available)/i.test(t)) return "Funnel isn't allowed on your tailnet yet. Allow it in the Tailscale admin console, then try again: https://login.tailscale.com/admin/acls";
   if (/doesn't appear to be running|failed to connect|not running/i.test(t)) return "Tailscale is installed but not running. Open the Tailscale app (or start the tailscaled service), then try again.";
   return t.split("\n").filter(Boolean).slice(-2).join(" ") || "Tailscale didn't answer.";
 }
@@ -122,6 +158,7 @@ export class Reach {
   private bin: string | null = null;
   private cache: { at: number; value: TailscaleStatus } | null = null;
   private lastError: string | null = null;
+  private serveConfig: unknown = null;
   readonly cloudflare: Cloudflare;
 
   constructor(
@@ -147,7 +184,7 @@ export class Reach {
   async tailscale(fresh = false): Promise<TailscaleStatus> {
     if (!fresh && this.cache && Date.now() - this.cache.at < 4000) return this.cache.value;
     const bin = this.find();
-    const empty: TailscaleStatus = { state: "missing", dnsName: null, ip: null, tailnet: null, canHttps: false, canFunnel: false, serving: false, funnel: false, authUrl: null, error: null };
+    const empty: TailscaleStatus = { state: "missing", dnsName: null, ip: null, tailnet: null, canHttps: false, canFunnel: false, serving: false, funnel: false, connectors: false, authUrl: null, error: null };
     if (!bin) return empty;
     const st = await this.run(bin, ["status", "--json"], 5000);
     let status: unknown = null;
@@ -163,6 +200,7 @@ export class Reach {
     try {
       serve = parseJson(sv.stdout);
     } catch {}
+    this.serveConfig = serve;
     const value = { ...readStatus(status, serve, this.port), error: this.lastError };
     this.cache = { at: Date.now(), value };
     return value;
@@ -174,15 +212,33 @@ export class Reach {
     return t.state === "running" && t.serving && t.dnsName ? `https://${t.dnsName}` : this.cloudflare.status().url;
   }
 
+  /** The public address cloud apps connect to while the connector door is open. */
+  async connectorUrl(): Promise<string | null> {
+    const t = await this.tailscale();
+    return t.state === "running" && t.connectors && t.dnsName ? `https://${t.dnsName}:${CONNECTOR_PORT}` : null;
+  }
+
   /**
    * Do one thing with Tailscale: sign in (returns the page to open), connect, or turn the https
-   * address on or off, privately (serve) or for everyone (funnel).
+   * address on or off, privately (serve) or for everyone (funnel), or open and close the
+   * connector door: only CONNECTOR_PATHS, public on CONNECTOR_PORT.
    */
-  async act(action: "login" | "up" | "serve" | "unserve" | "funnel" | "unfunnel"): Promise<TailscaleStatus> {
+  async act(action: TailscaleAction): Promise<TailscaleStatus> {
     const bin = this.find();
     if (!bin) throw new Error("Tailscale isn't installed on the computer running Wisp.");
     this.lastError = null;
     const target = `http://127.0.0.1:${this.port}`;
+    const https = `--https=${CONNECTOR_PORT}`;
+    const closeDoor = CONNECTOR_PATHS.map((p) => ["funnel", https, `--set-path=${p}`, "off"]);
+    if (action === "connectors") {
+      // the port may already carry someone's own funnel; never replace it
+      const before = await this.tailscale(true);
+      const other = otherUseOfConnectorPort(this.serveConfig, before.dnsName, this.port);
+      if (other) {
+        this.lastError = `Tailscale already shares something else on port ${CONNECTOR_PORT} of this computer (${other}). Turn that off first: tailscale funnel --https=${CONNECTOR_PORT} off`;
+        return { ...before, error: this.lastError };
+      }
+    }
     const steps: string[][] =
       action === "login"
         ? // starts the sign-in; the page shows up in status as AuthURL (waiting only a moment for it)
@@ -192,10 +248,15 @@ export class Reach {
           : action === "serve"
             ? [["serve", "--bg", "--yes", target]]
             : action === "unserve"
-              ? [["funnel", "--https=443", "off"], ["serve", "--https=443", "off"]]
+              ? [...closeDoor, ["funnel", "--https=443", "off"], ["serve", "--https=443", "off"]]
               : action === "funnel"
                 ? [["funnel", "--bg", "--yes", target]]
-                : [["funnel", "--https=443", "off"], ["serve", "--bg", "--yes", target]];
+                : action === "connectors"
+                  ? // the consent page opens on the private address, so it has to be on too
+                    [...(await this.tailscale()).serving ? [] : [["serve", "--bg", "--yes", target]], ...CONNECTOR_PATHS.map((p) => ["funnel", "--bg", "--yes", https, `--set-path=${p}`, `${target}${p}`])]
+                  : action === "unconnectors"
+                    ? closeDoor
+                    : [["funnel", "--https=443", "off"], ["serve", "--bg", "--yes", target]];
     for (const args of steps) {
       const r = await this.run(bin, args, action === "login" ? 12_000 : 20_000);
       // a sign-in that's waiting for the browser "fails" with a timeout but has printed its link
@@ -210,13 +271,17 @@ export class Reach {
         break;
       }
     }
+    // a door left half open helps nobody, so a failed opening closes what it opened
+    if (action === "connectors" && this.lastError) for (const args of closeDoor) await this.run(bin, args, 20_000);
     const after = await this.tailscale(true);
     // never report public access as off without seeing it off
-    const stillOpen = action === "unserve" ? after.serving || after.funnel : action === "unfunnel" ? after.funnel : false;
+    const stillOpen = action === "unserve" ? after.serving || after.funnel || after.connectors : action === "unfunnel" ? after.funnel : action === "unconnectors" ? after.connectors : false;
     if (stillOpen) {
       this.lastError = action === "unserve"
         ? "Wisp couldn't turn off its Tailscale address. Run: tailscale funnel --https=443 off && tailscale serve --https=443 off"
-        : "Wisp couldn't turn off public access. Run: tailscale funnel --https=443 off";
+        : action === "unconnectors"
+          ? `Wisp couldn't close the address for Grok, ChatGPT and Claude. Run: tailscale funnel --https=${CONNECTOR_PORT} off`
+          : "Wisp couldn't turn off public access. Run: tailscale funnel --https=443 off";
       return { ...after, error: this.lastError };
     }
     return after;

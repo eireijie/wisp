@@ -25,6 +25,7 @@ case "$(basename "$0") $*" in
   "tailscale status --json") cat "$STUB_DIR/ts-status.json" ;;
   "tailscale serve status --json") cat "$STUB_DIR/ts-serve.json" ;;
   "tailscale funnel --https=443 off"|"tailscale serve --https=443 off"|"tailscale serve --https=443 --set-path=/ off") [ -f "$STUB_DIR/ts-stuck" ] || echo '{}' > "$STUB_DIR/ts-serve.json" ;;
+  "tailscale funnel --https=8443 --set-path="*" off") [ -f "$STUB_DIR/ts-stuck" ] || echo '{}' > "$STUB_DIR/ts-serve.json" ;;
 esac
 [ -f "$STUB_DIR/fail-$(basename "$0")-$1" ] && exit 1
 exit 0`;
@@ -305,6 +306,16 @@ describe("Tailscale", () => {
     await removal.scan({});
     await removal.start(["services"], WORD);
     expect(off(r.calls())).toEqual(["tailscale serve --https=443 --set-path=/ off"]);
+  });
+
+  it("closes the door for Grok, ChatGPT and Claude, and only Wisp's paths on it", async () => {
+    const r = computer();
+    const door = { "/mcp": { Proxy: "http://127.0.0.1:4747/mcp" }, "/oauth/token": { Proxy: "http://127.0.0.1:4747/oauth/token" }, "/theirs": { Proxy: "http://127.0.0.1:9000/theirs" } };
+    r.write(path.join(r.stubs, "ts-serve.json"), JSON.stringify({ Web: { "mac.tail.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:4747" } } }, "mac.tail.ts.net:8443": { Handlers: door } }, AllowFunnel: { "mac.tail.ts.net:8443": true } }));
+    const removal = await realSpawnless(r);
+    await removal.scan({});
+    await removal.start(["services"], WORD);
+    expect(off(r.calls())).toEqual(["tailscale funnel --https=8443 --set-path=/mcp off", "tailscale funnel --https=8443 --set-path=/oauth/token off", "tailscale funnel --https=443 off", "tailscale serve --https=443 off"]);
   });
 
   it("reports an address that stayed on", async () => {
