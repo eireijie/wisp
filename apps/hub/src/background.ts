@@ -327,6 +327,11 @@ export class Background {
 
   private pendingFollowups = new Map<string, Followup[]>();
 
+  /** What a background run was woken for (follow-ups that came due), if anything. */
+  followupsOf(runId: string): Followup[] {
+    return this.pendingFollowups.get(runId) ?? [];
+  }
+
   /** A check that follow-ups woke: what it writes is the agent coming back to something. */
   carriesFollowups(runId: string) {
     return !!this.pendingFollowups.get(runId)?.length;

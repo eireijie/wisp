@@ -715,7 +715,7 @@ export class Hub {
       // a harness command (/compact, say) may finish without a word; say it ran
       const trigger = !body && agent && run.triggerMessageId ? store.message(run.triggerMessageId) : undefined;
       const ran = trigger && agent ? this.commandFor(agent, trigger.body) : null;
-      if (ran?.via === "raw" && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "notice", text: `Ran /${ran.name}.` }], hop: run.hop + 1, route: false });
+      if (ran?.via === "raw" && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "notice", text: `Ran /${ran.name}.` }], hop: run.hop + 1, route: false, conversationId: this.chatOfRun(run) });
       const posted = taskReply ? store.message(taskReply.messageId) : undefined;
       // the answer task_update already posted, repeated as the final reply (as-is, or wrapped in a line or two)
       const same = (a: string, b: string) => !!a.trim() && !!b.trim() && a.includes(b.trim());
@@ -728,7 +728,7 @@ export class Hub {
       // it worked on its screen: the reply keeps the screen, so it doesn't vanish when the run ends
       const screen = agent?.computerId && !gone ? this.screenAfterRun(agent.computerId, live.parts, body, run) : null;
       const parts = [...live.parts, ...(screen ? [screen] : []), ...skillParts];
-      const reply = body && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy }) : null;
+      const reply = body && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy, conversationId: this.chatOfRun(run) }) : null;
       // follow-ups it set and how it left the chat show under its answer
       this.loops.runEnded(run, reply?.id ?? (repeated && posted ? posted.id : null));
     } else {
@@ -737,7 +737,7 @@ export class Hub {
       const text = agent ? this.explainFailure(agent, result.error) : result.error;
       if (!gone) {
         const fix = agent ? this.failureFix(agent, result.error) : undefined;
-        this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "status", text: `Run failed: ${text}` }, ...(result.error === "cancelled" ? [] : [{ type: "run_failed" as const, runId: run.id, retry: !!run.triggerMessageId && !run.discussionId, ...(fix ? { fix } : {}) }])], hop: run.hop + 1, route: false });
+        this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "status", text: `Run failed: ${text}` }, ...(result.error === "cancelled" ? [] : [{ type: "run_failed" as const, runId: run.id, retry: !!run.triggerMessageId && !run.discussionId, ...(fix ? { fix } : {}) }])], hop: run.hop + 1, route: false, conversationId: this.chatOfRun(run) });
         failTaskOfRun(this, run, text);
       }
     }
@@ -824,15 +824,39 @@ export class Hub {
    * the person the message ultimately serves; by default the person who wrote it, or for an
    * agent, whoever asked it for the work it's doing now.
    */
-  postMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; route?: boolean; replyInThread?: boolean; onBehalfOf?: string | null }): Message {
+  postMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; route?: boolean; replyInThread?: boolean; onBehalfOf?: string | null; conversationId?: string | null; contextId?: string | null }): Message {
     const channel = this.store.channel(m.channelId);
     if (!channel) throw new Error("channel not found");
-    const msg = this.store.insertMessage(m);
+    const msg = this.store.insertMessage({ ...m, conversationId: m.conversationId ?? this.workingChat(m), contextId: m.contextId ?? this.repliedChat(m) });
     if (channel.kind === "dm" && m.author.kind === "user" && m.author.id !== "system") this.loops.personWrote(channel.id);
     this.broadcast(channel.workspaceId, { type: "message", message: msg }, this.audience(channel.id));
     this.push.onMessage(msg, channel, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
     if (m.route !== false) this.route(msg, channel.workspaceId, m.replyInThread ?? false, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
     return msg;
+  }
+
+  /**
+   * What an agent writes while it works on a request belongs to that request's chat, even when
+   * the work took longer than a quiet break.
+   */
+  private workingChat(m: { channelId: string; threadId?: string | null; author: Actor }): string | null {
+    if (m.threadId || m.author.kind !== "agent") return null;
+    const run = this.store.db
+      .prepare("SELECT trigger_message_id AS triggerId FROM runs WHERE agent_id = ? AND channel_id = ? AND thread_id IS NULL AND status = 'running' AND (kind IS NULL OR kind != 'background') ORDER BY created_at DESC LIMIT 1")
+      .get(m.author.id, m.channelId) as { triggerId: string } | undefined;
+    return (run?.triggerId && this.store.message(run.triggerId)?.conversationId) || null;
+  }
+
+  /** A reply to a message from an earlier chat brings that chat back for the agent. */
+  private repliedChat(m: { threadId?: string | null; replyToId?: string | null }): string | null {
+    if (m.threadId || !m.replyToId) return null;
+    return this.store.message(m.replyToId)?.conversationId ?? null;
+  }
+
+  /** The chat a run answers in: its trigger's, at the top of a DM or team (threads have no chats). */
+  chatOfRun(run: { threadId: string | null; triggerMessageId: string; kind?: string | null }): string | undefined {
+    if (run.threadId || run.kind === "background" || !run.triggerMessageId) return undefined;
+    return this.store.message(run.triggerMessageId)?.conversationId;
   }
 
   /** The person a message from `author` is for, when nobody says otherwise. */
@@ -1164,7 +1188,7 @@ export class Hub {
         const effort = bg?.effort ?? (run.kind !== "background" ? this.voiceEffort(agent, run.triggerMessageId) : undefined);
         this.send(conn, {
           type: "run",
-          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.kind === "background" ? BACKGROUND_THREAD : run.threadId, prompt, hop: run.hop, ...(run.kind === "background" ? { fresh: true } : {}), ...(bg?.model ? { model: bg.model } : {}), ...(effort ? { effort } : {}), ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}), ...(sent ? { credential: { ...sent, ...(fallback ? { model: fallback } : {}) } } : {}) },
+          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.kind === "background" ? BACKGROUND_THREAD : run.threadId, prompt, hop: run.hop, ...(run.kind === "background" ? { fresh: true } : {}), ...(this.chatOfRun(run) ? { conversation: this.chatOfRun(run) } : {}), ...(bg?.model ? { model: bg.model } : {}), ...(effort ? { effort } : {}), ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}), ...(sent ? { credential: { ...sent, ...(fallback ? { model: fallback } : {}) } } : {}) },
         });
       },
       // the prompt couldn't be built (a vault read failed, say): say so like any other failure
@@ -1481,9 +1505,23 @@ export class Hub {
     // a background check has no message that woke it; it gets its own section instead
     const background = run?.kind === "background" && run.id ? await this.background.promptSection({ id: run.id, agentId, channelId, requestedBy: run.requestedBy ?? null }) : "";
     // a discussion thread is the whole conversation, so agents see all of it
-    const history = background ? [] : store.messages(channelId, { threadId, limit: run?.discussionId ? 100 : CONTEXT_MESSAGES }).filter((m) => m.id !== triggerId && m.author.id !== "system");
-    const discussion = run && !background ? this.discussions.promptSection(run) : "";
     const found = store.message(triggerId);
+    // at the top of a DM or team, the agent sees only this chat: a new one starts after a quiet break
+    const chat = !background && !threadId && !run?.discussionId ? found?.conversationId : undefined;
+    const chatStart = chat ? store.message(chat)?.createdAt : undefined;
+    const history = background
+      ? []
+      : (chat ? store.conversationMessages(chat, CONTEXT_MESSAGES + 1) : store.messages(channelId, { threadId, limit: run?.discussionId ? 100 : CONTEXT_MESSAGES })).filter((m) => m.id !== triggerId && m.author.id !== "system");
+    // earlier chats the person brought back: a reply into one, or the agent checking back on one
+    const earlier = chat
+      ? store
+          .contextsOf(chat)
+          .slice(0, 2)
+          .map((id) => ({ at: store.message(id)?.createdAt, messages: store.conversationMessages(id, CONTEXT_MESSAGES).filter((m) => m.author.id !== "system") }))
+          .filter((e) => e.at && e.messages.length)
+      : [];
+    const hasOlder = !!chatStart && store.messages(channelId, { before: chatStart, limit: 1 }).length > 0;
+    const discussion = run && !background ? this.discussions.promptSection(run) : "";
     const trigger = found ? store.withReplyQuote(found) : { body: "", parts: [], author: { kind: "user" as const, id: "system" }, replyTo: undefined };
     // a harness's own command goes to it exactly as typed, into the same conversation
     const command = !background && trigger.author.kind === "user" ? this.commandFor(agent, trigger.body) : null;
@@ -1515,6 +1553,7 @@ export class Hub {
     const localTime = user
       ? `It's ${new Date().toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", ...(tz ? { timeZone: tz } : { timeZone: "UTC", timeZoneName: "short" }) })} for ${user.preferredName || user.name}${tz ? ` (${tz})` : ""}.`
       : "";
+    const when = (iso: string) => new Date(iso).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: tz ?? "UTC" });
     const asks = agentPolicy(this, agent.workspaceId).askBefore.map((k) => ASK_BEFORE_TEXT[k]);
     const [soul, memory, routines] = await Promise.all([this.soul(agent.id), this.memory.sections(agent, { person, query: trigger.body }), this.routines.promptSection(agent.id, trigger)]);
     const leading = leadSection(store, agent);
@@ -1557,6 +1596,8 @@ export class Hub {
       discussion ? `\n${discussion}` : "",
       background,
       parentThread.length ? `\nThis is a sub-thread. Earlier, in the thread it branched off from:\n${parentThread.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
+      hasOlder ? `\nThis chat started ${when(chatStart!)}, after a quiet break, so earlier chats here aren't shown. If they refer back to something from before, look with chat_read (before: "${chatStart}").` : "",
+      ...earlier.map((e) => `\nAn earlier chat they're picking back up (from ${when(e.at!)}):\n${e.messages.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}`),
       history.length ? `\nRecent conversation:\n${history.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
       background ? "" : trigger.replyTo ? `\nThis message replies to ${this.displayName(trigger.replyTo.author)}'s earlier message${trigger.replyTo.deleted ? " (since deleted)" : `: "${trigger.replyTo.snippet}"`}.` : "",
       background || !isVoiceMessage(trigger) ? "" : `\n${VOICE_CALL_NOTE}`,

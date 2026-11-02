@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import Database from "better-sqlite3";
+import { splitConversations, type ChatPoint } from "@wisp/core";
 
 const SCHEMA = `
 PRAGMA journal_mode = WAL;
@@ -271,6 +272,9 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   // the message a reply quotes (an inline quote, not a thread)
   ["messages", "reply_to_id", "TEXT"],
+  // the chat a top-level message is part of (chats split after a quiet break), and an earlier one it brings back
+  ["messages", "conversation_id", "TEXT"],
+  ["messages", "context_id", "TEXT"],
   ["push_subscriptions", "prefs_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["agents", "settings_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["nodes", "catalog_json", "TEXT NOT NULL DEFAULT '[]'"],
@@ -353,6 +357,8 @@ export function openDb(file: string): Database.Database {
       added.add(`${table}.${column}`);
     }
   }
+  db.exec("CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, created_at)");
+  if (added.has("messages.conversation_id")) migrateConversations(db);
   migrateGrants(db);
   migrateGroups(db);
   migrateNodeOwners(db);
@@ -363,6 +369,24 @@ export function openDb(file: string): Database.Database {
   dropOrphanChannelMembers(db);
   expireOldAgentTokens(db);
   return db;
+}
+
+/** Messages from before chats split after a quiet break: each top-level run of them is split the same way. */
+function migrateConversations(db: Database.Database) {
+  const rows = db.prepare("SELECT id, channel_id, created_at, author_id FROM messages WHERE thread_id IS NULL ORDER BY channel_id, created_at, rowid").all() as { id: string; channel_id: string; created_at: string; author_id: string }[];
+  const set = db.prepare("UPDATE messages SET conversation_id = ? WHERE id = ?");
+  db.transaction(() => {
+    let i = 0;
+    while (i < rows.length) {
+      const channel = rows[i].channel_id;
+      const run: ChatPoint[] = [];
+      while (i < rows.length && rows[i].channel_id === channel) {
+        run.push({ id: rows[i].id, createdAt: rows[i].created_at, authorId: rows[i].author_id });
+        i++;
+      }
+      for (const [id, conversation] of splitConversations(run)) set.run(conversation, id);
+    }
+  })();
 }
 
 /** Connection tokens for agents used to last forever; ones from then get the same limit as new ones. */

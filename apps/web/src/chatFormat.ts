@@ -23,6 +23,25 @@ export function needsStamp(prev: Message | undefined, m: Message) {
   return b.getTime() - a.getTime() > 30 * 60_000 || a.toDateString() !== b.toDateString();
 }
 
+/**
+ * A new chat starts at this message (after a quiet break the hub starts one; see
+ * CONVERSATION_GAP_MS): the list draws a divider there instead of a plain time.
+ */
+export function startsChat(prev: Message | undefined, m: Message) {
+  if (!m.conversationId) return false;
+  if (!prev) return m.id === m.conversationId;
+  return !!prev.conversationId && prev.conversationId !== m.conversationId;
+}
+
+/** An earlier chat named by when it started: "the 9:14 AM chat", "yesterday's 9:14 AM chat", "the Oct 30 chat". */
+export function chatName(iso: string, time: (d: Date) => string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return `the ${time(d)} chat`;
+  if (d.toDateString() === new Date(now.getTime() - 86_400_000).toDateString()) return `yesterday's ${time(d)} chat`;
+  return `the ${d.toLocaleDateString([], { month: "short", day: "numeric" })} chat`;
+}
+
 export function isGrouped(prev: Message | undefined, m: Message) {
   return !!prev && prev.author.kind === m.author.kind && prev.author.id === m.author.id && new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60_000 && m.author.id !== "system" && prev.author.id !== "system";
 }

@@ -29,7 +29,7 @@
 
 | Area | Added |
 |---|---|
-| Chat | `/` command menu; pin and unpin; a note on approve/deny; live streaming replies; per-chat drafts |
+| Chat | `/` command menu; pin and unpin; a note on approve/deny; live streaming replies; per-chat drafts; a new chat after 2.5 quiet hours with a dated divider and "Continue this chat"; right-click / press-and-hold menu with quick reactions; swipe right to open a thread |
 | DM controls | Access chip (read only / edit files / full); context ring with Compact |
 | Search | Search messages, notes, teams and agents from the Chats tab |
 | Inbox | What agents are doing, new replies, recent chats, tasks to check, setup card, allowance |

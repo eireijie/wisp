@@ -584,7 +584,8 @@ export class NodeDaemon {
         return this.send({ type: "run_failed", runId: run.runId, error: `couldn't set up the repo: ${(err as Error).message}` });
       }
     }
-    const sessionKey = `${agent.id}:${run.channelId}:${run.threadId ?? "main"}`;
+    // each chat (a new one starts after a quiet break) is its own harness session
+    const sessionKey = `${agent.id}:${run.channelId}:${run.threadId ?? "main"}${run.conversation ? `:${run.conversation}` : ""}`;
     // a session another harness made can't be continued by this one: it switched, so the reply starts fresh
     if (this.sessions[sessionKey] && (this.sessionHarness[sessionKey] ?? agent.harness) !== agent.harness) {
       delete this.sessions[sessionKey];

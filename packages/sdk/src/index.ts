@@ -58,9 +58,10 @@ export class WispClient {
     const all = await this.channels();
     return all.find((c) => c.name === n || c.id === n);
   }
-  messages(channelId: string, opts: { thread?: string; limit?: number } = {}) {
+  messages(channelId: string, opts: { thread?: string; limit?: number; before?: string } = {}) {
     const q = new URLSearchParams();
     if (opts.thread) q.set("thread", opts.thread);
+    if (opts.before) q.set("before", opts.before);
     if (opts.limit) q.set("limit", String(opts.limit));
     return this.request<{ messages: Message[] }>("GET", `/api/channels/${channelId}/messages?${q}`);
   }
