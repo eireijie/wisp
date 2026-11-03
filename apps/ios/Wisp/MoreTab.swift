@@ -24,6 +24,10 @@ struct MoreTab: View {
                 NavigationLink { TasksView() } label: { RowLabel(title: "Tasks", leading: { rowIcon("checklist") }) }
                   .accessibilityIdentifier("you-tasks")
               }
+              if store.features.storage {
+                NavigationLink { StorageView() } label: { RowLabel(title: "Storage", leading: { rowIcon("externaldrive") }) }
+                  .accessibilityIdentifier("you-storage")
+              }
               NavigationLink { MarketplaceView() } label: { RowLabel(title: "Marketplace", leading: { rowIcon("storefront") }) }
                 .accessibilityIdentifier("you-marketplace")
               NavigationLink { FeaturesView() } label: { RowLabel(title: "Mods", leading: { rowIcon("square.grid.2x2") }) }

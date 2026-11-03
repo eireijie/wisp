@@ -4,6 +4,7 @@ import { api } from "../api.ts";
 import { useStore, type ComputerInfo, type LiveRun } from "../store.ts";
 import { go } from "../router.ts";
 import { AgentAvatar, cx, timeAgo } from "./ui.tsx";
+import { StorageLogo } from "../views/settings/storage.tsx";
 
 /** "Needs you", "New replies"…: the small grey heading over a group, with a count or a link on the right. */
 export function SectionHead({ title, right, needs }: { title: string; right?: ReactNode; needs?: boolean }) {
@@ -26,7 +27,7 @@ export function Rule() {
 }
 
 /** The big pill buttons on a card: filled for the main answer, soft for the other, bare for "Open chat". */
-export function CardButton({ tone = "soft", className, ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: "primary" | "soft" | "ghost" }) {
+export function CardButton({ tone = "soft", className, ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: "primary" | "soft" | "ghost" | "danger" }) {
   return (
     <button
       type="button"
@@ -34,6 +35,7 @@ export function CardButton({ tone = "soft", className, ...p }: ButtonHTMLAttribu
       className={cx(
         "h-11 md:h-10 px-5 rounded-full text-[15px] md:text-sm font-medium whitespace-nowrap transition-colors disabled:opacity-50 disabled:pointer-events-none outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
         tone === "primary" && "bg-accent text-accent-ink hover:bg-accent/90",
+        tone === "danger" && "bg-bad text-white hover:bg-bad/90",
         tone === "soft" && "bg-chip text-ink hover:bg-hover border border-line",
         tone === "ghost" && "bg-transparent text-muted hover:text-ink px-3.5 font-medium",
         className,
@@ -196,6 +198,57 @@ export function LoginNeedCard({ approval: a }: { approval: Approval }) {
             </CardButton>
             <CardButton tone="ghost" disabled={busy} onClick={() => decide(true, true)} className="max-md:basis-full">
               Always allow for {name}
+            </CardButton>
+          </div>
+        )}
+        {error && <p className="text-xs text-bad">{error}</p>}
+      </section>
+    </GroupCard>
+  );
+}
+
+/** An agent wants to add, replace or delete a file on the workspace's storage: owners answer. */
+export function StorageNeedCard({ approval: a }: { approval: Approval }) {
+  const req = a.storage!;
+  const me = useStore((s) => s.me);
+  const agent = useStore((s) => s.agents.find((x) => x.id === a.agentId));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const name = agent?.name ?? "An agent";
+  const decide = async (approve: boolean, always = false) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const done = await api<Approval>("POST", `/api/approvals/${a.id}/decide`, { approve, always });
+      useStore.setState((s) => ({ approvals: { ...s.approvals, [a.id]: done } }));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <GroupCard className="p-4 md:px-5 md:py-[18px] flex flex-col gap-3">
+      <section aria-label="Storage request" className="contents">
+        <CardHead agent={agent} title={`${name} wants your OK`} sub={timeAgo(a.createdAt)} />
+        <div className="flex items-center gap-3 rounded-xl bg-panel px-3 py-2.5">
+          <StorageLogo service={req.service} size={32} />
+          <span className="min-w-0 text-sm text-ink/85 break-words">{a.summary}</span>
+        </div>
+        {me?.role !== "owner" ? (
+          <p className="text-xs text-muted">Waiting for an owner to answer.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2.5">
+            <CardButton tone={req.action === "delete" ? "danger" : "primary"} disabled={busy} onClick={() => decide(true)} className="flex-1 md:flex-none">
+              {req.action === "delete" ? "Delete" : req.action === "replace" ? "Replace" : "Allow"}
+            </CardButton>
+            {req.action !== "delete" && (
+              <CardButton disabled={busy} onClick={() => decide(true, true)} className="flex-1 md:flex-none">
+                Always in this folder
+              </CardButton>
+            )}
+            <CardButton disabled={busy} onClick={() => decide(false)} className="flex-1 md:flex-none">
+              No
             </CardButton>
           </div>
         )}

@@ -545,6 +545,16 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       });
       return decided;
     }
+    if (a.storage) {
+      // changing files on the workspace's storage is an owner's call, like setting the storage up
+      if (c.viewer.role !== "owner") return reply.code(403).send({ error: "Only owners can let agents change files on storage" });
+      const decided = store.decideApproval(a.id, body.approve ? "approved" : "denied", c.actor.id, body.note)!;
+      hub.broadcast(c.workspaceId, { type: "approval", approval: decided }, hub.audience(a.channelId));
+      void hub.storage.decide(a, body.approve, !!body.always).then((verdict) => {
+        if (agent && store.channel(a.channelId)) hub.postMessage({ channelId: a.channelId, threadId: a.threadId, author: c.actor, body: `@${agent.handle} ${verdict}${note}`, onBehalfOf: a.storage!.requestedBy ?? c.actor.id });
+      });
+      return decided;
+    }
     const decided = store.decideApproval(a.id, body.approve ? "approved" : "denied", c.actor.id, body.note)!;
     hub.broadcast(c.workspaceId, { type: "approval", approval: decided }, hub.audience(a.channelId));
     if (a.flow) {

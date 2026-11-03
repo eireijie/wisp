@@ -566,6 +566,7 @@ struct ApprovalBox: View {
   @State private var note = ""
 
   private var login: Approval.Login? { approval.login }
+  private var storage: Approval.Storage? { approval.storage }
   private var pending: Bool { approval.status == "pending" }
   private var name: String { agentName ?? store.agent(approval.agentId)?.name ?? "It" }
   private var title: String {
@@ -575,9 +576,63 @@ struct ApprovalBox: View {
 
   var body: some View {
     if inList {
-      content.padding(.vertical, 6)
+      (storage != nil ? AnyView(storageContent) : AnyView(content)).padding(.vertical, 6)
+    } else if storage != nil {
+      ChatCardShell(symbol: "lock", label: "Asking for your OK") { storageContent }
     } else {
       ChatCardShell(symbol: "lock", label: login != nil ? "Login request" : "Asking for your OK") { content }
+    }
+  }
+
+  /**
+   * A file on the workspace's storage (the Storage mod): which file and where, then Allow /
+   * Always in this folder / No. Replacing says Replace; deleting says Delete in red and never
+   * offers Always. Only owners answer.
+   */
+  @ViewBuilder private var storageContent: some View {
+    let s = storage!
+    let name = s.path.split(separator: "/").last.map(String.init) ?? s.path
+    let folder = s.path.split(separator: "/").dropLast().joined(separator: "/")
+    let verb = ["upload": "Upload", "replace": "Replace", "delete": "Delete", "mkdir": "Make folder"][s.action] ?? s.action
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(spacing: 12) {
+        StorageLogo(service: StorageService(rawValue: s.service) ?? .webdav, size: 36)
+        VStack(alignment: .leading, spacing: 2) {
+          Text("\(verb) \(name)").font(.system(size: 15, weight: .semibold)).lineLimit(2)
+          Text("\(s.connectionName) › \(folder.isEmpty ? "top folder" : folder)\(s.size.map { " · \(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))" } ?? "")")
+            .font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(2)
+        }
+      }
+      if pending && store.role != "guest" {
+        if !store.isOwner {
+          Text("Waiting for an owner to answer.").font(.system(size: 13)).foregroundStyle(Palette.muted)
+        } else {
+          HStack(spacing: 10) {
+            if s.action == "delete" {
+              Button("Delete", role: .destructive) { decide(true) }.buttonStyle(CardButtonStyle(danger: true)).accessibilityIdentifier("approval-approve")
+            } else {
+              Button(s.action == "replace" ? "Replace" : "Allow") { decide(true) }.buttonStyle(CardButtonStyle(prominent: true)).accessibilityIdentifier("approval-approve")
+            }
+            Button("No") { decide(false) }.buttonStyle(CardButtonStyle()).accessibilityIdentifier("approval-deny")
+          }
+          .disabled(busy)
+          if s.action != "delete" {
+            Button("Always in this folder") { decide(true, always: true) }
+              .font(.system(size: 13)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity).disabled(busy)
+              .accessibilityIdentifier("approval-always")
+          }
+        }
+      } else if !pending {
+        HStack(spacing: 6) {
+          Image(systemName: approval.status == "approved" ? "checkmark" : "xmark")
+          Text(approval.status == "approved" ? "\(decider) allowed this" : "\(decider) said no")
+          Spacer(minLength: 8)
+          if let at = approval.decidedAt.flatMap(Wire.date) { Text(at, format: .dateTime.hour().minute()).foregroundStyle(Palette.faint) }
+        }
+        .font(.system(size: 13))
+        .foregroundStyle(approval.status == "approved" ? Palette.statusOnline : Palette.muted)
+      }
+      if let error { Text(error).font(.caption).foregroundStyle(Palette.red) }
     }
   }
 

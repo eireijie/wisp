@@ -25,6 +25,9 @@ final class OrgFeatureTests: XCTestCase {
     let empty = try Wire.decoder.decode(Features.self, from: Data("{}".utf8))
     XCTAssertEqual(empty, .everything)
     XCTAssertEqual(empty.preset, "everything")
+    // Storage needs setting up first, so a hub that doesn't mention it means off
+    XCTAssertFalse(empty.storage)
+    XCTAssertTrue(try Wire.decoder.decode(Features.self, from: Data(#"{"storage":true}"#.utf8)).storage)
     let some = try Wire.decoder.decode(Features.self, from: Data(#"{"buddy":false,"voice":false}"#.utf8))
     XCTAssertFalse(some.buddy); XCTAssertFalse(some.voice); XCTAssertTrue(some.tasks)
     XCTAssertEqual(some.preset, "custom")
@@ -32,8 +35,8 @@ final class OrgFeatureTests: XCTestCase {
     let me = try Wire.decoder.decode(Me.self, from: Data(#"{"kind":"user","features":{"background":false,"routines":false,"teach":false,"tasks":false,"voice":false,"buddy":false,"invite":false,"remoteDesktop":false}}"#.utf8))
     XCTAssertEqual(me.features, .simple)
     XCTAssertNil(try Wire.decoder.decode(Me.self, from: Data(#"{"kind":"user"}"#.utf8)).features)
-    XCTAssertEqual(FeatureKey.allCases.count, 8)
-    XCTAssertEqual(FeatureKey.Group.allCases.flatMap(\.keys).count, 8)
+    XCTAssertEqual(FeatureKey.allCases.count, 9)
+    XCTAssertEqual(FeatureKey.Group.allCases.flatMap(\.keys).count, 9)
   }
 
   func testOrgsAndInviteLinks() throws {

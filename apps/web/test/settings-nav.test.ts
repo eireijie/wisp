@@ -25,7 +25,8 @@ describe("settings navigation", () => {
   });
 
   it("still opens every route (SETTINGS_PAGES) somewhere", () => {
-    const pages = settingsNav(false, FEATURE_PRESETS.everything).flatMap((s) => s.pages.map((p) => p.id));
+    // Everything leaves out mods that need setting up first (Storage); with every mod on, every page shows
+    const pages = settingsNav(false, { ...FEATURE_PRESETS.everything, storage: true }).flatMap((s) => s.pages.map((p) => p.id));
     expect([...pages].sort()).toEqual([...SETTINGS_PAGES].sort());
   });
 

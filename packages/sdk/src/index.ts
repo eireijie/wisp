@@ -1,4 +1,4 @@
-import type { Agent, Allowance, Approval, Channel, ComputerAction, ConnectionModel, HarnessSettings, HarnessSettingsChange, Message, ModelConnection, ModelLogin, ModelProvider, Routine, Followup, ChatLoop, Skill, Watch, WatchService, WatchServiceInfo } from "@wisp/core";
+import type { Agent, Allowance, Approval, Channel, ComputerAction, ConnectionModel, HarnessSettings, HarnessSettingsChange, Message, ModelConnection, ModelLogin, ModelProvider, Routine, Followup, ChatLoop, Skill, StorageEntry, StorageFolder, StorageService, Watch, WatchService, WatchServiceInfo } from "@wisp/core";
 
 export interface WispClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
@@ -146,6 +146,28 @@ export class WispClient {
   /** Sign in to a website on this agent's own computer with a login from the person's password manager; may ask them first. */
   fillLogin(site: string, account?: string) {
     return this.request<{ status: "filled" | "not_filled" | "asked"; message: string; approvalId?: string }>("POST", "/api/logins/fill", { site, ...(account ? { account } : {}) });
+  }
+  /** The storage this agent may use (the Storage mod), with its folders; empty when it has none. */
+  storageMine() {
+    return this.request<{ id: string; name: string; service: StorageService; folders: StorageFolder[] }[]>("GET", "/api/storage/mine");
+  }
+  /** What's in a folder on a storage, or (without a path) the folders the agent may use there. */
+  storageList(storage: string, path?: string) {
+    return this.request<{ connection: string; path: string; entries: StorageEntry[] } | { connection: string; folders: StorageFolder[] }>("POST", "/api/storage/agent/list", { storage, ...(path ? { path } : {}) });
+  }
+  storageRead(storage: string, path: string) {
+    return this.request<{ name: string; mime: string; size: number; text?: string; base64?: string }>("POST", "/api/storage/agent/read", { storage, path });
+  }
+  storageSearch(storage: string, query: string, path?: string) {
+    return this.request<StorageEntry[]>("POST", "/api/storage/agent/search", { storage, query, ...(path ? { path } : {}) });
+  }
+  /** Copy a file from a storage into Wisp; returns the Wisp file. */
+  storageToWisp(storage: string, path: string) {
+    return this.request<{ id: string; name: string; size: number; mime: string }>("POST", "/api/storage/agent/download", { storage, path });
+  }
+  /** Put a Wisp file on a storage, make a folder or delete something: done, or a person is asked first. */
+  storageChange(storage: string, action: "put" | "delete" | "mkdir", path: string, fileId?: string) {
+    return this.request<{ status: "done" | "asked"; message: string; approvalId?: string }>("POST", "/api/storage/agent/change", { storage, action, path, ...(fileId ? { fileId } : {}) });
   }
   /** Ask a person to do something on this agent's computer (sign in, enter a code). */
   computerHelp(request: string) {

@@ -322,13 +322,15 @@ struct ChatCardShell<Content: View>: View {
 /** The big pill buttons on a card: the main answer filled, the other outlined. */
 struct CardButtonStyle: ButtonStyle {
   var prominent = false
+  /** red, for an answer that deletes something */
+  var danger = false
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .font(.system(size: 15, weight: .semibold))
-      .foregroundStyle(prominent ? Palette.ground : Palette.text)
+      .foregroundStyle(danger ? Color.white : prominent ? Palette.ground : Palette.text)
       .frame(maxWidth: .infinity)
       .frame(height: 44)
-      .background(Capsule().fill(prominent ? Palette.text : Palette.control))
+      .background(Capsule().fill(danger ? Palette.red : prominent ? Palette.text : Palette.control))
       .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: prominent ? 0 : 1))
       .pressFeedback(configuration.isPressed)
   }

@@ -3,6 +3,7 @@ import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabe
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Logins } from "./logins.ts";
+import { Storage } from "./storage.ts";
 import { Discussions } from "./discussions.ts";
 import { Apns } from "./apns.ts";
 import { Fcm } from "./fcm.ts";
@@ -81,6 +82,8 @@ export class Hub {
   readonly computers: Computers;
   /** logins agents fill from the person's password manager */
   readonly logins: Logins;
+  /** files on the person's own storage (the Storage mod) */
+  readonly storage: Storage;
   readonly routines: Routines;
   readonly schedules: TeamSchedules;
   readonly background: Background;
@@ -134,6 +137,7 @@ export class Hub {
     this.flows = new TeamFlows(this);
     this.computers = new Computers(this);
     this.logins = new Logins(this);
+    this.storage = new Storage(this);
     this.routines = new Routines(this);
     this.schedules = new TeamSchedules(this);
     this.background = new Background(this);
@@ -1589,6 +1593,7 @@ export class Hub {
     await this.ensureSharedSkills(agent.id);
     const skills = this.skills.promptSection(agent.id, { learn: agentPolicy(this, agent.workspaceId).learnSkills });
     const connectors = this.connectors.promptSection(agent.id);
+    const storage = this.storage.promptSection(agent);
     const soulNote = agent.settings.soulLocked
       ? "Your soul is locked by your owner; don't try to edit it."
       : "As you learn who you are, you may refine it with memory_write on me/SOUL.md. Keep it short.";
@@ -1619,6 +1624,7 @@ export class Hub {
       this.computerSection(agent.id),
       skills ? `\n${skills}` : "",
       connectors ? `\n${connectors}` : "",
+      storage ? `\n${storage}` : "",
       routines ? `\n${routines}` : "",
       discussion ? `\n${discussion}` : "",
       background,

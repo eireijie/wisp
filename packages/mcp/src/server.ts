@@ -674,6 +674,88 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     );
   }
 
+  // --- storage (the Storage mod: only there when this agent has some) -------------------------
+
+  const storages = await client.storageMine().catch(() => []);
+  if (storages.length) {
+    const which = z.string().describe(`which storage: ${storages.map((s) => `"${s.name}"`).join(", ")}`);
+    const where = storages.map((s) => `${s.name}: ${s.folders.map((f) => `${f.path} (${f.access === "write" ? "read and change" : "read only"})`).join(", ")}`).join("; ");
+    const asked = (r: { status: string; message: string }) => text(r.message);
+
+    server.registerTool(
+      "storage_list",
+      { description: `List a folder on the person's storage. Without a path, shows the folders you may use. You may use: ${where}.`, inputSchema: { storage: which, path: z.string().optional().describe('e.g. "/Clients/Acme"') } },
+      safe(async ({ storage, path: p }) => {
+        const r = await client.storageList(storage, p);
+        if ("folders" in r) return json(r.folders);
+        return text(r.entries.map((e) => `${e.type === "folder" ? "[folder] " : ""}${e.path}${e.size !== null ? ` (${e.size} bytes)` : ""}${e.modified ? `, ${e.modified}` : ""}`).join("\n") || `(${r.path} is empty)`);
+      }),
+    );
+
+    server.registerTool(
+      "storage_read",
+      { description: "Read a file on the person's storage: text comes back as text and pictures are shown to you. For anything else, or files over 5 MB, use storage_download.", inputSchema: { storage: which, path: z.string() } },
+      safe(async ({ storage, path: p }) => {
+        const f = await client.storageRead(storage, p);
+        if (f.text !== undefined) return text(f.text.slice(0, 100_000));
+        if (/^image\/(png|jpeg|gif|webp)$/.test(f.mime) && f.base64) return { content: [{ type: "image" as const, data: f.base64, mimeType: f.mime }, { type: "text" as const, text: f.name }] };
+        return text(`${f.name} is ${f.mime} (${f.size} bytes); use storage_download to get it as a file.`);
+      }),
+    );
+
+    server.registerTool(
+      "storage_search",
+      { description: "Find files and folders on the person's storage whose names contain some text, inside the folders you may use (or one of them).", inputSchema: { storage: which, query: z.string(), path: z.string().optional() } },
+      safe(async ({ storage, query, path: p }) => {
+        const hits = await client.storageSearch(storage, query, p);
+        return text(hits.map((e) => `${e.type === "folder" ? "[folder] " : ""}${e.path}`).join("\n") || "Nothing found.");
+      }),
+    );
+
+    server.registerTool(
+      "storage_download",
+      {
+        description: `Copy a file from the person's storage into Wisp, so you can attach it to a message (its file id)${opts.localFiles !== false ? " and, with dest_dir, save it on your computer" : ""}.`,
+        inputSchema: { storage: which, path: z.string(), ...(opts.localFiles !== false ? { dest_dir: z.string().optional() } : {}) },
+      },
+      safe(async ({ storage, path: p, dest_dir }: { storage: string; path: string; dest_dir?: string }) => {
+        const f = await client.storageToWisp(storage, p);
+        if (!dest_dir || opts.localFiles === false) return text(`Copied ${f.name} into Wisp as ${f.id} (${f.size} bytes).`);
+        const got = await client.downloadFile(f.id);
+        await fs.mkdir(dest_dir, { recursive: true });
+        const dest = path.join(dest_dir, path.basename(got.name));
+        await fs.writeFile(dest, got.data);
+        return text(`Saved to ${dest} (Wisp file ${f.id}).`);
+      }),
+    );
+
+    server.registerTool(
+      "storage_upload",
+      {
+        description: `Put a file on the person's storage at a path (its full path, including the file name). Give a Wisp file id${opts.localFiles !== false ? " or a local_path on your computer" : ""}. A person is asked first, unless they said "Always in this folder"; then end your turn.`,
+        inputSchema: { storage: which, path: z.string().describe('e.g. "/Clients/Acme/Q3-report.pdf"'), file_id: z.string().optional(), ...(opts.localFiles !== false ? { local_path: z.string().optional() } : {}) },
+      },
+      safe(async ({ storage, path: p, file_id, local_path }: { storage: string; path: string; file_id?: string; local_path?: string }) => {
+        let fileId = file_id;
+        if (!fileId && local_path && opts.localFiles !== false) fileId = (await client.uploadFile(path.basename(local_path), await fs.readFile(local_path), guessMime(local_path))).id;
+        if (!fileId) throw new Error("give file_id or local_path");
+        return asked(await client.storageChange(storage, "put", p, fileId));
+      }),
+    );
+
+    server.registerTool(
+      "storage_mkdir",
+      { description: "Make a folder on the person's storage. A person is asked first, unless they said \"Always in this folder\".", inputSchema: { storage: which, path: z.string() } },
+      safe(async ({ storage, path: p }) => asked(await client.storageChange(storage, "mkdir", p))),
+    );
+
+    server.registerTool(
+      "storage_delete",
+      { description: "Delete a file or folder on the person's storage. A person is always asked first; end your turn after.", inputSchema: { storage: which, path: z.string() } },
+      safe(async ({ storage, path: p }) => asked(await client.storageChange(storage, "delete", p))),
+    );
+  }
+
   return server;
 }
 
