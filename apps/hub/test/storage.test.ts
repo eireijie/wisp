@@ -11,6 +11,7 @@ import { WispClient } from "@wisp/sdk";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
 import { parseMultistatus } from "../src/storage-providers.ts";
+import { makeRoomAs } from "./room.ts";
 import { startStubs, type Stubs } from "./storage-stubs.ts";
 
 /**
@@ -164,7 +165,8 @@ describe("WebDAV", () => {
   });
 
   it("tells the agent about it in its prompt", async () => {
-    const general = (await api("POST", "/api/channels", { name: "general" })).data;
+    await makeRoomAs(hub, base, owner, { name: "general" });
+    const general = (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === "general");
     const msg = (await api("POST", `/api/channels/${general.id}/messages`, { body: "hi" })).data;
     const prompt = await hub.buildPrompt(scout.id, general.id, null, msg.id);
     expect(prompt).toContain("## Your storage");
