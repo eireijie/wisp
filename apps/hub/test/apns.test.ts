@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
+import { makeRoomAs } from "./room.ts";
 import { issueToken } from "../src/auth.ts";
 import { createOrganization } from "../src/api-orgs.ts";
 
@@ -59,6 +60,9 @@ const waitFor = async <T>(fn: () => T | undefined, ms = 3000): Promise<T> => {
 
 const PHONE = "a".repeat(64);
 
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = (body: Parameters<typeof makeRoomAs>[3], token = owner) => makeRoomAs(hub, base, token, body);
+
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-apns-"));
   const built = await buildHub({ dataDir: dir, setupCode: false });
@@ -69,7 +73,7 @@ beforeAll(async () => {
   await new Promise<void>((r) => apns.listen(0, "127.0.0.1", r));
   hub.apns.origin = `http://127.0.0.1:${(apns.address() as { port: number }).port}`;
   owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex Morgan", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
-  await api("POST", "/api/channels", { name: "general" });
+  await room({ name: "general" });
 });
 
 afterAll(async () => {

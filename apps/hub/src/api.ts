@@ -25,6 +25,8 @@ import {
   pickReviewer,
   teamChain,
   teamProblem,
+  teamShrinkProblem,
+  teamSizeProblem,
   chartFromSteps,
   migrateTeam,
   migrateTemplate,
@@ -686,7 +688,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       if (onTeam.size !== sent.size || [...sent].some((a) => !onTeam.has(a))) return reply.code(409).send({ error: "This team runs on roles and steps. Change who's on it from the channel's Team tab in the web app." });
     }
     if (body.settings?.team) body.settings.team = stampSchedules(c, withChart(keepTeamExtras(body.settings.team, ch.settings.team)), ch.settings.team);
-    const problem = settingsProblem(c, body.settings, ch.settings.team, ch.id);
+    const problem = settingsProblem(c, body.settings, ch.settings.team, ch.id) ?? (body.settings?.team && ch.kind === "channel" ? teamShrinkProblem(ch.settings.team, body.settings.team) : null);
     if (problem) return reply.code(400).send({ error: problem });
     if (body.private && !ch.private) {
       const why = protectedReason(c, ch, "made private");
@@ -745,6 +747,12 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
         const member: Actor = { kind: p.kind, id: p.memberId };
         if (method === "PUT") store.addChannelMember(ch.id, member);
         else {
+          const team = ch.settings.team;
+          if (member.kind === "agent" && team) {
+            const left = { nodes: team.nodes.filter((n) => n.agentId !== member.id), roles: team.roles?.map((r) => (r.agentId === member.id ? { ...r, agentId: null } : r)), steps: team.steps?.map((s) => (s.agentId === member.id ? { ...s, agentId: null } : s)) };
+            const refused = teamShrinkProblem(team, left);
+            if (refused) return reply.code(409).send({ error: refused });
+          }
           store.removeChannelMember(ch.id, member);
           // an agent that's no longer here stops answering here
           if (member.kind === "agent") store.clearDefaultAgent(member.id, ch.id);
@@ -1006,7 +1014,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (store.channelByName(c.workspaceId, body.name)) return reply.code(409).send({ error: "channel exists" });
     if (body.sectionId && store.section(body.sectionId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown section" });
     if (body.settings?.team) body.settings.team = stampSchedules(c, withChart(body.settings.team));
-    const problem = settingsProblem(c, body.settings);
+    const problem = teamSizeProblem(body.settings?.team) ?? settingsProblem(c, body.settings);
     if (problem) return reply.code(400).send({ error: problem });
     const members = body.members.filter((m) => (m.kind === "user" ? !!store.role(c.workspaceId, m.id) : store.agent(m.id)?.workspaceId === c.workspaceId));
     if (members.length !== body.members.length) return reply.code(400).send({ error: "someone to add isn't in this workspace" });
@@ -1949,7 +1957,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       (ch.settings.team?.steps ?? []).filter((s) => s.kind === "schedule")
     ).map((s) => ({ ...s, inputs: [], next: firsts[0] ?? null, nexts: firsts }));
     const team = stampSchedules(c, withChart({ ...(ch.settings.team ?? { nodes: [], edges: [] }), roles, steps: layoutSteps([...schedules, ...(steps as TeamStep[])]) }), ch.settings.team);
-    const problem = teamProblem(team);
+    const problem = teamProblem(team) ?? teamShrinkProblem(ch.settings.team, team);
     if (problem) return reply.code(400).send({ error: problem });
     joinTeam(ch.id, { team });
     const updated = store.updateChannel(ch.id, { settings: { team } });

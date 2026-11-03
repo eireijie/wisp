@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
+import { makeRoom } from "./room.ts";
 
 let dir: string;
 let base: string;
@@ -14,6 +15,9 @@ let guest: string;
 let me: any;
 let sam: any;
 let atlas: any;
+let who: { workspaceId: string; userId: string };
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = (body: Parameters<typeof makeRoom>[2]) => makeRoom(hub, who, body);
 
 async function api<T = any>(method: string, url: string, body?: unknown, token = owner): Promise<{ status: number; data: T }> {
   const res = await fetch(base + url, {
@@ -35,8 +39,10 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
   owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
-  await api("POST", "/api/channels", { name: "general" });
-  me = (await api("GET", "/api/me")).data.user;
+  const mine = (await api("GET", "/api/me")).data;
+  me = mine.user;
+  who = { workspaceId: mine.workspace.id, userId: me.id };
+  room({ name: "general" });
   sam = (await api("POST", "/api/members", { email: "sam@example.com", name: "Sam", password: "password123", role: "member" })).data;
   await api("POST", "/api/members", { email: "gus@example.com", name: "Gus", password: "password123", role: "guest" });
   guest = (await api("POST", "/api/auth/login", { email: "gus@example.com", password: "password123" }, "")).data.token;
@@ -50,7 +56,7 @@ afterAll(async () => {
 
 describe("channel members", () => {
   it("lists, adds and removes people and agents", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "launch" })).data;
+    const ch = room({ name: "launch" }).data;
     expect((await api("GET", `/api/channels/${ch.id}/members`)).data).toEqual([{ kind: "user", id: me.id, name: "Alex", handle: null, role: "owner" }]);
 
     await api("PUT", `/api/channels/${ch.id}/members/agent/${atlas.id}`);
@@ -86,7 +92,7 @@ describe("channel members", () => {
   });
 
   it("wakes an agent added to a channel when it's mentioned there", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "ops" })).data;
+    const ch = room({ name: "ops" }).data;
     await api("PUT", `/api/channels/${ch.id}/members/agent/${atlas.id}`);
     const msg = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "@atlas status?" })).data;
     const run = hub.store.db.prepare("SELECT status FROM runs WHERE trigger_message_id = ?").get(msg.id) as { status: string } | undefined;
@@ -96,7 +102,7 @@ describe("channel members", () => {
 
 describe("deleting channels", () => {
   it("deletes a channel with its messages, stops its work and lets go of its tasks", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "scratch" })).data;
+    const ch = room({ name: "scratch" }).data;
     await api("POST", `/api/channels/${ch.id}/messages`, { body: "hello" });
     const task = (await api("POST", "/api/tasks", { to: "atlas", title: "Tidy up", brief: "now", channelId: ch.id })).data;
     expect(task.channelId).toBe(ch.id);
@@ -110,7 +116,7 @@ describe("deleting channels", () => {
     const after = (await api<any[]>("GET", "/api/tasks")).data.find((t) => t.id === task.id);
     expect(after.channelId).toBeNull();
     // the name is free again
-    expect((await api("POST", "/api/channels", { name: "scratch" })).status).toBe(200);
+    expect(room({ name: "scratch" }).status).toBe(200);
   });
 
   it("keeps DMs", async () => {
@@ -127,7 +133,7 @@ describe("who answers in a channel", () => {
   });
 
   it("only wakes @mentioned agents until the channel has a default agent", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "support" })).data;
+    const ch = room({ name: "support" }).data;
     expect(ch.settings).toEqual({ defaultAgentId: null, replyInThread: false, instructions: "", team: null });
     expect(hub.targets(await post(ch.id, "anyone around?"), ch.workspaceId)).toEqual([]);
 
@@ -153,12 +159,12 @@ describe("who answers in a channel", () => {
   });
 
   it("rejects an agent from somewhere else", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "elsewhere" })).data;
+    const ch = room({ name: "elsewhere" }).data;
     expect((await api("PATCH", `/api/channels/${ch.id}`, { settings: { defaultAgentId: "agt_nope" } })).status).toBe(400);
   });
 
   it("sends a plain reply in a thread to the agent already in it", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "threads" })).data;
+    const ch = room({ name: "threads" }).data;
     const root = await post(ch.id, "@nova draft the release notes");
     // nobody answered yet: the agent asked at the start hears the follow-up
     expect(hub.targets(await post(ch.id, "and keep them short", root.id), ch.workspaceId)).toEqual([nova.id]);
@@ -168,18 +174,19 @@ describe("who answers in a channel", () => {
   });
 
   it("creates a channel with members, a default agent and threaded replies", async () => {
-    const res = await api("POST", "/api/channels", { name: "ops-team", private: true, settings: { defaultAgentId: nova.id, replyInThread: true }, members: [{ kind: "user", id: sam.id }] });
+    const team = { nodes: [{ agentId: nova.id, lead: true, x: 0, y: 0 }, { agentId: atlas.id, lead: false, x: 0, y: 0 }], edges: [{ from: nova.id, to: atlas.id }] };
+    const res = await api("POST", "/api/channels", { name: "ops-team", private: true, settings: { defaultAgentId: nova.id, replyInThread: true, team }, members: [{ kind: "user", id: sam.id }] });
     expect(res.status).toBe(200);
     expect(res.data.private).toBe(true);
     const members = (await api<any[]>("GET", `/api/channels/${res.data.id}/members`)).data.map((m) => m.name);
-    expect(members).toEqual(["Alex", "Sam", "Nova"]);
-    expect((await api("POST", "/api/channels", { name: "ops-team-2", members: [{ kind: "agent", id: "agt_nope" }] })).status).toBe(400);
+    expect(members).toEqual(["Alex", "Sam", "Atlas", "Nova"]);
+    expect((await api("POST", "/api/channels", { name: "ops-team-2", settings: { team }, members: [{ kind: "agent", id: "agt_nope" }] })).status).toBe(400);
   });
 });
 
 describe("private channels", () => {
   it("are only seen by their members (and owners)", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "secret", private: true })).data;
+    const ch = room({ name: "secret", private: true }).data;
     const samToken = (await api("POST", "/api/auth/login", { email: "sam@example.com", password: "password123" }, "")).data.token;
     const visible = async (token: string) => (await api<any[]>("GET", "/api/channels", undefined, token)).data.some((c) => c.id === ch.id);
     expect(await visible(owner)).toBe(true);
@@ -199,7 +206,7 @@ describe("private channels", () => {
 
 describe("archiving channels", () => {
   it("makes a channel read-only and brings it back", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "old-launch", settings: { defaultAgentId: atlas.id } })).data;
+    const ch = room({ name: "old-launch", settings: { defaultAgentId: atlas.id } }).data;
     const archived = await api("POST", `/api/channels/${ch.id}/archive`, { archived: true });
     expect(archived.status).toBe(200);
     expect(archived.data.archivedAt).toBeTruthy();
@@ -300,7 +307,7 @@ describe("editing and deleting messages", () => {
   });
 
   it("refuses in archived channels", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "frozen" })).data;
+    const ch = room({ name: "frozen" }).data;
     const msg = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "last words" })).data;
     await api("POST", `/api/channels/${ch.id}/archive`, { archived: true });
     expect((await api("PATCH", `/api/messages/${msg.id}`, { body: "new words" })).status).toBe(409);
@@ -308,7 +315,7 @@ describe("editing and deleting messages", () => {
   });
 
   it("lists the agents in a channel in the order they joined, for its icon", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "icons" })).data;
+    const ch = room({ name: "icons" }).data;
     const nova = (await api("POST", "/api/agents", { handle: "nova-icon", name: "Nova", harness: "custom" })).data;
     await api("PUT", `/api/channels/${ch.id}/members/agent/${nova.id}`);
     await api("PUT", `/api/channels/${ch.id}/members/agent/${atlas.id}`);
@@ -317,7 +324,7 @@ describe("editing and deleting messages", () => {
   });
 
   it("counts only members who still exist, matching the member list", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "headcount" })).data;
+    const ch = room({ name: "headcount" }).data;
     const gone = (await api("POST", "/api/agents", { handle: "gone", name: "Gone", harness: "custom" })).data;
     await api("PUT", `/api/channels/${ch.id}/members/agent/${gone.id}`);
     await api("PUT", `/api/channels/${ch.id}/members/agent/${atlas.id}`);
@@ -336,7 +343,7 @@ describe("editing and deleting messages", () => {
       const res = await fetch(base + "/api/files", { method: "POST", headers: { authorization: `Bearer ${owner}`, "content-type": "application/octet-stream", "x-filename": "i", "x-mime-type": mime, ...(channelId ? { "x-channel-id": channelId } : {}) }, body: Buffer.from(mime + channelId) });
       return ((await res.json()) as { id: string }).id;
     };
-    const ch = (await api("POST", "/api/channels", { name: "icon-team" })).data;
+    const ch = room({ name: "icon-team" }).data;
     const icon = await upload(ch.id, "image/png");
     const set = await api("PATCH", `/api/channels/${ch.id}`, { settings: { iconFileId: icon } });
     expect(set.status).toBe(200);

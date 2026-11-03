@@ -7,6 +7,8 @@ import type { HarnessAdapter, RunInput } from "@wisp/adapters";
 import { WispClient } from "@wisp/sdk";
 import { NodeDaemon, normalizeHubUrl } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
+import type { Hub } from "../src/hub.ts";
+import { makeRoomFor } from "./room.ts";
 
 let dir: string;
 let url: string;
@@ -14,6 +16,7 @@ let nodeDir: string;
 let nodeToken: string;
 let close: () => Promise<void>;
 let daemon: NodeDaemon;
+let hub: Hub;
 let owner: WispClient;
 const calls: RunInput[] = [];
 const logs: string[] = [];
@@ -53,15 +56,20 @@ const waitFor = async <T>(fn: () => Promise<T | undefined>, ms = 4000): Promise<
   throw new Error("timed out");
 };
 
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = async (body: Parameters<typeof makeRoomFor>[2]) => (await makeRoomFor(hub, owner, body)).data;
+
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-node-"));
-  const { app } = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
+  const built = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
+  const { app } = built;
+  hub = built.hub;
   await app.listen({ port: 0, host: "127.0.0.1" });
   url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WispClient({ url, token: setup.token });
-  await owner.request("POST", "/api/channels", { name: "general" });
+  await room({ name: "general" });
   const { node, token } = await owner.request("POST", "/api/nodes", { name: "box" });
   nodeToken = token;
   nodeDir = path.join(dir, "node");
@@ -111,7 +119,7 @@ describe("node daemon", () => {
   });
 
   it("does not retry a brand-new session that fails", async () => {
-    const ch = await owner.request("POST", "/api/channels", { name: "fresh" });
+    const ch = await room({ name: "fresh" });
     const before = calls.length;
     await owner.send(ch.id, "@bolt explode");
     await waitFor(async () => (await owner.messages(ch.id)).messages.find((m) => m.parts.some((p) => p.type === "status")));
@@ -154,7 +162,7 @@ describe("node daemon", () => {
   it("says when a connected app didn't start because its command isn't on the device", async () => {
     const bolt = (await owner.agents()).find((a) => a.handle === "bolt")!;
     const conn = await owner.request("POST", "/api/connectors", { kind: "mcp-stdio", name: "Widgets", command: "wisp-no-such-command-xyz", args: [], agentIds: [bolt.id] });
-    const ch = await owner.request("POST", "/api/channels", { name: "widgets" });
+    const ch = await room({ name: "widgets" });
     await owner.send(ch.id, "@bolt use widgets");
     const reply = await waitFor(async () => (await owner.messages(ch.id)).messages.find((m) => m.author.id === bolt.id));
     expect(reply.parts).toContainEqual({ type: "notice", text: `Connected app widgets didn't start: "wisp-no-such-command-xyz" isn't installed on box.` });
@@ -164,7 +172,7 @@ describe("node daemon", () => {
   });
 
   it("keeps a run's result for the hub when the connection drops, and sends it once it's back", async () => {
-    const general = await owner.request("POST", "/api/channels", { name: "away" });
+    const general = await room({ name: "away" });
     const n = calls.length + 1;
     await owner.send(general.id, "@bolt slow one");
     await waitFor(async () => (calls.length >= n ? true : undefined));
@@ -181,7 +189,7 @@ describe("node daemon", () => {
   });
 
   it("pausing the device also stops runs that were still waiting their turn", async () => {
-    const ch = await owner.request("POST", "/api/channels", { name: "pausing" });
+    const ch = await room({ name: "pausing" });
     const n = calls.length + 1;
     await owner.send(ch.id, "@bolt slow two");
     await owner.send(ch.id, "@bolt queued three");
@@ -201,7 +209,7 @@ describe("node daemon", () => {
   });
 
   it("waits for runs in flight to report before stopping", async () => {
-    const ch = await owner.request("POST", "/api/channels", { name: "stopping" });
+    const ch = await room({ name: "stopping" });
     const n = calls.length + 1;
     await owner.send(ch.id, "@bolt slow four");
     await waitFor(async () => (calls.length >= n ? true : undefined));
