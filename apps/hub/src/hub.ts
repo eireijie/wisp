@@ -10,6 +10,7 @@ import { Reach } from "./reach.ts";
 import { Routines } from "./routines.ts";
 import { TeamSchedules } from "./team-schedules.ts";
 import { BACKGROUND_THREAD, Background } from "./background.ts";
+import { AutoMemory, MEMORY_THREAD } from "./auto-memory.ts";
 import { Push } from "./push.ts";
 import { Loops } from "./loops.ts";
 import { Marketplace } from "./marketplace.ts";
@@ -27,7 +28,7 @@ import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
 import { spawnSection } from "./spawn.ts";
 import { foldTeams } from "./fold-teams.ts";
 import { TeamFlows } from "./team-flows.ts";
-import type { Store } from "./store.ts";
+import type { RunKind, Store } from "./store.ts";
 import { guestEvent } from "./guest-computers.ts";
 
 const CONTEXT_MESSAGES = 20;
@@ -83,6 +84,8 @@ export class Hub {
   readonly schedules: TeamSchedules;
   readonly background: Background;
   readonly loops: Loops;
+  /** memory passes after meaningful work, and the daily tidy of the graph */
+  readonly autoMemory: AutoMemory;
   readonly push: Push;
   readonly marketplace: Marketplace;
   readonly logos: Logos;
@@ -133,6 +136,7 @@ export class Hub {
     this.schedules = new TeamSchedules(this);
     this.background = new Background(this);
     this.loops = new Loops(this);
+    this.autoMemory = new AutoMemory(this);
     this.push = new Push(this);
     this.marketplace = new Marketplace(this);
     this.logos = new Logos(this);
@@ -244,6 +248,7 @@ export class Hub {
     this.routines.stop();
     this.schedules.stop();
     this.background.stop();
+    this.autoMemory.stop();
     for (const c of this.clients) c.socket.terminate();
     for (const n of this.nodes.values()) n.socket.terminate();
     this.clients.clear();
@@ -651,7 +656,7 @@ export class Hub {
         collect(live, msg.event);
         this.live.set(run.id, live);
         // a background check works quietly: nothing shows in the DM unless it messages the person
-        if (run.kind !== "background") this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, ...this.whereRuns(run), event: msg.event }, this.audience(run.channelId));
+        if (!run.kind) this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, ...this.whereRuns(run), event: msg.event }, this.audience(run.channelId));
         return;
       }
       case "run_done":
@@ -704,7 +709,11 @@ export class Hub {
     const gone = !store.channel(run.channelId);
     const agent = store.agent(run.agentId);
     let body = "";
-    if (run.kind === "background") {
+    if (run.kind === "memory") {
+      // a memory pass posts nothing: what it saved is in Memory's history
+      store.setRunStatus(run.id, "finalText" in result ? "done" : "failed", "error" in result ? result.error : undefined);
+      this.autoMemory.finished(run.id);
+    } else if (run.kind === "background") {
       store.setRunStatus(run.id, "finalText" in result ? "done" : "failed", "error" in result ? result.error : undefined);
       this.background.finished(run, "finalText" in result ? result.finalText.trim() || live.text.trim() : `The check failed: ${result.error}`);
       this.loops.runEnded(run, null);
@@ -731,8 +740,11 @@ export class Hub {
       const reply = body && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy, conversationId: this.chatOfRun(run) }) : null;
       // follow-ups it set and how it left the chat show under its answer
       this.loops.runEnded(run, reply?.id ?? (repeated && posted ? posted.id : null));
+      // work worth remembering that it didn't save gets a memory pass once the chat goes quiet
+      this.autoMemory.runFinished(run, { reply: body || (posted?.body ?? ""), tools: live.parts.flatMap((p) => (p.type === "tool_call" ? [p.name] : [])), usedSkill: skillParts.length > 0 });
     } else {
       this.loops.runEnded(run, null);
+      this.autoMemory.finished(run.id);
       store.setRunStatus(run.id, "failed", result.error);
       const text = agent ? this.explainFailure(agent, result.error) : result.error;
       if (!gone) {
@@ -855,7 +867,7 @@ export class Hub {
 
   /** The chat a run answers in: its trigger's, at the top of a DM or team (threads have no chats). */
   chatOfRun(run: { threadId: string | null; triggerMessageId: string; kind?: string | null }): string | undefined {
-    if (run.threadId || run.kind === "background" || !run.triggerMessageId) return undefined;
+    if (run.threadId || run.kind || !run.triggerMessageId) return undefined;
     return this.store.message(run.triggerMessageId)?.conversationId;
   }
 
@@ -1159,11 +1171,11 @@ export class Hub {
     this.store.setRunStatus(run.id, "running");
     this.broadcast(conn.workspaceId, { type: "agent_status", agentId: agent.id, status: "busy" });
     if (run.kind === "background") this.background.started(run);
-    else this.dropWaitingNotice(run, agent);
+    else if (run.kind !== "memory") this.dropWaitingNotice(run, agent);
     // working again, so an earlier "needs you on my computer" no longer stands
     if (agent.computerId) this.computers.dropHelp(agent.computerId, agent.id);
     // lets browsers show "Nova: thinking" right away, before the harness streams anything
-    if (run.kind !== "background") this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: agent.id, channelId: run.channelId, ...this.whereRuns(run), event: { type: "status", text: "started" } }, this.audience(run.channelId));
+    if (!run.kind) this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: agent.id, channelId: run.channelId, ...this.whereRuns(run), event: { type: "status", text: "started" } }, this.audience(run.channelId));
     this.buildPrompt(agent.id, run.channelId, run.threadId, run.triggerMessageId, run).then(
       async (prompt) => {
         // sign-ins to remote connectors that are about to expire are refreshed first
@@ -1181,14 +1193,16 @@ export class Hub {
         const computer: ComputerSpec | undefined = c?.kind === "vm" && c.nodeId === agent.nodeId ? this.computers.spec(c) : undefined;
         const inComputer = this.runsInComputer(agent);
         const connectors = this.connectors.specsFor(agent.id);
-        // every background check starts a new session (the watch notes carry what it needs), on the model the person picked for checks
-        const bg = run.kind === "background" && run.requestedBy ? this.store.background(agent.id, run.requestedBy) : undefined;
+        // every background check (and memory pass) starts a new session (its prompt carries what it needs), on the model the person picked for checks
+        const bg = run.kind && run.requestedBy ? this.store.background(agent.id, run.requestedBy) : undefined;
         const sent = credential ? (this.credentialFor(agent) ?? credential) : null;
         const fallback = sent && !agent.model ? await this.connectionDefaultModel(agent, sent.connectionId) : undefined;
-        const effort = bg?.effort ?? (run.kind !== "background" ? this.voiceEffort(agent, run.triggerMessageId) : undefined);
+        // a memory pass is light work: low effort unless the person picked an effort for background work
+        const effort = bg?.effort ?? (!run.kind ? this.voiceEffort(agent, run.triggerMessageId) : run.kind === "memory" ? this.lowEffort(agent) : undefined);
+        const threadId = run.kind === "background" ? BACKGROUND_THREAD : run.kind === "memory" ? MEMORY_THREAD : run.threadId;
         this.send(conn, {
           type: "run",
-          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.kind === "background" ? BACKGROUND_THREAD : run.threadId, prompt, hop: run.hop, ...(run.kind === "background" ? { fresh: true } : {}), ...(this.chatOfRun(run) ? { conversation: this.chatOfRun(run) } : {}), ...(bg?.model ? { model: bg.model } : {}), ...(effort ? { effort } : {}), ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}), ...(sent ? { credential: { ...sent, ...(fallback ? { model: fallback } : {}) } } : {}) },
+          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId, prompt, hop: run.hop, ...(run.kind ? { fresh: true } : {}), ...(this.chatOfRun(run) ? { conversation: this.chatOfRun(run) } : {}), ...(bg?.model ? { model: bg.model } : {}), ...(effort ? { effort } : {}), ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}), ...(sent ? { credential: { ...sent, ...(fallback ? { model: fallback } : {}) } } : {}) },
         });
       },
       // the prompt couldn't be built (a vault read failed, say): say so like any other failure
@@ -1200,6 +1214,11 @@ export class Hub {
   private voiceEffort(agent: Agent, triggerId: string): string | undefined {
     const trigger = triggerId ? this.store.message(triggerId) : undefined;
     if (!trigger || !isVoiceMessage(trigger)) return undefined;
+    return this.lowEffort(agent);
+  }
+
+  /** "low" when the agent's model offers reasoning effort levels, else nothing (its default). */
+  private lowEffort(agent: Agent): string | undefined {
     const catalog = this.catalogFor(agent);
     const efforts = catalog?.models.find((m) => m.id === (agent.model ?? catalog.defaultModel))?.efforts ?? catalog?.efforts ?? [];
     return efforts.includes("low") ? "low" : undefined;
@@ -1497,9 +1516,10 @@ export class Hub {
     channelId: string,
     threadId: string | null,
     triggerId: string,
-    run?: { id?: string; discussionId: string | null; phase: string | null; kind?: "background" | null; requestedBy?: string | null },
+    run?: { id?: string; discussionId: string | null; phase: string | null; kind?: RunKind | null; requestedBy?: string | null },
   ): Promise<string> {
     const { store } = this;
+    if (run?.kind === "memory" && run.id) return this.autoMemory.prompt({ id: run.id, agentId });
     const agent = store.agent(agentId)!;
     const channel = store.channel(channelId)!;
     // a background check has no message that woke it; it gets its own section instead

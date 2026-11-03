@@ -52,7 +52,14 @@ export interface SaveHints {
   similar: { path: string; title: string }[];
   /** [[links]] it could add (not `links`, which is what the note already links to) */
   linkable: string[];
+  /** [[links]] Wisp added itself because the note linked to nothing (a guarded save) */
+  linked?: string[];
 }
+
+/** A new note sharing this much with an existing one (shared words over all words) says the same thing again. */
+export const DUPLICATE_SCORE = 0.8;
+/** At most this many links go on the "Related:" line Wisp adds to a note that links nothing. */
+const AUTO_LINKS = 3;
 
 /** A run of consecutive lines last changed by the same commit. */
 export interface BlameBlock {
@@ -185,13 +192,15 @@ export class Vault {
   /**
    * Save a note the way agents do (memory_write, or memory_append with `append`): fill in the
    * front matter it's missing (type, created, updated), save, and return hints. `fill: false`
-   * saves the text as given; `allow` limits the hints to notes the writer can read.
+   * saves the text as given; `allow` limits the hints to notes the writer can read. `guard`
+   * keeps the graph tidy: a new note that repeats an existing one is refused (409, naming the
+   * note to update), and a note that links to nothing gets a "Related:" line to its closest notes.
    */
   async save(
     rel: string,
     text: string,
     author: CommitAuthor,
-    opts: { append?: boolean; message?: string; fill?: boolean; allow?: (path: string) => boolean; today?: string } = {},
+    opts: { append?: boolean; message?: string; fill?: boolean; allow?: (path: string) => boolean; today?: string; guard?: boolean } = {},
   ): Promise<NoteMeta & SaveHints> {
     const p = notePath(rel);
     const old = await this.read(p).catch((e) => {
@@ -206,9 +215,28 @@ export class Vault {
       const was = (k: string) => (typeof old?.frontmatter[k] === "string" ? (old.frontmatter[k] as string) : null);
       content = fillFrontmatter(content, { type: was("type") ?? guessType(p), created: was("created") ?? today, updated: today });
     }
-    const hints = this.hints(p, opts.append ? text : content, opts.allow);
+    const found = await this.scoredHints(p, opts.append ? text : content, opts.allow);
+    if (opts.guard && !old && !opts.append) {
+      const same = found.similar.find((s) => s.body >= DUPLICATE_SCORE || (s.sameTitle && s.body >= 0.5));
+      if (same) throw new VaultError(`${same.path} ("${same.title}") already says this. Update that note instead: memory_read it, then memory_write it with your change.`, 409);
+    }
+    // a note that links nothing is an island in the graph: link what it's closest to
+    let linked: string[] = [];
+    if (opts.guard && !opts.append && !isMachinery(p) && !this.linksAnything(p, content)) {
+      linked = [...new Set([...found.linkable, ...found.similar.map((s) => s.link)])].slice(0, AUTO_LINKS);
+      if (linked.length) content = `${content.replace(/\s+$/, "")}\n\nRelated: ${linked.join(", ")}\n`;
+    }
     const meta = await this.write(p, content, author, opts.message ?? (opts.append ? `Append to ${p}` : undefined));
-    return { ...meta, ...(await hints) };
+    const hints: SaveHints = { similar: found.similar.slice(0, 3).map(({ path, title }) => ({ path, title })), linkable: found.linkable.filter((l) => !linked.includes(l)) };
+    return { ...meta, ...hints, ...(linked.length ? { linked } : {}) };
+  }
+
+  /** Whether a note links to another note that exists. */
+  private linksAnything(p: string, content: string): boolean {
+    return parseNote(p, content).links.some((t) => {
+      const to = this.resolveLink(t, p);
+      return !!to && to.toLowerCase() !== p.toLowerCase();
+    });
   }
 
   /**
@@ -216,11 +244,22 @@ export class Vault {
    * into instead of keeping two), and notes the text names without linking them.
    */
   async hints(rel: string, text: string, allow?: (path: string) => boolean, limit = 3): Promise<SaveHints> {
+    const found = await this.scoredHints(rel, text, allow);
+    return { similar: found.similar.slice(0, limit).map(({ path, title }) => ({ path, title })), linkable: found.linkable };
+  }
+
+  /** `hints` with how close each similar note is (`body`: shared words over all words) and the [[link]] that reaches it. */
+  private async scoredHints(rel: string, text: string, allow?: (path: string) => boolean) {
     const p = notePath(rel);
     const parsed = parseNote(p, text);
     const readable = (q: string) => q !== p && !isMachinery(q) && (!allow || allow(q));
+    const notes = this.list(readable);
+    const byName = new Map<string, number>();
+    for (const n of notes) byName.set(normalizeTarget(basename(n.path)), (byName.get(normalizeTarget(basename(n.path))) ?? 0) + 1);
+    // two notes with the same file name need the full path to tell them apart
+    const linkTo = (q: string) => `[[${(byName.get(normalizeTarget(basename(q))) ?? 0) > 1 ? q.replace(/\.md$/i, "") : basename(q)}]]`;
 
-    const similar: { path: string; title: string; score: number }[] = [];
+    const similar: { path: string; title: string; score: number; body: number; sameTitle: boolean; link: string }[] = [];
     const mine = noteWords(`${parsed.title} ${parsed.body}`);
     const myTitle = noteWords(parsed.title);
     if (mine.size >= 3) {
@@ -231,28 +270,24 @@ export class Vault {
         const body = overlap(mine, noteWords(`${o.title} ${o.body}`));
         const title = overlap(myTitle, noteWords(o.title));
         const score = Math.max(body.shared >= 3 ? body.score : 0, title.shared >= 2 ? title.score : 0);
-        if (score >= 0.5) similar.push({ path: hit.path, title: o.title, score });
+        if (score >= 0.5) similar.push({ path: hit.path, title: o.title, score, body: body.shared >= 3 ? body.score : 0, sameTitle: title.shared >= 2 && title.score === 1, link: linkTo(hit.path) });
       }
     }
     similar.sort((a, b) => b.score - a.score);
 
     const linked = new Set(parsed.links);
     const plain = withoutCode(parsed.body).replace(/!?\[\[[^\]]*\]\]/g, " ").toLowerCase();
-    const notes = this.list(readable);
-    const byName = new Map<string, number>();
-    for (const n of notes) byName.set(normalizeTarget(basename(n.path)), (byName.get(normalizeTarget(basename(n.path))) ?? 0) + 1);
     const links: { link: string; weight: number }[] = [];
     for (const n of notes) {
       const name = normalizeTarget(basename(n.path));
       if (linked.has(name) || linked.has(normalizeTarget(n.path))) continue;
       const hit = linkNames(n.path, n.title).filter((m) => mentions(plain, m));
       if (!hit.length) continue;
-      // two notes with the same file name need the full path to tell them apart
-      links.push({ link: `[[${(byName.get(name) ?? 0) > 1 ? n.path.replace(/\.md$/i, "") : basename(n.path)}]]`, weight: Math.max(...hit.map((m) => m.length)) });
+      links.push({ link: linkTo(n.path), weight: Math.max(...hit.map((m) => m.length)) });
     }
     links.sort((a, b) => b.weight - a.weight);
 
-    return { similar: similar.slice(0, limit).map(({ path, title }) => ({ path, title })), linkable: [...new Set(links.map((l) => l.link))].slice(0, 5) };
+    return { similar, linkable: [...new Set(links.map((l) => l.link))].slice(0, 5) };
   }
 
   async remove(rel: string, author: CommitAuthor): Promise<void> {

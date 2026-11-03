@@ -7,23 +7,31 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { WispClient } from "@wisp/sdk";
 import { createWispMcp } from "@wisp/mcp/src/server.ts";
 import { buildHub } from "../src/app.ts";
+import type { Hub } from "../src/hub.ts";
+import { makeRoomFor } from "./room.ts";
 
 let dir: string;
 let close: () => Promise<void>;
 let mcp: Client;
+let hub: Hub;
 let owner: WispClient;
 let agentId: string;
 
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = async (body: Parameters<typeof makeRoomFor>[2]) => (await makeRoomFor(hub, owner, body)).data;
+
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-mcp-"));
-  const { app } = await buildHub({ dataDir: dir, setupCode: false });
+  const built = await buildHub({ dataDir: dir, setupCode: false });
+  const { app } = built;
+  hub = built.hub;
   await app.listen({ port: 0, host: "127.0.0.1" });
   const url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();
 
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WispClient({ url, token: setup.token });
-  await owner.request("POST", "/api/channels", { name: "general" });
+  await room({ name: "general" });
   const agent = await owner.request("POST", "/api/agents", { handle: "scout", name: "Scout", harness: "claude-code" });
   await owner.request("POST", "/api/agents", { handle: "helper", name: "Helper", harness: "codex" });
   agentId = agent.id;
@@ -118,7 +126,8 @@ describe("wisp-mcp", () => {
     await call("memory_write", { path: "shared/projects/apollo-launch-plan.md", content: "# Apollo launch plan\nLaunch the rebuilt site on November 3 after the content freeze and QA pass." });
     const r = await call("memory_write", { path: "shared/projects/apollo-launch.md", content: "# Apollo launch\nWe launch the rebuilt site November 3, after QA and the content freeze." });
     expect(r.text).toBe(
-      "Saved shared/projects/apollo-launch.md.\nSimilar notes (if it's the same idea, merge into one and delete the other):\n- shared/projects/apollo-launch-plan.md (Apollo launch plan)\nMentions you could link: [[apollo]]",
+      // it linked nothing, so Wisp linked what it mentions and the note it's closest to
+      "Saved shared/projects/apollo-launch.md.\nIt linked to nothing, so Wisp added \"Related: [[apollo]], [[apollo-launch-plan]]\". Change it if a better note fits.\nSimilar notes (if it's the same idea, merge into one and delete the other):\n- shared/projects/apollo-launch-plan.md (Apollo launch plan)",
     );
     const saved = (await call("memory_read", { path: "shared/projects/apollo-launch.md" })).text;
     expect(saved).toMatch(/^---\ntype: project\ncreated: \d{4}-\d\d-\d\d\nupdated: \d{4}-\d\d-\d\d\n---\n\n# Apollo launch/);
@@ -144,8 +153,9 @@ describe("wisp-mcp", () => {
     expect((await call("memory_context")).text).toContain("Likes tea, not coffee");
     const p = saved.text.match(/in (\S+)\.$/)![1];
     expect((await call("memory_forget", { path: p })).text).toBe(`Forgot ${p}.`);
-    await owner.request("POST", "/api/channels", { name: "scouts", settings: { team: { nodes: [{ agentId, lead: true, x: 0, y: 0, role: "Scout" }], edges: [], folder: "teams/scouts" } } });
-    expect(JSON.parse((await call("teams_list")).text)[0]).toMatchObject({ channel: "#scouts", leads: ["@scout"], memory: "teams/scouts/", members: [{ agent: "@scout", role: "Scout" }] });
+    const helperId = (await owner.agents()).find((a) => a.handle === "helper")!.id;
+    await owner.request("POST", "/api/channels", { name: "scouts", settings: { team: { nodes: [{ agentId, lead: true, x: 0, y: 0, role: "Scout" }, { agentId: helperId, lead: false, x: 0, y: 0 }], edges: [{ from: agentId, to: helperId }], folder: "teams/scouts" } } });
+    expect(JSON.parse((await call("teams_list")).text)[0]).toMatchObject({ channel: "#scouts", leads: ["@scout"], memory: "teams/scouts/", members: [{ agent: "@scout", role: "Scout" }, { agent: "@helper" }] });
     expect(JSON.parse((await call("agents_list")).text).find((a: any) => a.handle === "@scout").teams).toEqual(["#scouts"]);
   });
 

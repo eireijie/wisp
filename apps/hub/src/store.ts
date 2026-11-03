@@ -2,6 +2,9 @@ import { channelTeams, chartFromSteps, cleanRulePath, hasSteps, isGraphTeam, mig
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
+/** Runs nobody wrote a message for: a background check, or a memory pass after recent work. Both count against the background allowance. */
+export type RunKind = "background" | "memory";
+
 export interface PushPrefs {
   dms?: boolean;
   replies?: boolean;
@@ -999,7 +1002,8 @@ export class Store {
 
   /** `requestedBy`: the person this run is ultimately for (who asked, or who asked the agent that asked); null when nobody did. */
   /** `kind: "background"` is a check the agent does on its own: no trigger message, and nothing posted when it ends. */
-  createRun(r: { agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; hop: number; discussionId?: string; phase?: string; requestedBy?: string | null; kind?: "background" }) {
+  /** `kind: "memory"` is a pass that saves what recent work taught it (AutoMemory): also no trigger message, nothing posted. */
+  createRun(r: { agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; hop: number; discussionId?: string; phase?: string; requestedBy?: string | null; kind?: RunKind }) {
     const runId = id("run");
     this.db
       .prepare("INSERT INTO runs (id, agent_id, channel_id, thread_id, trigger_message_id, status, hop, discussion_id, phase, requested_by, kind, created_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)")
@@ -1013,7 +1017,7 @@ export class Store {
         "SELECT id, agent_id AS agentId, channel_id AS channelId, thread_id AS threadId, trigger_message_id AS triggerMessageId, status, hop, discussion_id AS discussionId, phase, requested_by AS requestedBy, kind, created_at AS createdAt, finished_at AS finishedAt FROM runs WHERE id = ?",
       )
       .get(runId) as
-      | { id: string; agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; status: string; hop: number; discussionId: string | null; phase: string | null; requestedBy: string | null; kind: "background" | null; createdAt: string; finishedAt: string | null }
+      | { id: string; agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; status: string; hop: number; discussionId: string | null; phase: string | null; requestedBy: string | null; kind: RunKind | null; createdAt: string; finishedAt: string | null }
       | undefined;
   }
 
@@ -1086,7 +1090,7 @@ export class Store {
         `SELECT r.id, r.status, r.kind, r.error, r.created_at AS createdAt, r.finished_at AS finishedAt, r.channel_id AS channelId, r.thread_id AS threadId,
                 c.name AS channelName, c.kind AS channelKind, m.body AS trigger
          FROM runs r LEFT JOIN channels c ON c.id = r.channel_id LEFT JOIN messages m ON m.id = r.trigger_message_id
-         WHERE r.agent_id = ? AND NOT (r.kind = 'background' AND r.status = 'queued') ORDER BY r.created_at DESC LIMIT ?`,
+         WHERE r.agent_id = ? AND NOT (r.kind IN ('background','memory') AND r.status = 'queued') ORDER BY r.created_at DESC LIMIT ?`,
       )
       .all(agentId, limit) as {
       id: string;
@@ -1309,7 +1313,7 @@ export class Store {
   /** Background checks for one person since `since`, by every agent in a workspace: what each used. */
   backgroundRunsFor(workspaceId: string, userId: string, since: string) {
     const rows = this.db
-      .prepare("SELECT r.agent_id AS agentId, r.usage_json AS usage FROM runs r JOIN agents a ON a.id = r.agent_id WHERE a.workspace_id = ? AND r.requested_by = ? AND r.kind = 'background' AND r.status != 'queued' AND r.created_at >= ?")
+      .prepare("SELECT r.agent_id AS agentId, r.usage_json AS usage FROM runs r JOIN agents a ON a.id = r.agent_id WHERE a.workspace_id = ? AND r.requested_by = ? AND r.kind IN ('background','memory') AND r.status != 'queued' AND r.created_at >= ?")
       .all(workspaceId, userId, since) as { agentId: string; usage: string | null }[];
     return rows.map((r) => {
       const u = r.usage ? (JSON.parse(r.usage) as Omit<ContextUsage, "at">) : null;
@@ -1329,7 +1333,7 @@ export class Store {
     return this.db
       .prepare(
         `SELECT substr(r.created_at, 1, 14) || printf('%02d', (CAST(substr(r.created_at, 15, 2) AS INTEGER) / 15) * 15) AS slot,
-                r.agent_id AS agentId, r.kind = 'background' AS background, json_extract(r.usage_json, '$.model') AS model,
+                r.agent_id AS agentId, r.kind IN ('background','memory') AS background, json_extract(r.usage_json, '$.model') AS model,
                 COUNT(*) AS runs, SUM(r.status = 'failed') AS failed,
                 SUM(CASE WHEN ${tokenSql} THEN COALESCE(json_extract(r.usage_json, '$.inputTokens'), 0) + COALESCE(json_extract(r.usage_json, '$.outputTokens'), 0) ELSE ? END) AS tokens,
                 SUM(NOT ${tokenSql}) AS guessed

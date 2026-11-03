@@ -756,8 +756,9 @@ function guessMime(p: string): string {
 }
 
 /** The hints after a save, in a few short lines ("" when there are none). */
-export function saveHints(r: { similar?: { path: string; title: string }[]; linkable?: string[] } | null | undefined): string {
+export function saveHints(r: { similar?: { path: string; title: string }[]; linkable?: string[]; linked?: string[] } | null | undefined): string {
   const out: string[] = [];
+  if (r?.linked?.length) out.push(`It linked to nothing, so Wisp added "Related: ${r.linked.join(", ")}". Change it if a better note fits.`);
   if (r?.similar?.length) out.push(`Similar notes (if it's the same idea, merge into one and delete the other):\n${r.similar.map((s) => `- ${s.path} (${s.title})`).join("\n")}`);
   if (r?.linkable?.length) out.push(`Mentions you could link: ${r.linkable.join(", ")}`);
   return out.length ? `\n${out.join("\n")}` : "";

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { TEAM_TEMPLATES, stepsProblem, teamFromTemplate, type TeamFlow } from "@wisp/core";
 import { buildHub } from "../src/app.ts";
+import { makeRoomAs } from "./room.ts";
 import type { Hub } from "../src/hub.ts";
 
 let dir: string;
@@ -159,7 +160,8 @@ describe("a stepped team at work", () => {
 
 describe("an agent setting up a team from a description", () => {
   it("names roles and steps in words and handles; Wisp turns them into a chart", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "described" })).data;
+    // a plain chat for the agent to turn into a team (the API only makes teams of two or more)
+    const ch = (await makeRoomAs(hub, base, owner, { name: "described" })).data;
     // the first agent is the workspace's lead
     const body = {
       roles: [

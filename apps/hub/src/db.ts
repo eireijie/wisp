@@ -249,6 +249,12 @@ CREATE TABLE IF NOT EXISTS changes (
   created_at TEXT NOT NULL, undone_at TEXT
 );
 CREATE INDEX IF NOT EXISTS changes_by_user ON changes(workspace_id, user_id, created_at);
+-- what each chat run was asked and which tools it used, so the hub sees an agent doing the same kind of task again
+CREATE TABLE IF NOT EXISTS task_shapes (
+  run_id TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  words TEXT NOT NULL, tools TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_shapes_by_agent ON task_shapes(agent_id, created_at);
 CREATE TABLE IF NOT EXISTS model_connections (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

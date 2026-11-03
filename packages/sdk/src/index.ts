@@ -267,4 +267,6 @@ export interface SavedNote {
   path: string;
   similar?: { path: string; title: string }[];
   linkable?: string[];
+  /** [[links]] Wisp added because the note linked to nothing */
+  linked?: string[];
 }

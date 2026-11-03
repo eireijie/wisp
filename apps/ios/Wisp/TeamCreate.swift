@@ -28,12 +28,15 @@ struct NewChannel: View {
   @State private var model = NewTeamDraft()
   @State private var path: [NewTeamRoute] = []
   @State private var action = FormAction()
+  @State private var addingAgent = false
 
   private var slug: String { ManagementText.channelName(model.name) }
   /** the name as the person typed it, for headings; the slug is only what gets sent */
   private var shownName: String { let t = model.name.trimmingCharacters(in: .whitespacesAndNewlines); return t.isEmpty ? slug : t }
   private var exists: Bool { store.channels.contains { $0.name == slug } }
   private var validName: Bool { slug.range(of: "^[a-z0-9][a-z0-9_-]{0,79}$", options: .regularExpression) != nil && !exists && model.topic.count <= 250 }
+  /** a team needs at least two agents; with fewer, the person is sent to make another */
+  private var needsAgents: Bool { store.agents.count < ChannelTeam.minAgents }
 
   var body: some View {
     NavigationStack(path: $path) {
@@ -57,6 +60,7 @@ struct NewChannel: View {
         }
     }
     .interactiveDismissDisabled(action.busy)
+    .sheet(isPresented: $addingAgent) { AddAgent { _ in } }
     .presentationBackground(Palette.sheet)
   }
 
@@ -74,6 +78,16 @@ struct NewChannel: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 22) {
           Text("Step 1 of 2 · Name and description").font(.system(size: 15)).foregroundStyle(Palette.muted).padding(.horizontal, 18)
+          if needsAgents {
+            VStack(alignment: .leading, spacing: 6) {
+              Text("A team needs at least \(ChannelTeam.minAgents) agents, and you have \(store.agents.isEmpty ? "none" : String(store.agents.count)).").font(.system(size: 15)).foregroundStyle(Palette.text)
+              Button(store.agents.isEmpty ? "Make an agent" : "Make another agent") { addingAgent = true }
+                .font(.system(size: 15)).foregroundStyle(Palette.blue).accessibilityIdentifier("create-add-agent")
+            }
+            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+            .accessibilityIdentifier("create-needs-agents")
+          }
           VStack(alignment: .leading, spacing: 8) {
             Text("Name").font(.system(size: 15)).foregroundStyle(Palette.muted).padding(.horizontal, 18)
             TextField("Release crew", text: $model.name).textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -100,7 +114,7 @@ struct NewChannel: View {
       }
       .scrollDismissesKeyboard(.interactively)
       Button { path.append(.start) } label: { Text("Next").frame(maxWidth: .infinity) }
-        .primaryButton().disabled(!validName).padding(.horizontal, 36).padding(.vertical, 10)
+        .primaryButton().disabled(!validName || needsAgents).padding(.horizontal, 36).padding(.vertical, 10)
         .accessibilityIdentifier("create-next")
     }
     .background(Palette.sheet.ignoresSafeArea())
@@ -158,12 +172,6 @@ struct NewChannel: View {
             startRow("Browse templates", "\(TeamTemplate.builtIn.count) ready-made teams.", "square.grid.2x2", "start-templates") { path.append(.templates) }
             startRow("Have an agent build it", "Say it in one sentence.", "sparkles", "start-agent") { path.append(.describe) }
           }
-          Button {
-            action.run { try await create(team: nil) }
-          } label: {
-            Text("Skip, set it up later").font(.system(size: 15)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity, minHeight: 50)
-          }
-          .buttonStyle(.plain).disabled(action.busy).accessibilityIdentifier("start-skip")
           InlineError(error: action.error)
         }
         .padding(.horizontal, 18).padding(.top, 10)
@@ -377,7 +385,7 @@ private struct PreviewPage: View {
           .padding(16).frame(maxWidth: .infinity, alignment: .leading)
           .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
     .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
-          if let problem = team.stepsProblem ?? error {
+          if let problem = team.createProblem ?? error {
             Text(problem).font(.system(size: 15)).foregroundStyle(Palette.red).padding(.horizontal, 6)
           }
         }
@@ -386,7 +394,7 @@ private struct PreviewPage: View {
     } bottom: {
       HStack(spacing: 12) {
         Button(action: edit) { Text("Edit").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.large).accessibilityIdentifier("preview-edit")
-        Button(action: create) { Text("Create team").frame(maxWidth: .infinity) }.primaryButton().disabled(busy || team.stepsProblem != nil)
+        Button(action: create) { Text("Create team").frame(maxWidth: .infinity) }.primaryButton().disabled(busy || team.createProblem != nil)
           .accessibilityIdentifier("preview-create")
       }
       .padding(.horizontal, 24).padding(.vertical, 10)
@@ -464,6 +472,9 @@ private struct ReviewPage: View {
     .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
           }
           .buttonStyle(.plain)
+          if let problem = team.createProblem, error == nil {
+            Text(problem).font(.system(size: 15)).foregroundStyle(Palette.red).padding(.horizontal, 6).accessibilityIdentifier("review-problem")
+          }
           if let problem = error {
             VStack(alignment: .leading, spacing: 4) {
               Label("Couldn't create it", systemImage: "exclamationmark.circle").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.red)
@@ -479,7 +490,7 @@ private struct ReviewPage: View {
     } bottom: {
       HStack(spacing: 12) {
         Button(action: back) { Text("Edit steps").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.large)
-        Button(action: create) { Text("Create team").frame(maxWidth: .infinity) }.primaryButton().disabled(busy || team.stepsProblem != nil)
+        Button(action: create) { Text("Create team").frame(maxWidth: .infinity) }.primaryButton().disabled(busy || team.createProblem != nil)
           .accessibilityIdentifier("review-create")
       }
       .padding(.horizontal, 24).padding(.vertical, 10)
