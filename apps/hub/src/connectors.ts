@@ -58,6 +58,12 @@ export class ConnectorStore {
     return r?.kind === "mcp-http" && r.url ? fillTemplate(r.url, JSON.parse(r.env_json)) : null;
   }
 
+  /** A connector's own values, secrets in the clear: for the hub itself (watches), never for an API answer. */
+  values(connectorId: string): Record<string, string> | null {
+    const r = this.row(connectorId);
+    return r?.enabled ? (JSON.parse(r.env_json) as Record<string, string>) : null;
+  }
+
   /** The headers a remote connector sends, values filled in (no sign-in token). */
   serverHeaders(connectorId: string): Record<string, string> {
     const r = this.row(connectorId);

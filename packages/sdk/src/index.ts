@@ -1,4 +1,4 @@
-import type { Agent, Allowance, Approval, Channel, ComputerAction, ConnectionModel, HarnessSettings, HarnessSettingsChange, Message, ModelConnection, ModelLogin, ModelProvider, Routine, Followup, ChatLoop, Skill } from "@wisp/core";
+import type { Agent, Allowance, Approval, Channel, ComputerAction, ConnectionModel, HarnessSettings, HarnessSettingsChange, Message, ModelConnection, ModelLogin, ModelProvider, Routine, Followup, ChatLoop, Skill, Watch, WatchService, WatchServiceInfo } from "@wisp/core";
 
 export interface WispClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
@@ -190,8 +190,20 @@ export class WispClient {
     return this.request<Approval>("POST", "/api/approvals", { summary, details });
   }
   /** Write to the person this agent works for, in their DM; it reaches their phone by push. */
-  messagePerson(text: string, fileIds: string[] = [], replies: string[] = []) {
-    return this.request<{ messageId: string; channelId: string }>("POST", "/api/message-person", { text, fileIds, replies });
+  messagePerson(text: string, fileIds: string[] = [], replies: string[] = [], about?: string) {
+    return this.request<{ messageId: string; channelId: string }>("POST", "/api/message-person", { text, fileIds, replies, ...(about ? { about } : {}) });
+  }
+  /** Watches on people's apps: an agent sees the ones it's on; a person sees theirs. Both get what can be watched. */
+  watches() {
+    return this.request<{ watches: (Watch & { estimate: { checksPerDay: number; tokensPerDay: number; shareOfAllowance: number | null; note: string } })[]; services: WatchServiceInfo[] }>("GET", "/api/watches");
+  }
+  /** Start watching an app for the person (an agent watches for itself; a person names agentIds). The first look happens now, so a bad key fails here. */
+  startWatch(w: { service: WatchService; connectorId?: string; key?: Record<string, string>; config?: Record<string, string | string[]>; label?: string; everyMinutes?: number; agentIds?: string[] }) {
+    return this.request<Watch & { backgroundOn: boolean; estimate: { note: string } }>("POST", "/api/watches", w);
+  }
+  /** An agent takes itself off a watch; a person stops it altogether. */
+  stopWatch(watchId: string) {
+    return this.request<{ ok: boolean }>("DELETE", `/api/watches/${watchId}`);
   }
   /** This agent's background settings for the person it works for, the organization's mods, and today's allowance. */
   mySettings() {
