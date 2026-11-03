@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { Bell, BookOpen, ChevronLeft, ChevronRight, Cpu, Database, Gauge, Info, KeyRound, Link2, Mic, Monitor, Palette, Plug, Settings, ShieldCheck, SlidersHorizontal, Smartphone, Sparkles, Store, User, Users, Wifi, Wrench, Building2, Bot, SquareTerminal, Brain, Wand2 } from "lucide-react";
+import { Bell, BookOpen, ChevronLeft, ChevronRight, Cpu, Database, Gauge, HardDrive, Info, KeyRound, Link2, Mic, Monitor, Palette, Plug, Settings, ShieldCheck, SlidersHorizontal, Smartphone, Sparkles, Store, User, Users, Wifi, Wrench, Building2, Bot, SquareTerminal, Brain, Wand2 } from "lucide-react";
 import { resolveFeatures, type Features } from "@wisp/core";
 import { useStore } from "../store.ts";
 import { go, href, type SettingsPage } from "../router.ts";
@@ -16,6 +16,7 @@ import { SkillsPage } from "./settings/skills.tsx";
 import { DevicesPage } from "./settings/devices.tsx";
 import { MobilePage } from "./settings/mobile.tsx";
 import { LoginsPage } from "./settings/logins.tsx";
+import { StoragePage } from "./settings/storage.tsx";
 import { UsagePage } from "./settings/usage.tsx";
 import { AskAndChanges } from "./settings/changes.tsx";
 import { AgentDefaultsPage } from "./settings/defaults.tsx";
@@ -62,6 +63,7 @@ const NAV: NavSection[] = [
       { id: "harnesses", label: "Harnesses", icon: ic(SquareTerminal), noGuests: true },
       { id: "runtimes", label: "Harness setup", icon: ic(Cpu), noGuests: true },
       { id: "logins", label: "Logins", icon: ic(KeyRound), noGuests: true },
+      { id: "storage", label: "Storage", icon: ic(HardDrive), feature: "storage", noGuests: true },
       { id: "apps", label: "Connected apps", icon: ic(Store), noGuests: true },
       { id: "skills", label: "Skills", icon: ic(Wand2), noGuests: true },
       { id: "connections", label: "Outside agents", icon: ic(Plug), noGuests: true },
@@ -122,6 +124,7 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   memory: () => <MemoryPage />,
   computers: () => <ComputersPage />,
   logins: () => <LoginsPage />,
+  storage: () => <StoragePage />,
   connections: () => <ConnectionsPage />,
   skills: () => <SkillsPage />,
   data: () => <DataPage />,

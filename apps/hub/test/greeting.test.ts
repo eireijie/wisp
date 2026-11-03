@@ -7,7 +7,7 @@ import { WispClient } from "@wisp/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
-import { SETUP_REPLIES, greetNewAgent, setupNotePath } from "../src/greeting.ts";
+import { SETUP_REPLIES, greetNewAgent, recordSetupStep, setupNotePath } from "../src/greeting.ts";
 
 let dir: string;
 let close: () => Promise<void>;
@@ -134,8 +134,8 @@ describe("a new agent speaks first", () => {
     // no computer: it says so and offers to get one, instead of trying to open sites
     expect(prompt).toContain("You don't have a computer");
     expect(prompt).toContain("Agents → you → Computer");
-    // watches only after a yes, through the agent's own tool
-    expect(prompt).toContain("Once they say yes to watching an account and you have watch_start");
+    // watches only after a yes
+    expect(prompt).toContain("Only after they say yes to watching, in the reply to that yes, list the accounts in setup_step watch");
     expect(said(id).at(-1)!.body).toBe("Managing ads, social media posts, or both?");
 
     await answer(id, "Both");
@@ -183,6 +183,38 @@ describe("a new agent speaks first", () => {
     expect(prompt).toContain("Settings → Logins");
     expect(prompt).toContain("Never ask for a password in chat");
     expect(prompt).not.toContain("You don't have a computer");
+  });
+
+  it("starts watches for the accounts only in its reply to the person's yes", async () => {
+    const id = await make("kit");
+    const ws = hub.store.agent(id)!.workspaceId;
+    const ads = { service: "browser" as const, label: "Google Ads", url: "https://ads.google.com", lookFor: "campaigns paused or over budget" };
+    // not answering anyone (a background check, a stray call): refused
+    const { token } = await owner.request<{ token: string }>("POST", `/api/agents/${id}/token`);
+    await expect(new WispClient({ url, token }).setupStep({ watch: [ads] })).rejects.toThrow(/reply to their yes/);
+    // answering another agent's message: refused too
+    const bot = hub.postMessage({ channelId: dmOf(id).id, author: { kind: "agent", id }, body: "Want me to keep an eye on Google Ads?", route: false });
+    expect(await recordSetupStep(hub, hub.store.agent(id)!, { watch: [ads] }, bot)).toEqual({ error: expect.stringMatching(/ask them first/) });
+    expect(hub.watches.list(ws, { agentId: id })).toEqual([]);
+
+    // a browser watch needs a computer: Wisp says why instead of pretending
+    const yes = hub.postMessage({ channelId: dmOf(id).id, author: { kind: "user", id: me }, body: "Yes, watch them", route: false });
+    let r = await recordSetupStep(hub, hub.store.agent(id)!, { watch: [ads] }, yes);
+    expect(r).toMatchObject({ watched: [{ label: "Google Ads", watching: false, why: expect.stringMatching(/needs its own computer/) }] });
+
+    // with one, the yes starts the watch, once
+    hub.watches.stop();
+    const comp = hub.store.createComputer({ workspaceId: ws, name: "Kit's desk", kind: "vm", nodeId, config: { cpus: 2, memoryGb: 4 }, status: "ready" });
+    hub.store.updateAgent(id, { computerId: comp.id });
+    r = await recordSetupStep(hub, hub.store.agent(id)!, { step: "checkins", summary: "Mornings", watch: [ads] }, yes);
+    expect(r).toMatchObject({ watched: [{ label: "Google Ads", watching: true }] });
+    await recordSetupStep(hub, hub.store.agent(id)!, { watch: [ads] }, yes);
+    const all = hub.watches.list(ws, { agentId: id });
+    hub.store.updateAgent(id, { computerId: null });
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({ service: "browser", userId: me, agentIds: [id], config: { url: "https://ads.google.com", lookFor: "campaigns paused or over budget" } });
+    expect(setupOf(id).steps.checkins).toBe("Mornings; Watching Google Ads");
+    for (const w of all) hub.watches.remove(w.id);
   });
 
   it("doesn't offer a role to an agent made for one", async () => {

@@ -49,6 +49,7 @@ extension FeatureKey {
     case .buddy: .indigo
     case .invite: .gray
     case .remoteDesktop: .orange
+    case .storage: .cyan
     }
   }
 }

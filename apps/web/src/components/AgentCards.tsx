@@ -7,6 +7,7 @@ import { usePrefs, useStore } from "../store.ts";
 import { undoChange, useChanges } from "../changes.ts";
 import { href } from "../router.ts";
 import { ComputerMini } from "../views/ComputersView.tsx";
+import { StorageLogo } from "../views/settings/storage.tsx";
 import { Pill, cx, clockTime } from "./ui.tsx";
 
 /** An agent's request on its computer ("Sign in to Zendesk…"): a card that takes you there; with no request, the screen live. */
@@ -73,6 +74,7 @@ export function ApprovalCard({ id }: { id: string }) {
   }, [id, approval]);
   if (!approval) return null;
   if (approval.login) return <LoginApprovalCard approval={approval} />;
+  if (approval.storage) return <StorageApprovalCard approval={approval} />;
   const decide = async (approve: boolean) => {
     setBusy(true);
     setError(null);
@@ -175,6 +177,75 @@ function LoginApprovalCard({ approval }: { approval: Approval }) {
         )
       ) : (
         <Decided ok={approval.status === "approved"} text={approval.status === "approved" ? `${decider} approved this` : `${decider} said not now`} at={approval.decidedAt} />
+      )}
+      {error && <p className="mt-2 text-xs text-bad">{error}</p>}
+    </ChatCard>
+  );
+}
+
+const size = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+
+/**
+ * "Can I upload this?" for a file on the person's storage (the Storage mod): the file, where it
+ * goes, and Allow / Always in this folder / No. Replacing says Replace; deleting says Delete and
+ * never offers Always. Only owners answer.
+ */
+function StorageApprovalCard({ approval }: { approval: Approval }) {
+  const req = approval.storage!;
+  const me = useStore((s) => s.me);
+  const decider = useStore((s) => (approval.decidedBy === s.me?.user.id ? "You" : (s.members.find((m) => m.id === approval.decidedBy)?.name ?? "Someone")));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pending = approval.status === "pending";
+  const name = req.path.slice(req.path.lastIndexOf("/") + 1);
+  const folder = req.path.slice(1, req.path.lastIndexOf("/")) || "top folder";
+  const verb = { upload: "Upload", replace: "Replace", delete: "Delete", mkdir: "Make folder" }[req.action];
+  const decide = async (approve: boolean, always = false) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const a = await api("POST", `/api/approvals/${approval.id}/decide`, { approve, always });
+      useStore.setState((s) => ({ approvals: { ...s.approvals, [approval.id]: a } }));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <ChatCard icon={<LockKeyhole size={13} />} label="Asking for your OK" ariaLabel="Storage request">
+      <div className="mt-2.5 flex items-center gap-3">
+        <StorageLogo service={req.service} size={36} />
+        <span className="min-w-0">
+          <span className="block truncate text-body font-medium">
+            {verb} {name}
+          </span>
+          <span className="block truncate text-[13px] text-muted">
+            {req.connectionName} › {folder}
+            {req.size !== null ? ` · ${size(req.size)}` : ""}
+          </span>
+        </span>
+      </div>
+      {pending ? (
+        me?.role !== "owner" ? (
+          <p className="mt-2.5 text-xs text-muted">Waiting for an owner to answer.</p>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button disabled={busy} onClick={() => decide(true)} className={cx("h-10 rounded-full px-4 text-sm font-medium disabled:opacity-50", req.action === "delete" ? "bg-bad text-white" : "bg-accent text-accent-ink")}>
+              {req.action === "delete" ? "Delete" : req.action === "replace" ? "Replace" : "Allow"}
+            </button>
+            {req.action !== "delete" && (
+              <button disabled={busy} onClick={() => decide(true, true)} className="h-10 rounded-full border border-control-line bg-control px-4 text-sm font-medium disabled:opacity-50">
+                Always in this folder
+              </button>
+            )}
+            <button disabled={busy} onClick={() => decide(false)} className="h-10 rounded-full border border-control-line bg-control px-4 text-sm font-medium disabled:opacity-50">
+              No
+            </button>
+          </div>
+        )
+      ) : (
+        <Decided ok={approval.status === "approved"} text={approval.status === "approved" ? `${decider} allowed this` : `${decider} said no`} at={approval.decidedAt} />
       )}
       {error && <p className="mt-2 text-xs text-bad">{error}</p>}
     </ChatCard>

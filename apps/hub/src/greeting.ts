@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { harnessInfo, harnessLabel, SETUP_STEPS, type Agent, type AgentSetup, type Message, type SetupStep } from "@wisp/core";
+import { harnessInfo, harnessLabel, SETUP_STEPS, WATCH_SERVICES, type Agent, type AgentSetup, type Message, type SetupStep, type WatchService } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import type { Hub } from "./hub.ts";
 
@@ -57,7 +57,7 @@ const GUIDE: Record<SetupStep, StepGuide> = {
   checkins: {
     ask: "How often should I check in with you, and are there hours I should stay quiet?",
     how: () =>
-      `Ask how often to check in and when to stay quiet, and offer to keep an eye on the accounts they named. Apply it with settings_read then settings_change (background work on, how often, quiet hours, what to keep an eye on). Once they say yes to watching an account and you have watch_start, start a watch for it (service "browser" with its url for sites like Google Ads or Instagram). If they'd rather you only answer when asked, turn background work off. Save it as a preference.`,
+      `Ask how often to check in and when to stay quiet, and offer to keep an eye on the accounts they named ("Want me to keep an eye on Google Ads and Instagram?"). Apply the check-ins with settings_read then settings_change (background work on, how often, quiet hours). Only after they say yes to watching, in the reply to that yes, list the accounts in setup_step watch: the app's service (${WATCH_SERVICES.filter((s) => s !== "browser").join(", ")}), or "browser" with the site's url and what to look for (Google Ads, Instagram and other sites). Wisp starts the watches and tells you which worked; say so in a line. Don't watch anything they didn't say yes to. If they'd rather you only answer when asked, turn background work off. Save it as a preference.`,
   },
   boundaries: {
     ask: "Is there anything I should never do without asking you first?",
@@ -169,10 +169,18 @@ export function recordSetupReply(hub: Hub, msg: Message): void {
  * The agent finished a step (setup_step). A role the person agreed to becomes the agent's role;
  * the accounts they named go to watchSetupAccounts.
  */
-export function recordSetupStep(hub: Hub, agent: Agent, step: { step?: SetupStep; summary?: string; role?: string; accounts?: string[]; done?: boolean }): AgentSetup | { error: string } {
+export async function recordSetupStep(
+  hub: Hub,
+  agent: Agent,
+  step: { step?: SetupStep; summary?: string; role?: string; accounts?: string[]; watch?: SetupWatch[]; done?: boolean },
+  /** the message the agent is answering: watches start only in the reply to the person's own yes */
+  answering?: Message,
+): Promise<{ setup: AgentSetup; watched: WatchResult[] } | { error: string }> {
   const { store } = hub;
   const s = activeSetup(agent);
   if (!s) return { error: "your setup is already over; just carry on" };
+  if (step.watch?.length && !(answering && answering.author.kind === "user" && answering.author.id === s.userId && answering.channelId === s.channelId))
+    return { error: "watches start only in your reply to their yes in your DM; ask them first" };
   const steps = { ...s.steps };
   const role = step.role?.trim().slice(0, 60);
   if (role) {
@@ -183,21 +191,48 @@ export function recordSetupStep(hub: Hub, agent: Agent, step: { step?: SetupStep
   const accounts = step.accounts?.map((a) => a.trim().slice(0, 80)).filter(Boolean).slice(0, 30);
   if (accounts?.length) steps.accounts = accounts.join(", ");
   if (step.step) steps[step.step] = (step.summary?.trim() || steps[step.step] || "done").slice(0, STEP_CHARS);
+  const watched = step.watch?.length ? await watchSetupAccounts(hub, agent, s.userId, step.watch) : [];
+  const ok = watched.filter((w) => w.watching && !steps.checkins?.includes(w.label)).map((w) => w.label);
+  if (ok.length) steps.checkins = [steps.checkins, `Watching ${ok.join(", ")}`].filter(Boolean).join("; ").slice(0, STEP_CHARS);
   const next: AgentSetup = { ...s, steps, ...(accounts?.length ? { accounts } : {}), done: !!step.done };
   store.updateAgent(agent.id, { settings: { setup: next } });
-  if (accounts?.length) watchSetupAccounts(hub, agent, s.userId, accounts);
   void saveSetupNote(hub, agent.id).catch(() => undefined);
-  return next;
+  return { setup: next, watched };
 }
 
+/** An account the person said yes to watching, as the agent names it. */
+export interface SetupWatch {
+  service: WatchService;
+  label?: string;
+  /** browser watches: the site, and what to look for there */
+  url?: string;
+  lookFor?: string;
+}
+
+export type WatchResult = { label: string; watching: true; watchId: string } | { label: string; watching: false; why: string };
+
 /**
- * The accounts a person named at setup, for whatever keeps an eye on them for this agent.
- * Hook for the connector watchers (PR 74, "connector-events"): watches need the person's yes, so
- * the agent starts them itself with watch_start during the check-ins step; this is where the hub
- * can act on the list on its own (suggest a watch service per account, say). Until then the agent
- * keeps an eye on them through its background work, whose focus the setup asks it to set.
+ * Start watching the accounts the person said yes to (recordSetupStep only calls this in the reply
+ * to their own message). Each becomes a watch (watches.ts) for this agent and this person; one
+ * this agent already has for the same app or site is kept, not doubled.
  */
-export function watchSetupAccounts(_hub: Hub, _agent: Agent, _userId: string, _accounts: string[]): void {}
+export async function watchSetupAccounts(hub: Hub, agent: Agent, userId: string, wanted: SetupWatch[]): Promise<WatchResult[]> {
+  const have = hub.watches.list(agent.workspaceId, { agentId: agent.id, userId });
+  const out: WatchResult[] = [];
+  for (const w of wanted.slice(0, 10)) {
+    const label = (w.label?.trim() || (w.service === "browser" ? w.url ?? "a site" : w.service)).slice(0, 80);
+    const same = have.find((h) => h.service === w.service && (w.service !== "browser" || h.config.url === w.url));
+    if (same) {
+      out.push({ label, watching: true, watchId: same.id });
+      continue;
+    }
+    const config = w.service === "browser" ? { url: w.url?.trim() ?? "", lookFor: w.lookFor?.trim() ?? "" } : undefined;
+    const made = await hub.watches.create({ workspaceId: agent.workspaceId, userId, agentIds: [agent.id], service: w.service, config, label: w.label?.trim() || undefined, createdBy: agent.id });
+    out.push("error" in made ? { label, watching: false, why: made.error } : { label: made.label, watching: true, watchId: made.id });
+    if (!("error" in made)) have.push(made);
+  }
+  return out;
+}
 
 /** What the person said at setup, kept in the agent's own notes too, where they can read and fix it. */
 export const setupNotePath = (agentId: string) => `agents/${agentId}/First chat.md`;
@@ -277,13 +312,22 @@ export function registerSetupApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     const agent = hub.store.agent(c.actor.id);
     if (!agent) return reply.code(404).send({ error: "agent not found" });
     const body = h.parse(
-      z.object({ step: z.enum(SETUP_STEPS).optional(), summary: z.string().max(2000).optional(), role: z.string().max(200).optional(), accounts: z.array(z.string().max(200)).max(50).optional(), done: z.boolean().optional() }),
+      z.object({
+        step: z.enum(SETUP_STEPS).optional(),
+        summary: z.string().max(2000).optional(),
+        role: z.string().max(200).optional(),
+        accounts: z.array(z.string().max(200)).max(50).optional(),
+        watch: z.array(z.object({ service: z.enum(WATCH_SERVICES), label: z.string().max(80).optional(), url: z.string().max(2000).optional(), lookFor: z.string().max(500).optional() })).max(10).optional(),
+        done: z.boolean().optional(),
+      }),
       req.body,
       reply,
     );
     if (!body) return;
-    const r = recordSetupStep(hub, agent, body);
+    const run = hub.runFor(agent.id, req.headers["x-wisp-run"]);
+    const answering = run?.triggerMessageId ? hub.store.message(run.triggerMessageId) : undefined;
+    const r = await recordSetupStep(hub, agent, body, answering);
     if ("error" in r) return reply.code(409).send(r);
-    return { done: r.done, left: remaining(r) };
+    return { done: r.setup.done, left: remaining(r.setup), watched: r.watched };
   });
 }

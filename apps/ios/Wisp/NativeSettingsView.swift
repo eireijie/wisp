@@ -38,6 +38,9 @@ struct NativeSettingsView: View {
           NavigationLink { HarnessesView() } label: { RowLabel(title: "Harnesses") }.accessibilityIdentifier("settings-harnesses")
           NavigationLink { SkillsView() } label: { RowLabel(title: "Skills") }.accessibilityIdentifier("settings-skills")
           NavigationLink { LoginsView() } label: { RowLabel(title: "Logins") }.accessibilityIdentifier("settings-logins")
+          if store.features.storage {
+            NavigationLink { StorageView() } label: { RowLabel(title: "Storage") }.accessibilityIdentifier("settings-storage")
+          }
           NavigationLink { AgentRuntimesView() } label: { RowLabel(title: "Harness setup") }.accessibilityIdentifier("settings-runtimes")
         }
       }

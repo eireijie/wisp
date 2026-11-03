@@ -1,4 +1,4 @@
-import type { Agent, Allowance, Approval, Channel, ComputerAction, ConnectionModel, HarnessSettings, HarnessSettingsChange, Message, ModelConnection, ModelLogin, ModelProvider, Routine, Followup, ChatLoop, Skill } from "@wisp/core";
+import type { Agent, Allowance, Approval, Channel, ComputerAction, ConnectionModel, HarnessSettings, HarnessSettingsChange, Message, ModelConnection, ModelLogin, ModelProvider, Routine, Followup, ChatLoop, Skill, StorageEntry, StorageFolder, StorageService, Watch, WatchService, WatchServiceInfo } from "@wisp/core";
 
 export interface WispClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
@@ -147,6 +147,28 @@ export class WispClient {
   fillLogin(site: string, account?: string) {
     return this.request<{ status: "filled" | "not_filled" | "asked"; message: string; approvalId?: string }>("POST", "/api/logins/fill", { site, ...(account ? { account } : {}) });
   }
+  /** The storage this agent may use (the Storage mod), with its folders; empty when it has none. */
+  storageMine() {
+    return this.request<{ id: string; name: string; service: StorageService; folders: StorageFolder[] }[]>("GET", "/api/storage/mine");
+  }
+  /** What's in a folder on a storage, or (without a path) the folders the agent may use there. */
+  storageList(storage: string, path?: string) {
+    return this.request<{ connection: string; path: string; entries: StorageEntry[] } | { connection: string; folders: StorageFolder[] }>("POST", "/api/storage/agent/list", { storage, ...(path ? { path } : {}) });
+  }
+  storageRead(storage: string, path: string) {
+    return this.request<{ name: string; mime: string; size: number; text?: string; base64?: string }>("POST", "/api/storage/agent/read", { storage, path });
+  }
+  storageSearch(storage: string, query: string, path?: string) {
+    return this.request<StorageEntry[]>("POST", "/api/storage/agent/search", { storage, query, ...(path ? { path } : {}) });
+  }
+  /** Copy a file from a storage into Wisp; returns the Wisp file. */
+  storageToWisp(storage: string, path: string) {
+    return this.request<{ id: string; name: string; size: number; mime: string }>("POST", "/api/storage/agent/download", { storage, path });
+  }
+  /** Put a Wisp file on a storage, make a folder or delete something: done, or a person is asked first. */
+  storageChange(storage: string, action: "put" | "delete" | "mkdir", path: string, fileId?: string) {
+    return this.request<{ status: "done" | "asked"; message: string; approvalId?: string }>("POST", "/api/storage/agent/change", { storage, action, path, ...(fileId ? { fileId } : {}) });
+  }
   /** Ask a person to do something on this agent's computer (sign in, enter a code). */
   computerHelp(request: string) {
     return this.request<{ ok: boolean; messageId: string }>("POST", "/api/computers/mine/help", { request });
@@ -190,8 +212,20 @@ export class WispClient {
     return this.request<Approval>("POST", "/api/approvals", { summary, details });
   }
   /** Write to the person this agent works for, in their DM; it reaches their phone by push. */
-  messagePerson(text: string, fileIds: string[] = [], replies: string[] = []) {
-    return this.request<{ messageId: string; channelId: string }>("POST", "/api/message-person", { text, fileIds, replies });
+  messagePerson(text: string, fileIds: string[] = [], replies: string[] = [], about?: string) {
+    return this.request<{ messageId: string; channelId: string }>("POST", "/api/message-person", { text, fileIds, replies, ...(about ? { about } : {}) });
+  }
+  /** Watches on people's apps: an agent sees the ones it's on; a person sees theirs. Both get what can be watched. */
+  watches() {
+    return this.request<{ watches: (Watch & { estimate: { checksPerDay: number; tokensPerDay: number; shareOfAllowance: number | null; note: string } })[]; services: WatchServiceInfo[] }>("GET", "/api/watches");
+  }
+  /** Start watching an app for the person (an agent watches for itself; a person names agentIds). The first look happens now, so a bad key fails here. */
+  startWatch(w: { service: WatchService; connectorId?: string; key?: Record<string, string>; config?: Record<string, string | string[]>; label?: string; everyMinutes?: number; agentIds?: string[] }) {
+    return this.request<Watch & { backgroundOn: boolean; estimate: { note: string } }>("POST", "/api/watches", w);
+  }
+  /** An agent takes itself off a watch; a person stops it altogether. */
+  stopWatch(watchId: string) {
+    return this.request<{ ok: boolean }>("DELETE", `/api/watches/${watchId}`);
   }
   /** This agent's background settings for the person it works for, the organization's mods, and today's allowance. */
   mySettings() {
@@ -224,8 +258,8 @@ export class WispClient {
   chatStatus(s: { status: ChatLoop["status"]; summary?: string; did?: string; saved?: string; next?: string; checkBackInMinutes?: number }) {
     return this.request<ChatLoop>("POST", "/api/chat-status", s);
   }
-  setupStep(s: { step?: string; summary?: string; role?: string; accounts?: string[]; done?: boolean }) {
-    return this.request<{ done: boolean; left: string[] }>("POST", "/api/setup-step", s);
+  setupStep(s: { step?: string; summary?: string; role?: string; accounts?: string[]; watch?: { service: string; label?: string; url?: string; lookFor?: string }[]; done?: boolean }) {
+    return this.request<{ done: boolean; left: string[]; watched: ({ label: string; watching: true; watchId: string } | { label: string; watching: false; why: string })[] }>("POST", "/api/setup-step", s);
   }
   routines() {
     return this.request<Routine[]>("GET", "/api/routines");

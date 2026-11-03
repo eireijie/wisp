@@ -152,6 +152,61 @@
   .plan .spec small { display: block; color: var(--muted); font-size: 12.5px; }
   .plan .price { font-weight: 600; white-space: nowrap; }
   .tag { font-size: 11.5px; background: var(--chip); border-radius: 6px; padding: 1px 6px; margin-left: 6px; font-weight: 500; color: var(--muted); }
+  /* the two questions on the first screen, and the Recommended tag that follows the answers */
+  .q { margin-bottom: 14px; }
+  .q > p { font-size: 13px; font-weight: 500; color: var(--muted); margin: 0 0 7px 2px; }
+  .seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
+  .seg button { height: 34px; padding: 0 8px; font-size: 13.5px; font-weight: 500; border: 0; border-radius: 7px; background: transparent; color: var(--muted); box-shadow: none; transition: background 220ms, color 220ms, box-shadow 220ms, transform 160ms; }
+  .seg button:hover:not(:disabled) { transform: none; color: var(--ink); }
+  .seg button[aria-checked="true"] { background: var(--control); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.12), 0 0 0 0.5px var(--control-line); }
+  .choice { transition: border-color 220ms, background 220ms, transform 200ms cubic-bezier(0.2, 0.9, 0.25, 1.3); align-items: flex-start; }
+  .choice > svg { margin-top: 1px; }
+  .choice[aria-pressed="true"], .choice.primary[aria-pressed="true"] { border-color: var(--ink); background: var(--panel); }
+  .choice strong { display: flex; align-items: center; gap: 8px; }
+  .choice .text .why { color: var(--ok); font-size: 12.5px; }
+  .choice .text .tag.rec { color: var(--accent-ink); font-size: 11.5px; }
+  .tag.rec { background: var(--accent); color: var(--accent-ink); margin-left: 0; animation: tagin 420ms cubic-bezier(0.2, 0.9, 0.25, 1.3) both; }
+  @keyframes tagin { from { opacity: 0; transform: translateX(-8px) scale(0.9); } }
+  /* Cloud: which provider, signing in or pasting a token */
+  .provider { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); background: var(--card); border-radius: 8px; margin-bottom: 14px; font-size: 14px; }
+  .provider .n { flex: 1; font-weight: 500; }
+  .provider .tag { margin-left: 0; }
+  .provider button.link, .loc button.link { height: auto; padding: 0; font-size: 13px; }
+  .plogo { width: 18px; height: 18px; flex: none; display: grid; place-items: center; }
+  .plogo svg { width: 18px; height: 18px; }
+  .plist { display: grid; gap: 6px; margin: -6px 0 14px; animation: rise 360ms cubic-bezier(0.2, 0.85, 0.25, 1) both; }
+  .prow { display: flex; gap: 12px; align-items: center; height: auto; padding: 10px 12px; text-align: left; font-weight: 400; background: var(--control); border-color: var(--line); box-shadow: none; }
+  .prow:hover { border-color: var(--faint); }
+  .prow .spec { flex: 1; display: grid; gap: 1px; }
+  .prow b { font-weight: 500; font-size: 14px; }
+  .prow small { color: var(--muted); font-size: 12.5px; }
+  .prow .price { font-weight: 600; font-size: 13.5px; }
+  button.brand { background: #0069ff; border-color: #0069ff; color: #fff; }
+  .waitbox { display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); font-size: 14px; animation: rise 360ms cubic-bezier(0.2, 0.85, 0.25, 1) both; }
+  .step { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; font-size: 14px; }
+  .num { width: 22px; height: 22px; border-radius: 50%; background: var(--chip); color: var(--muted); font-size: 12px; font-weight: 600; display: grid; place-items: center; flex: none; margin-top: 1px; transition: background 260ms, color 260ms; }
+  .num.ok { background: var(--ok); color: #fff; }
+  .step .body { flex: 1; min-width: 0; }
+  .step .d { color: var(--muted); font-size: 13px; margin: 2px 0 8px; }
+  a.button { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--control-line); background: var(--control); color: var(--ink); font-weight: 500; font-size: 14px; text-decoration: none; transition: transform 180ms cubic-bezier(0.2, 0.9, 0.25, 1.3); }
+  a.button:active { transform: scale(0.97); }
+  a.button svg { width: 13px; height: 13px; }
+  .found-token { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--ok) 10%, var(--panel)); border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent); font-size: 13.5px; margin-top: 8px; animation: rise 420ms cubic-bezier(0.2, 0.85, 0.25, 1) both; }
+  .found-token span { flex: 1; }
+  .found-token button { height: 30px; padding: 0 12px; font-size: 13px; }
+  .loc { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--muted); margin: -2px 0 12px 2px; }
+  .loc svg { width: 14px; height: 14px; flex: none; }
+  .loc select { height: 32px; width: auto; flex: 1; font-size: 13.5px; }
+  .plan { transition: border-color 200ms, background 200ms, transform 160ms; }
+  .plan:active { transform: scale(0.99); }
+  .plan:has(input:checked) { background: var(--panel); }
+  .plan .spec b { font-weight: 500; font-size: 14.5px; display: flex; align-items: center; gap: 6px; }
+  .checks li .lbl { flex: 1; }
+  .checks li .time { font-variant-numeric: tabular-nums; color: var(--faint); font-size: 13px; }
+  .fix { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+  .fix b { display: block; font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+  .fix p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .rd-id { font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: 0.02em; color: var(--ink); }
   :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
   /* the wisps: the same drawing and motion as the app's ghost */
   .w { position: absolute; left: 0; top: 0; width: 300px; height: 300px; pointer-events: none; transition: left 850ms cubic-bezier(0.3, 0.85, 0.3, 1), top 850ms cubic-bezier(0.3, 0.85, 0.3, 1), transform 850ms cubic-bezier(0.3, 0.85, 0.3, 1), opacity 600ms; }
@@ -192,7 +247,7 @@
   .spark { position: absolute; color: var(--ink); animation: spark 1.4s ease-in-out infinite both; }
   @keyframes spark { 0%, 100% { opacity: 0; transform: scale(0.4); } 50% { opacity: 1; transform: scale(1); } }
   @media (prefers-reduced-motion: reduce) {
-    .status-row .dots i, .dot::after, .digit, .prop, .spark, .ga, .mo, .ground, .keys, .blink, #welcome > *, main > section > *, main > div > section > * { animation: none !important; }
+    .status-row .dots i, .dot::after, .tag.rec, .plist, .waitbox, .found-token, .digit, .prop, .spark, .ga, .mo, .ground, .keys, .blink, #welcome > *, main > section > *, main > div > section > * { animation: none !important; }
     .w, #fill { transition: opacity 200ms; }
     .spark { opacity: 0.6; }
   }
@@ -216,21 +271,36 @@
   </div>
   <header>
     <div>
-      <h1 id="title">Welcome to Wisp!</h1>
-      <p id="subtitle">How do you want to begin?</p>
+      <h1 id="title">Welcome to Wisp</h1>
+      <p id="subtitle">Two questions, then pick where your agents live.</p>
     </div>
   </header>
 
   <div id="welcome" class="choices" hidden>
-    <button class="choice primary" id="pick-create">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2 20h20"/></svg>
-      <span class="text"><strong>Self-Host</strong><span>Your server runs on this computer.</span></span>
-    </button>
-    <button class="choice" id="pick-cloud">
+    <div class="q">
+      <p id="q-on">Is this computer on all day?</p>
+      <div class="seg" role="radiogroup" aria-labelledby="q-on">
+        <button type="button" role="radio" data-q="on" data-v="no">No, it sleeps or travels</button>
+        <button type="button" role="radio" data-q="on" data-v="yes">Yes, it stays on</button>
+      </div>
+    </div>
+    <div class="q">
+      <p id="q-use">Should agents use this computer's apps too?</p>
+      <div class="seg" role="radiogroup" aria-labelledby="q-use">
+        <button type="button" role="radio" data-q="use" data-v="no">No</button>
+        <button type="button" role="radio" data-q="use" data-v="yes">Yes</button>
+      </div>
+    </div>
+    <button class="choice" id="pick-cloud" aria-pressed="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4.25 4.25 0 0 1-.5 8.5Z"/></svg>
-      <span class="text"><strong>Cloud</strong><span>Your server stays on in your own Hetzner account.</span></span>
+      <span class="text"><strong>Cloud<span class="tag rec" id="rec-cloud" hidden>Recommended</span></strong><span>Always on, about $24 a month on your own cloud account.</span><span class="why" id="why-cloud" hidden></span></span>
+    </button>
+    <button class="choice" id="pick-create" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2 20h20"/></svg>
+      <span class="text"><strong>Self-Host<span class="tag rec" id="rec-self" hidden>Recommended</span></strong><span>Free, on this computer. Agents work while it's awake.</span><span class="why" id="why-self" hidden>Because this computer stays on.</span></span>
     </button>
     <div class="push"></div>
+    <button class="primary wide" id="welcome-go">Continue</button>
     <button class="link wide" id="pick-join">Already have a Wisp? Join it</button>
   </div>
 
@@ -294,28 +364,35 @@
 
   <div id="cloud" hidden>
     <section id="cloud-connect">
-      <h2><svg viewBox="0 0 24 24" width="16" height="16" fill="#D50C2D" aria-hidden="true" style="vertical-align:-3px;margin-right:8px"><path d="M0 0v24h24V0H0zm4.602 4.025h2.244c.509 0 .716.215.716.717v5.64h8.883v-5.64c0-.509.215-.717.717-.717h2.229c.5 0 .71.23.724.717v14.516c0 .509-.215.717-.717.717h-2.23c-.51 0-.717-.215-.717-.717v-5.735H7.562v5.735c0 .516-.215.717-.716.717H4.602c-.51 0-.717-.208-.717-.717V4.742c0-.509.207-.717.717-.717z"/></svg>Connect your Hetzner account</h2>
-      <p>Your server runs in your own <a href="https://www.hetzner.com/cloud" target="_blank">Hetzner Cloud</a> account, and Hetzner bills you directly.</p>
-      <ol class="steps">
-        <li>Sign in at <a href="https://console.hetzner.com" target="_blank">console.hetzner.com</a> (or sign up) and open a project.</li>
-        <li>Go to <strong>Security → API keys</strong>, click <strong>Generate API key</strong>, and choose <strong>Read &amp; Write</strong>.</li>
-        <li>Paste it here.</li>
-      </ol>
-      <form id="cloud-token-form">
-        <label class="field"><span>API key</span>
-          <input id="cloud-token" type="password" placeholder="Paste it here." aria-label="API key" autocomplete="off" spellcheck="false" />
-        </label>
-        <p class="hint" style="margin:-6px 6px 14px">This key stays in this window until setup finishes.</p>
+      <h2>Connect a cloud account</h2>
+      <p>Your server runs in your own account, billed by the hour. Delete it any time.</p>
+      <div class="provider"><span class="plogo" id="p-logo" aria-hidden="true"></span><span class="n" id="p-name"></span><span class="tag" id="p-rec">Recommended</span><button class="link" id="p-change" aria-expanded="false">Change</button></div>
+      <div class="plist" id="p-list" hidden></div>
+      <div id="signin-box">
+        <button class="primary wide brand" id="signin-go">Sign in with DigitalOcean</button>
+        <p class="hint" style="text-align:center">New to DigitalOcean? Sign up on the same page. It asks for a card, and new accounts get $5 of credit.</p>
+      </div>
+      <div id="signin-wait" hidden>
+        <div class="waitbox" role="status"><span class="dot wait"></span><span>Finish signing in in your browser, then come back here.</span></div>
+        <button class="link wide" id="signin-cancel">Cancel</button>
+      </div>
+      <form id="cloud-token-form" hidden>
+        <div class="step"><span class="num" id="t-num1">1</span><div class="body">Sign in to <span data-p-name></span><div class="d" id="t-step1"></div><a class="button" id="t-open" target="_blank"><span id="t-open-label"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a></div></div>
+        <div class="step"><span class="num">2</span><div class="body"><span id="t-step2"></span>
+          <input id="cloud-token" type="password" placeholder="Paste it here" aria-label="API token" autocomplete="off" spellcheck="false" style="margin-top:8px" />
+          <div class="found-token" id="t-found" hidden><span>Found a <span data-p-name></span> token you just copied.</span><button type="button" class="primary" id="t-use">Use it</button></div>
+        </div></div>
         <button class="primary wide" type="submit" id="cloud-token-go">Continue</button>
       </form>
       <p class="error" id="cloud-token-error" hidden></p>
+      <div class="push"></div>
+      <p class="hint" id="p-foot"></p>
     </section>
 
     <section id="cloud-choose" hidden>
-      <h2>Choose your server</h2>
-      <label class="field"><span>Location</span><select id="cloud-location"></select></label>
+      <h2>Choose a size</h2>
+      <div class="loc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg><span id="cloud-where"></span><button class="link" id="cloud-where-change">Change</button><select id="cloud-location" aria-label="Location" hidden></select></div>
       <div class="plans" id="cloud-plans" role="radiogroup" aria-label="Size"></div>
-      <p class="hint" id="cloud-billing" style="text-align:left"></p>
       <h3>Your account</h3>
       <form id="cloud-form">
         <label class="field"><input id="cloud-name" autocomplete="name" placeholder="Name" aria-label="Name" required /></label>
@@ -323,22 +400,46 @@
         <label class="field"><input id="cloud-password" type="password" autocomplete="new-password" minlength="8" required placeholder="Password" aria-label="Password" /></label>
         <button class="primary wide" type="submit" id="cloud-go">Start Wisp</button>
       </form>
+      <p class="hint" id="cloud-billing" style="text-align:center"></p>
       <p class="error" id="cloud-error" hidden></p>
     </section>
 
     <section id="cloud-progress" hidden>
-      <h2 id="cloud-progress-title">Getting your server ready…</h2>
-      <p>This usually takes 3 to 5 minutes.</p>
-      <ul class="checks" id="cloud-checks"></ul>
-      <p class="error" id="cloud-fail" hidden></p>
+      <h2 id="cloud-progress-title">Setting up your server</h2>
+      <p id="cloud-progress-sub">About 4 minutes. You can leave this window open and do something else.</p>
+      <ul class="checks" id="cloud-checks" role="status"></ul>
+      <div class="fix" id="cloud-fix" hidden><b id="cloud-fix-title"></b><p id="cloud-fail"></p></div>
+      <div class="push"></div>
+      <p class="hint" id="cloud-elapsed" style="text-align:center"></p>
       <div class="row" id="cloud-fail-actions" hidden>
-        <button id="cloud-delete">Delete the cloud computer</button>
+        <button id="cloud-delete">Delete server</button>
         <button class="primary" id="cloud-wait">Keep waiting</button>
-        <button class="link" id="cloud-keep">Keep it</button>
       </div>
-      <p class="hint" id="cloud-fail-hint" style="text-align:center" hidden></p>
+      <div class="row" id="cloud-retry-actions" hidden>
+        <a class="button" id="cloud-fix-open" target="_blank" hidden></a>
+        <button class="primary" id="cloud-retry">Try again</button>
+      </div>
+      <div class="row"><button class="link" id="cloud-keep" hidden>Keep it and decide later</button></div>
     </section>
   </div>
+
+  <section id="rustdesk" hidden>
+    <h2>Watch this computer from anywhere</h2>
+    <p>Your agents can use this <span data-computer>computer</span>. To see or take over its screen from your phone, add a remote desktop app.</p>
+    <div class="choice" aria-pressed="true" style="cursor:default">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+      <span class="text"><strong>RustDesk<span class="tag rec">Recommended</span></strong><span id="rd-text">Free and open source. Wisp installs it and shows its ID on this computer's page. You set its password; Wisp never sees it.</span></span>
+    </div>
+    <div class="choice" id="rd-own" style="cursor:default;margin-top:10px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+      <span class="text"><strong>Wisp's own view</strong><span>Watch inside Wisp with your screen code. Linux and Windows today.</span></span>
+    </div>
+    <p class="error" id="rd-error" hidden></p>
+    <div class="push"></div>
+    <button class="primary wide" id="rd-go">Install RustDesk</button>
+    <a class="button" id="rd-get" href="https://rustdesk.com/download" target="_blank" hidden style="justify-content:center;margin-top:8px">Get RustDesk <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
+    <button class="link wide" id="rd-skip">Not now</button>
+  </section>
 
   <section id="starting" class="center" hidden>
     <h2 id="starting-title">Getting ready…</h2>
@@ -360,16 +461,54 @@
   const $ = (id) => document.getElementById(id);
   const state = JSON.parse(new URLSearchParams(location.search).get("state") || "{}");
   const setup = window.wispSetup;
-  const SCREENS = ["welcome", "create", "installing", "ready", "join", "cloud", "waiting", "starting", "unreachable"];
+  const SCREENS = ["welcome", "create", "installing", "ready", "join", "cloud", "rustdesk", "waiting", "starting", "unreachable"];
   const show = (id) => {
     SCREENS.forEach((s) => ($(s).hidden = s !== id));
     document.querySelector("main")?.setAttribute("data-screen", id);
-    $("back").hidden = ["welcome", "installing", "ready", "waiting", "starting", "unreachable"].includes(id) && !(id === "welcome" && state.canReturn);
+    $("back").hidden = ["welcome", "installing", "ready", "rustdesk", "waiting", "starting", "unreachable"].includes(id) && !(id === "welcome" && state.canReturn);
   };
   const err = (id, msg) => { $(id).hidden = !msg; $(id).textContent = msg || ""; };
 
+  // ------------------------------------------------ the two questions, and the recommended start
+  // On all day: Self-Host is free there and recommended. Otherwise (a laptop, or not sure) Cloud,
+  // because a server never sleeps. Agents using this computer doesn't change that: on Cloud this
+  // computer joins too, and either way RustDesk is offered at the end.
+  const answers = { on: "no", use: "no" };
+  let picked = null;
+  const recommended = () => (answers.on === "yes" ? "self" : "cloud");
+  function renderWelcome() {
+    document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-checked", String(answers[b.dataset.q] === b.dataset.v)));
+    const rec = recommended();
+    const choice = picked || rec;
+    for (const [id, which] of [["cloud", "cloud"], ["self", "self"]]) {
+      const tag = $(`rec-${id}`);
+      if (tag.hidden !== (rec !== which)) { tag.hidden = rec !== which; tag.style.animation = "none"; void tag.offsetWidth; tag.style.animation = ""; }
+      $(`why-${id}`).hidden = rec !== which;
+    }
+    $("why-cloud").textContent = answers.use === "yes" ? "Agents live on the server and use this computer when it's awake." : "Because this computer sleeps, and a server never does.";
+    $("pick-cloud").setAttribute("aria-pressed", String(choice === "cloud"));
+    $("pick-create").setAttribute("aria-pressed", String(choice === "self"));
+    $("welcome-go").textContent = `Continue with ${choice === "cloud" ? "Cloud" : "Self-Host"}`;
+    window.dispatchEvent(new Event("wisp:scene"));
+  }
+  document.querySelectorAll(".seg button").forEach((b) => (b.onclick = () => {
+    answers[b.dataset.q] = b.dataset.v;
+    if (b.dataset.q === "on") picked = null;
+    renderWelcome();
+  }));
+  $("pick-cloud").onclick = () => { picked = "cloud"; renderWelcome(); };
+  $("pick-create").onclick = () => { picked = "self"; renderWelcome(); };
+  $("pick-cloud").ondblclick = () => goCloud();
+  $("pick-create").ondblclick = () => show("create");
+  $("welcome-go").onclick = () => ((picked || recommended()) === "cloud" ? goCloud() : show("create"));
+  renderWelcome();
+
+  let computer = "computer";
   setup.check().then((c) => {
-    $("ready-computer").textContent = c.platform === "darwin" ? "Mac" : c.platform === "win32" ? "PC" : "computer";
+    computer = c.platform === "darwin" ? "Mac" : c.platform === "win32" ? "PC" : "computer";
+    $("ready-computer").textContent = computer;
+    document.querySelectorAll("[data-computer]").forEach((el) => (el.textContent = computer));
+    if (c.laptop === false) { answers.on = "yes"; renderWelcome(); }
     if (state.step === "create" && c.problem && !state.problem) err("create-error", c.problem);
   });
 
@@ -504,8 +643,8 @@
 
   function goWelcome() {
     stopJoin();
-    $("title").textContent = "Welcome to Wisp!";
-    $("subtitle").textContent = "How do you want to begin?";
+    $("title").textContent = "Welcome to Wisp";
+    $("subtitle").textContent = "Two questions, then pick where your agents live.";
     show("welcome");
   }
 
@@ -523,13 +662,19 @@
     if (state.log) { $("log").hidden = false; $("log").textContent = state.log; }
   } else goWelcome();
 
-  $("pick-create").onclick = () => show("create");
   $("pick-join").onclick = goJoin;
   $("scan").onclick = scan;
   $("cancel-join").onclick = goJoin;
   $("join-again").onclick = goJoin;
   window.addEventListener("beforeunload", stopJoin);
-  document.querySelectorAll("[data-back]").forEach((b) => (b.onclick = () => (document.querySelector("main")?.getAttribute("data-screen") === "welcome" && state.canReturn ? setup.returnToServer() : goWelcome())));
+  document.querySelectorAll("[data-back]").forEach((b) => (b.onclick = () => {
+    const screen = document.querySelector("main")?.getAttribute("data-screen");
+    if (screen === "welcome" && state.canReturn) return setup.returnToServer();
+    // within Cloud, back from choosing a size goes to connecting
+    if (screen === "cloud" && !$("cloud-choose").hidden) return cloudCard("cloud-connect");
+    if (screen === "cloud") cancelSignIn();
+    goWelcome();
+  }));
   $("retry").onclick = () => { show("starting"); setup.retry(); };
   $("switch").onclick = goWelcome;
   async function startWisp() {
@@ -543,47 +688,123 @@
     if (r?.log) { $("log").hidden = false; $("log").textContent = r.log; }
   };
   $("create-go").onclick = startWisp;
-  $("ready-go").onclick = () => {
-    $("starting-title").textContent = "Opening your Wisp…";
-    show("starting");
-    setup.open();
-  };
+  $("ready-go").onclick = () => afterServer("Opening your Wisp…");
   $("join-form").onsubmit = (e) => { e.preventDefault(); requestJoin($("url").value.trim()); };
 
-  // ------------------------------------------------ create one in your cloud account
-  // The Hetzner token lives only in this variable, and goes when the window leaves this page.
+  // ------------------------------------------------ Cloud: a server in the person's own cloud account
+  // The token lives only in this variable, and goes when the window leaves this page.
+  let providers = [];
+  let prov = null;
   let cloudToken = "";
   let offer = null;
   let failed = null;
   let resumeId = null;
   let deleteId = null;
-  const cloudCard = (id) => ["cloud-connect", "cloud-choose", "cloud-progress"].forEach((c) => ($(c).hidden = c !== id));
-  const money = (n) => new Intl.NumberFormat(undefined, { style: "currency", currency: offer.currency }).format(n);
-  const STEPS = [
-    ["create", "Creating your Hetzner server"],
-    ["boot", "Starting it up"],
-    ["https", "Installing Wisp and getting a certificate"],
-    ["account", "Making your account"],
-  ];
-
-  $("pick-cloud").onclick = () => {
-    show("cloud");
-    cloudCard(offer ? "cloud-choose" : "cloud-connect");
-    $(offer ? "cloud-name" : "cloud-token").focus();
+  const cloudCard = (id) => {
+    ["cloud-connect", "cloud-choose", "cloud-progress"].forEach((c) => ($(c).hidden = c !== id));
+    window.dispatchEvent(new Event("wisp:scene"));
+  };
+  const money = (n, currency = offer?.currency || "USD") => new Intl.NumberFormat(undefined, { style: "currency", currency, minimumFractionDigits: n % 1 ? 2 : 0 }).format(n);
+  const LOGOS = {
+    digitalocean: '<svg viewBox="0 0 24 24" fill="#0080FF"><path d="M12.04 0C5.408-.02.005 5.37.005 11.992h4.638c0-4.923 4.882-8.731 10.064-6.855a6.95 6.95 0 014.147 4.148c1.889 5.177-1.924 10.055-6.84 10.064v-4.61H7.391v4.623h4.61V24c7.86 0 13.967-7.588 11.397-15.83-1.115-3.59-3.985-6.446-7.575-7.575A12.8 12.8 0 0012.039 0zM7.39 19.362H3.828v3.564H7.39zm-3.563 0v-2.978H.85v2.978z"/></svg>',
+    hetzner: '<svg viewBox="0 0 24 24" fill="#D50C2D"><path d="M0 0v24h24V0H0zm4.602 4.025h2.244c.509 0 .716.215.716.717v5.64h8.883v-5.64c0-.509.215-.717.717-.717h2.229c.5 0 .71.23.724.717v14.516c0 .509-.215.717-.717.717h-2.23c-.51 0-.717-.215-.717-.717v-5.735H7.562v5.735c0 .516-.215.717-.716.717H4.602c-.51 0-.717-.208-.717-.717V4.742c0-.509.207-.717.717-.717z"/></svg>',
+    vultr: '<svg viewBox="0 0 24 24" fill="#007BFC"><path d="M8.36 2.172A1.194 1.194 0 007.348 1.6H1.2A1.2 1.2 0 000 2.8a1.211 1.211 0 00.182.64l11.6 18.4a1.206 1.206 0 002.035 0l3.075-4.874a1.229 1.229 0 00.182-.64 1.211 1.211 0 00-.182-.642zm10.349 8.68a1.206 1.206 0 002.035 0L21.8 9.178l2.017-3.2a1.211 1.211 0 00.183-.64 1.229 1.229 0 00-.183-.64l-1.6-2.526a1.206 1.206 0 00-1.016-.571h-6.148a1.2 1.2 0 00-1.201 1.2 1.143 1.143 0 00.188.64z"/></svg>',
+  };
+  // what each provider asks of the person, and its 4 GB price for the list (the real prices come from its API)
+  const HOW = {
+    digitalocean: { note: "Sign in. Same price everywhere.", from: "$24", foot: "Wisp only asks to create, see and delete servers. The sign-in ends when setup does." },
+    hetzner: { note: "Cheapest in Europe. Paste an API token.", from: "€5.99", step1: "New? Hetzner may ask for an ID check before your first server.", step2: "In your project, open Security, API tokens. Make one with Read & Write and copy it.", foot: "The token stays in this window and is gone when setup ends." },
+    vultr: { note: "Same price everywhere. Paste an API key.", from: "$20", step1: "New? Vultr asks for a card when you sign up.", step2: "Open Account, API. Turn the API on, allow all IPv4 and IPv6 addresses, and copy the key.", foot: "The key stays in this window and is gone when setup ends." },
   };
 
-  $("cloud-token-form").onsubmit = async (e) => {
+  async function goCloud() {
+    show("cloud");
+    if (!providers.length) providers = await setup.cloudProviders();
+    if (!prov) pickProvider(providers[0].id);
+    cloudCard(offer && !failed ? "cloud-choose" : "cloud-connect");
+  }
+
+  function pickProvider(id) {
+    prov = providers.find((p) => p.id === id);
+    offer = null;
+    cloudToken = "";
+    $("cloud-token").value = "";
+    $("t-found").hidden = true;
+    $("t-num1").classList.remove("ok");
+    err("cloud-token-error", "");
+    $("p-logo").innerHTML = LOGOS[prov.id] || "";
+    $("p-name").textContent = prov.name;
+    document.querySelectorAll("[data-p-name]").forEach((el) => (el.textContent = prov.name));
+    $("p-rec").hidden = prov.id !== providers[0].id;
+    $("signin-box").hidden = !prov.signIn;
+    $("signin-wait").hidden = true;
+    $("cloud-token-form").hidden = prov.signIn;
+    $("t-step1").textContent = HOW[prov.id]?.step1 || "";
+    $("t-step2").textContent = HOW[prov.id]?.step2 || "Make an API token that can create servers, and copy it.";
+    $("t-open").href = prov.signInUrl;
+    $("t-open-label").textContent = `Open ${prov.name}`;
+    $("p-foot").textContent = HOW[prov.id]?.foot || "";
+    $("p-list").hidden = true;
+    $("p-change").setAttribute("aria-expanded", "false");
+  }
+
+  $("p-change").onclick = () => {
+    const open = $("p-list").hidden;
+    $("p-list").hidden = !open;
+    $("p-change").setAttribute("aria-expanded", String(open));
+    if (!open) return;
+    $("p-list").replaceChildren(...providers.filter((p) => p.id !== prov.id).map((p) => {
+      const b = Object.assign(document.createElement("button"), { type: "button", className: "prow" });
+      const logo = Object.assign(document.createElement("span"), { className: "plogo", innerHTML: LOGOS[p.id] || "" });
+      const spec = Object.assign(document.createElement("span"), { className: "spec" });
+      spec.append(Object.assign(document.createElement("b"), { textContent: p.name }), Object.assign(document.createElement("small"), { textContent: HOW[p.id]?.note || "" }));
+      const price = Object.assign(document.createElement("span"), { className: "price", textContent: HOW[p.id]?.from ? `${HOW[p.id].from}/mo` : "" });
+      b.append(logo, spec, price);
+      b.onclick = () => { cancelSignIn(); pickProvider(p.id); };
+      return b;
+    }));
+  };
+
+  // signing in (DigitalOcean): the browser does it, and this page waits
+  function cancelSignIn() {
+    if (!$("signin-wait").hidden) setup.cloudSignInCancel();
+  }
+  $("signin-go").onclick = async () => {
+    err("cloud-token-error", "");
+    $("signin-box").hidden = true;
+    $("signin-wait").hidden = false;
+    const r = await setup.cloudSignIn();
+    $("signin-wait").hidden = true;
+    $("signin-box").hidden = false;
+    if (!r.ok) return r.cancelled ? undefined : err("cloud-token-error", r.error);
+    await useToken(r.token);
+  };
+  $("signin-cancel").onclick = () => setup.cloudSignInCancel();
+
+  // pasting a token (Hetzner, Vultr): a token copied while the provider's page was open is offered
+  $("t-open").addEventListener("click", () => $("t-num1").classList.add("ok"));
+  window.addEventListener("focus", async () => {
+    if ($("cloud").hidden || $("cloud-connect").hidden || !prov || prov.signIn || $("cloud-token").value) return;
+    const found = await setup.clipboardToken(prov.id);
+    $("t-found").hidden = !found;
+    $("t-found").dataset.token = found || "";
+  });
+  $("t-use").onclick = () => { $("t-found").hidden = true; useToken($("t-found").dataset.token); };
+  $("cloud-token-form").onsubmit = (e) => {
     e.preventDefault();
     const token = $("cloud-token").value.trim();
     if (!token) return $("cloud-token").focus();
+    useToken(token);
+  };
+
+  async function useToken(token) {
     err("cloud-token-error", "");
     $("cloud-token-go").disabled = true;
     $("cloud-token-go").textContent = "Checking…";
-    const r = await setup.cloudPlans(token);
+    const r = await setup.cloudPlans(prov.id, token);
     $("cloud-token-go").disabled = false;
     $("cloud-token-go").textContent = "Continue";
     if (!r.ok) return err("cloud-token-error", r.error);
-    if (!r.plans.length && resumeId == null && deleteId == null) return err("cloud-token-error", "Hetzner has no computers available right now.");
     cloudToken = token;
     $("cloud-token").value = "";
     if (deleteId != null) {
@@ -591,129 +812,259 @@
       await deleteFailed();
       return;
     }
+    if (resumeId != null) return resumeCard();
+    if (!r.locations.length) return err("cloud-token-error", `${prov.name} has no servers available right now. Try again later, or pick another provider.`);
     offer = r;
     const sel = $("cloud-location");
-    sel.replaceChildren(...r.locations.map((l) => new Option(`${l.city}, ${l.country}`, l.name)));
-    sel.value = r.plans[0]?.location || ""; // where the cheapest is
+    sel.replaceChildren(...r.locations.map((l) => new Option(`${l.city}${l.country ? `, ${l.country}` : ""}`, l.name)));
+    sel.value = r.nearest || r.locations[0].name;
+    sel.hidden = true;
+    $("cloud-where").hidden = $("cloud-where-change").hidden = false;
     renderPlans();
     cloudCard("cloud-choose");
     $("cloud-name").focus();
-  };
+  }
 
+  /** Picking up a server that didn't finish: no size to choose, only the account to make on it. */
+  function resumeCard() {
+    $("cloud-plans").replaceChildren();
+    $("cloud-where").hidden = $("cloud-where-change").hidden = $("cloud-location").hidden = true;
+    $("cloud-go").textContent = "Keep waiting";
+    $("cloud-billing").textContent = "";
+    cloudCard("cloud-choose");
+    $("cloud-name").focus();
+  }
+
+  $("cloud-where-change").onclick = () => {
+    $("cloud-where").hidden = $("cloud-where-change").hidden = true;
+    $("cloud-location").hidden = false;
+    $("cloud-location").focus();
+  };
   $("cloud-location").onchange = renderPlans;
 
+  const TIER = { 2: "agents without computers of their own", 4: "Wisp and your first agent's computer", 8: "a few agents with computers at once", 16: "many agents with computers at once" };
   function renderPlans() {
     const loc = $("cloud-location").value;
-    const here = offer.plans.filter((p) => p.location === loc);
-    const best = here.find((p) => p.memory >= 8) || here[here.length - 1];
-    $("cloud-plans").replaceChildren(...here.map((p) => {
+    const place = offer.locations.find((l) => l.name === loc);
+    $("cloud-where").textContent = `${place?.city || loc}${loc === offer.nearest ? ", closest to you" : ""}`;
+    const sizes = offer.choices[loc] || [];
+    const keep = document.querySelector('input[name="plan"]:checked')?.dataset.memory;
+    $("cloud-plans").replaceChildren(...sizes.map((p) => {
       const row = document.createElement("label");
       row.className = "plan";
-      const radio = Object.assign(document.createElement("input"), { type: "radio", name: "plan", value: p.type, checked: p === best });
+      const radio = Object.assign(document.createElement("input"), { type: "radio", name: "plan", value: p.type, checked: keep ? String(p.memory) === keep : p.recommended });
+      radio.dataset.memory = String(p.memory);
       radio.onchange = priceButton;
       const spec = document.createElement("span");
       spec.className = "spec";
-      spec.textContent = `${p.cores} vCPU · ${p.memory} GB memory · ${p.disk} GB disk`;
-      if (p === best) spec.append(Object.assign(document.createElement("span"), { className: "tag", textContent: "Recommended" }));
-      spec.append(Object.assign(document.createElement("small"), { textContent: `${p.type.toUpperCase()} · ${p.arch === "arm" ? "Arm" : "Intel/AMD"}` }));
+      const name = document.createElement("b");
+      name.textContent = `${p.memory} GB`;
+      if (p.recommended) name.append(Object.assign(document.createElement("span"), { className: "tag", textContent: "Recommended" }));
+      spec.append(name, Object.assign(document.createElement("small"), { textContent: `${p.cores} vCPU · ${TIER[p.memory] || `${p.disk} GB disk`}` }));
       const price = Object.assign(document.createElement("span"), { className: "price", textContent: `${money(p.monthly)}/mo` });
       row.append(radio, spec, price);
       return row;
     }));
+    if (!document.querySelector('input[name="plan"]:checked')) document.querySelector('input[name="plan"]')?.click();
     priceButton();
   }
 
   function chosen() {
     const type = document.querySelector('input[name="plan"]:checked')?.value;
-    return offer?.plans.find((p) => p.type === type && p.location === $("cloud-location").value);
+    return (offer?.choices[$("cloud-location").value] || []).find((p) => p.type === type);
   }
 
   function priceButton() {
     const p = chosen();
-    if (resumeId != null) { $("cloud-go").textContent = "Keep waiting"; return; }
     if (!p) return;
     $("cloud-go").textContent = `Start Wisp for ${money(p.monthly)}/month`;
-    $("cloud-billing").textContent = `Hetzner bills up to ${money(p.monthly)} a month, including the IPv4 address (${money(p.ipv4)}), until you delete this computer. Your agents run on this server. Wisp takes about 1 GB, and each agent with its own computer can use up to 4 GB more.`;
+    $("cloud-billing").textContent = `${prov.name} bills by the hour, up to ${money(p.monthly)} a month${p.ipv4 ? ` with the IPv4 address` : ""}, until you delete the server.`;
   }
 
   $("cloud-form").onsubmit = (e) => {
     e.preventDefault();
     cloudCreate(resumeId);
   };
+
+  // ---- progress you can follow: each step with its own time, and a plain fix when one fails
+  const STEPS = [
+    ["create", "Creating the server"],
+    ["boot", "Starting it"],
+    ["https", "Installing Wisp"],
+    ["account", "Making your account"],
+  ];
+  let current = "create";
+  let started = 0;
+  const stepTimes = {};
+  let ticker = null;
+  const clock = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+  let running = false;
+  function progress(step, broken = false) {
+    if (!running && !broken) return; // a step heard after it already finished or failed
+    if (!stepTimes[step]) stepTimes[step] = Date.now();
+    current = step;
+    renderChecks(broken);
+  }
+  function renderChecks(broken = false, upTo = STEPS.length) {
+    const at = current === "done" ? STEPS.length : STEPS.findIndex(([id]) => id === current);
+    $("cloud-checks").replaceChildren(...STEPS.slice(0, upTo).map(([id, label], i) => {
+      const row = li(i < at ? "ok" : i === at ? (broken ? "bad" : "wait") : "no", label);
+      if (row.lastChild) row.lastChild.className = "lbl";
+      const next = STEPS[i + 1] && stepTimes[STEPS[i + 1][0]];
+      const t = stepTimes[id] ? (i < at && next ? next - stepTimes[id] : i === at ? Date.now() - stepTimes[id] : 0) : 0;
+      row.append(Object.assign(document.createElement("span"), { className: "time", textContent: t ? clock(t) : "" }));
+      return row;
+    }));
+    $("cloud-elapsed").textContent = started ? `${clock(Date.now() - started)} so far` : "";
+  }
+  const stopTicker = () => { clearInterval(ticker); ticker = null; };
+
+  /** What went wrong, said as a title and its fix, with the provider's page when the fix is there. */
+  function explainFailure(message) {
+    const m = message || "";
+    if (/payment method|Billing|billing page/i.test(m)) return { title: `${prov.name} needs a payment method first`, open: prov.billingUrl };
+    if (/checking your account|ID check/i.test(m)) return { title: `${prov.name} hasn't finished checking your account`, open: prov.signInUrl };
+    if (/limit/i.test(m)) return { title: `Your ${prov.name} account is at its limit`, open: prov.signInUrl };
+    if (/no servers of that size/i.test(m)) return { title: "That size is sold out there" };
+    if (/token|sign-in|Sign in again|API key/i.test(m)) return { title: "The sign-in stopped working" };
+    if (/internet|reach/i.test(m)) return { title: `Couldn't reach ${prov.name}` };
+    if (/HTTPS in time|didn't start in time/i.test(m)) return { title: "It may still be installing" };
+    return { title: "Something went wrong" };
+  }
+
   /** Create a server, or (`resume`, a server that didn't finish) keep setting that one up. */
   async function cloudCreate(resume) {
     const p = chosen();
     if (!p && resume == null) return err("cloud-error", "Pick a size.");
+    if (!cloudToken) { resumeId = resume; cloudCard("cloud-connect"); return; }
     err("cloud-error", "");
     failed = null;
-    $("cloud-fail").hidden = $("cloud-fail-actions").hidden = $("cloud-fail-hint").hidden = true;
-    $("cloud-progress-title").textContent = "Getting your server ready…";
+    $("cloud-fix").hidden = $("cloud-fail-actions").hidden = $("cloud-retry-actions").hidden = $("cloud-keep").hidden = true;
+    $("cloud-progress-title").textContent = "Setting up your server";
+    $("cloud-progress-sub").textContent = "About 4 minutes. You can leave this window open and do something else.";
     cloudCard("cloud-progress");
     document.querySelectorAll("[data-back]").forEach((b) => (b.hidden = true));
+    for (const k of Object.keys(stepTimes)) delete stepTimes[k];
+    started = Date.now();
+    running = true;
     progress(resume == null ? "create" : "boot");
+    stopTicker();
+    ticker = setInterval(() => renderChecks(), 1000);
     const account = { name: $("cloud-name").value.trim(), email: $("cloud-email").value.trim(), password: $("cloud-password").value };
-    const r = await setup.cloudCreate(cloudToken, { type: p?.type, location: p?.location, account, device: false, resume });
+    const r = await setup.cloudCreate(prov.id, cloudToken, { type: p?.type, location: p?.location, account, device: answers.use === "yes", resume });
+    stopTicker();
+    running = false;
     if (r.ok) {
       cloudToken = "";
-      $("starting-title").textContent = `Opening ${new URL(r.url).host}…`;
-      return show("starting");
+      resumeId = null;
+      current = "done";
+      renderChecks();
+      return afterServer(`Opening ${new URL(r.url).host}…`);
     }
     document.querySelectorAll("[data-back]").forEach((b) => (b.hidden = false));
-    progress(current, true);
-    $("cloud-progress-title").textContent = "Your Wisp isn't ready";
-    err("cloud-fail", r.error);
+    const why = explainFailure(r.error);
+    // nothing created: only the step that failed; otherwise every step, to see how far it got
+    renderChecks(true, r.server ? STEPS.length : STEPS.findIndex(([id]) => id === current) + 1);
+    $("cloud-fix-title").textContent = why.title;
+    // the fix, without repeating the title when the message starts with it
+    $("cloud-fail").textContent = r.error.startsWith(why.title) ? r.error.slice(why.title.length).replace(/^[.:]\s*/, "") : r.error;
+    $("cloud-fix").hidden = false;
+    $("cloud-elapsed").textContent = "";
     if (!r.server) {
-      // nothing was created: back to choosing, with the reason
-      cloudCard("cloud-choose");
-      return err("cloud-error", r.error);
+      // nothing was created: say so, and offer the fix and another go
+      $("cloud-progress-title").textContent = "Your server wasn't created";
+      $("cloud-progress-sub").textContent = "Nothing was made, so nothing is billed.";
+      $("cloud-fix-open").hidden = !why.open;
+      if (why.open) { $("cloud-fix-open").href = why.open; $("cloud-fix-open").textContent = `Open ${prov.name}`; }
+      $("cloud-retry-actions").hidden = false;
+      return;
     }
+    $("cloud-progress-title").textContent = "Your Wisp isn't ready yet";
+    $("cloud-progress-sub").textContent = `The server is on, but setting it up stopped. ${prov.name} bills for it until you delete it.`;
     showCloudFailure(r.server);
   }
+  $("cloud-retry").onclick = () => (offer ? cloudCard("cloud-choose") : cloudCard("cloud-connect"));
 
   function showCloudFailure(server) {
     failed = server;
     document.querySelectorAll("[data-back]").forEach((b) => (b.hidden = false));
     $("cloud-fail-actions").hidden = false;
-    $("cloud-fail-hint").hidden = false;
-    $("cloud-fail-hint").textContent = `Hetzner bills for ${server.name} until you delete it in their console.`;
+    $("cloud-keep").hidden = false;
   }
 
-  let current = "create";
   setup.onCloudStep((step) => progress(step));
-  function progress(step, broken = false) {
-    current = step;
-    const at = STEPS.findIndex(([id]) => id === step);
-    $("cloud-checks").replaceChildren(...STEPS.map(([, label], i) => li(i < at ? "ok" : i === at ? (broken ? "bad" : "wait") : "no", label)));
-  }
 
   async function deleteFailed() {
     if (!failed) return;
-    if (!cloudToken) { deleteId = failed.id; cloudCard("cloud-connect"); $("cloud-token").focus(); return; }
+    if (!cloudToken) { deleteId = failed.id; cloudCard("cloud-connect"); return; }
     $("cloud-delete").disabled = true;
-    const r = await setup.cloudDelete(cloudToken, failed.id);
+    const r = await setup.cloudDelete(prov.id, cloudToken, failed.id);
     $("cloud-delete").disabled = false;
-    if (!r.ok) return err("cloud-fail", r.error);
+    if (!r.ok) { $("cloud-fail").textContent = r.error; return; }
     failed = null;
     resumeId = deleteId = null;
-    $("cloud-fail-actions").hidden = $("cloud-fail-hint").hidden = true;
-    $("cloud-progress-title").textContent = "Cloud computer deleted";
-    err("cloud-fail", "");
-    $("cloud-checks").replaceChildren(li("ok", "Deleted from your Hetzner account. Nothing more is billed for it."));
+    $("cloud-fail-actions").hidden = $("cloud-keep").hidden = $("cloud-fix").hidden = true;
+    $("cloud-progress-title").textContent = "Server deleted";
+    $("cloud-progress-sub").textContent = `Deleted from your ${prov.name} account. Nothing more is billed for it.`;
+    $("cloud-checks").replaceChildren();
+    $("cloud-retry-actions").hidden = false;
+    $("cloud-fix-open").hidden = true;
   }
   $("cloud-delete").onclick = deleteFailed;
   $("cloud-wait").onclick = () => {
     if (!failed) return;
     resumeId = failed.id;
-    if (!cloudToken) { deleteId = null; cloudCard("cloud-connect"); $("cloud-token").focus(); return; }
+    if (!cloudToken) { deleteId = null; cloudCard("cloud-connect"); return; }
     cloudCreate(resumeId);
   };
   $("cloud-keep").onclick = () => setup.cloudKeep();
   if (state.step === "cloud" && state.server) {
-    show("cloud");
-    cloudCard("cloud-progress");
-    $("cloud-progress-title").textContent = "Your Wisp isn't ready";
-    showCloudFailure(state.server);
+    // a server that didn't finish, from an earlier run: its provider is the one to sign in to
+    setup.cloudProviders().then((list) => {
+      providers = list;
+      pickProvider(state.server.provider || "hetzner");
+      show("cloud");
+      cloudCard("cloud-progress");
+      $("cloud-progress-title").textContent = "Your Wisp isn't ready yet";
+      $("cloud-progress-sub").textContent = `${prov.name} bills for ${state.server.name} until you delete it.`;
+      showCloudFailure(state.server);
+    });
   }
+
+  // ------------------------------------------------ after the server: RustDesk when agents use this computer
+  async function afterServer(opening) {
+    const wantsScreen = answers.use === "yes";
+    const rd = wantsScreen ? await setup.rustdeskStatus() : null;
+    if (!wantsScreen || rd?.id) return openWisp(opening);
+    $("rd-own").hidden = computer === "Mac"; // Wisp's own view isn't on a Mac yet
+    $("rd-go").textContent = rd.installed ? "Set up RustDesk" : "Install RustDesk";
+    $("rd-go").dataset.opening = opening;
+    show("rustdesk");
+  }
+  function openWisp(opening) {
+    $("starting-title").textContent = opening;
+    show("starting");
+    setup.open();
+  }
+  $("rd-go").onclick = async () => {
+    err("rd-error", "");
+    $("rd-go").disabled = true;
+    $("rd-go").textContent = "Installing…";
+    const r = await setup.rustdeskInstall();
+    $("rd-go").disabled = false;
+    if (r.ok) {
+      $("rd-text").innerHTML = "";
+      $("rd-text").append("This computer's ID is ", Object.assign(document.createElement("span"), { className: "rd-id", textContent: r.id.replace(/(\d{3})(?=\d)/g, "$1 ") }), ". In RustDesk, set a permanent password under Settings, Security, and keep it in your password manager.");
+      $("rd-go").textContent = "Continue";
+      $("rd-go").onclick = () => openWisp($("rd-go").dataset.opening);
+      $("rd-skip").hidden = true;
+      return;
+    }
+    $("rd-go").textContent = "Check again";
+    err("rd-error", r.error);
+    $("rd-get").hidden = !r.url;
+  };
+  $("rd-skip").onclick = () => openWisp($("rd-go").dataset.opening);
 </script>
 <script>
   // The stage's wisps. Plain script, because this page runs before the app does; the drawing and the
@@ -786,9 +1137,9 @@ const CREW = [
     const SCENE = {
       welcome: [50, 47, 260, "awake"], create: [50, 42, 170, "awake"], installing: [50, 46, 240, "working"], ready: [50, 40, 190, "done"],
       join: [50, 47, 190, "waiting"], waiting: [50, 47, 190, "waiting"], cloud: [50, 56, 170, "awake"], "cloud-progress": [50, 56, 240, "working"],
-      starting: [50, 46, 210, "awake"], unreachable: [50, 46, 190, "waiting"],
+      starting: [50, 46, 210, "awake"], unreachable: [50, 46, 190, "waiting"], "cloud-choose": [50, 56, 170, "awake"], rustdesk: [50, 42, 170, "awake"],
     };
-    const PROGRESS = { welcome: 4, create: 12, installing: 22, ready: 36, cloud: 14, "cloud-progress": 34, starting: 40, join: 4, waiting: 4, unreachable: 4 };
+    const PROGRESS = { welcome: 4, create: 12, installing: 22, ready: 36, cloud: 14, "cloud-choose": 24, "cloud-progress": 34, rustdesk: 38, starting: 40, join: 4, waiting: 4, unreachable: 4 };
     const BOX = 300;
     const stage = document.getElementById("stage");
     const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -860,22 +1211,30 @@ const CREW = [
     const props = document.createElement("div");
     stage.prepend(props);
     let last = "";
+    let lastCloudy = false;
 
     function update() {
       const m = document.querySelector("main");
       let id = m.getAttribute("data-screen") || "welcome";
       if (id === "cloud" && !document.getElementById("cloud-progress").hidden) id = "cloud-progress";
+      if (id === "cloud" && !document.getElementById("cloud-choose").hidden) id = "cloud-choose";
       const s = SCENE[id] || SCENE.welcome;
       document.getElementById("fill").style.width = (PROGRESS[id] ?? 4) + "%";
-      if (id === last) return;
+      // on the first screen, the cloud shows while Cloud is the choice
+      const cloudy = id === "cloud" || id === "cloud-choose" || id === "cloud-progress" || (id === "welcome" && document.getElementById("pick-cloud").getAttribute("aria-pressed") === "true");
+      if (id === last && cloudy === lastCloudy) return;
+      const same = id === last;
       last = id;
+      lastCloudy = cloudy;
+      if (same) { props.innerHTML = cloudy ? CLOUD : ""; return; }
       place(main, s[0], s[1], s[2]);
       if (s[3] !== mood) { mood = s[3]; main.innerHTML = svg(0, WHITE, mood); }
       const shown = id === "welcome" ? 1 : id === "join" || id === "waiting" ? 0.32 : 0;
       crew.forEach((el) => (el.style.opacity = shown));
-      props.innerHTML = (id === "create" || id === "ready" ? LAPTOP : "") + (id === "cloud" || id === "cloud-progress" ? CLOUD : "") + (id === "ready" ? spark(30, 24, 26, 0) + spark(68, 20, 34, 0.35) + spark(74, 50, 20, 0.7) + spark(24, 54, 22, 0.2) : "");
+      props.innerHTML = (id === "create" || id === "ready" || id === "rustdesk" ? LAPTOP : "") + (cloudy ? CLOUD : "") + (id === "ready" ? spark(30, 24, 26, 0) + spark(68, 20, 34, 0.35) + spark(74, 50, 20, 0.7) + spark(24, 54, 22, 0.2) : "");
     }
     new MutationObserver(update).observe(document.querySelector("main"), { attributes: true, attributeFilter: ["data-screen", "hidden"], subtree: true });
+    window.addEventListener("wisp:scene", update);
     update();
 
     // the approval code, as tiles that come in one after another

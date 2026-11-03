@@ -46,7 +46,7 @@ export type Route =
 
 export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "access", "background", "routines", "memory", "skills", "apps", "permissions", "connect", "runs", "remove"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
-export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "usage", "voice", "appearance", "security", "devices", "mobile", "general", "access", "agent-defaults", "people", "agents", "runtimes", "models", "harnesses", "memory", "computers", "logins", "apps", "skills", "connections", "data", "updates"] as const;
+export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "usage", "voice", "appearance", "security", "devices", "mobile", "general", "access", "agent-defaults", "people", "agents", "runtimes", "models", "harnesses", "memory", "computers", "logins", "storage", "apps", "skills", "connections", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
 export const MARKET_SECTIONS = ["all", "apps", "skills", "devices", "installed"] as const;
 export type MarketSection = (typeof MARKET_SECTIONS)[number];

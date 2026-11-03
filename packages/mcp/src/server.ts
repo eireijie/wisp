@@ -3,7 +3,7 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { WispClient } from "@wisp/sdk";
-import { SETTINGS_HARNESSES, SETUP_STEPS, type Screenshot } from "@wisp/core";
+import { SETTINGS_HARNESSES, SETUP_STEPS, WATCH_SERVICES, type Screenshot } from "@wisp/core";
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 const text = (t: string): { content: Content[] } => ({ content: [{ type: "text" as const, text: t }] });
@@ -342,11 +342,67 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
         text: z.string(),
         file_ids: z.array(z.string()).optional(),
         replies: z.array(z.string()).optional().describe("2–4 quick answers they can tap, a few words each, under 40 characters (\"Sent it\", \"Tomorrow\"), when they'd answer in a word"),
+        about: z.string().optional().describe("a short key for what this is about (\"notion:<page id>\", \"essay-due-friday\"), so you only raise it once: if they don't answer, Wisp won't let you raise the same key again"),
       },
     },
-    safe(async ({ text: t, file_ids, replies }) => {
-      await client.messagePerson(t, file_ids ?? [], replies ?? []);
+    safe(async ({ text: t, file_ids, replies, about }) => {
+      await client.messagePerson(t, file_ids ?? [], replies ?? [], about);
       return text("Sent.");
+    }),
+  );
+
+  // --- watching the person's apps ---------------------------------------------------------
+
+  server.registerTool(
+    "watch_list",
+    {
+      description:
+        "See what you watch for the person you work for (apps where Wisp tells you when something changes, and sites you check in your browser), and what else can be watched and how to connect it.",
+      inputSchema: {},
+    },
+    safe(async () => {
+      const r = await client.watches();
+      return text(
+        [
+          r.watches.length ? "You watch:" : "You don't watch anything for them yet.",
+          ...r.watches.map((w) => `- ${w.id} ${w.label} (${w.service})${w.paused ? ", paused" : ""}${w.lastError ? `, last look failed: ${w.lastError}` : ""}. ${w.estimate.note}`),
+          "\nWhat can be watched:",
+          ...r.services.map((s) => `- ${s.service}: ${s.name}, ${s.watches}.${s.available ? "" : ` Not available: ${s.unavailableReason}`} How: ${s.howToConnect}`),
+        ].join("\n"),
+      );
+    }),
+  );
+
+  server.registerTool(
+    "watch_start",
+    {
+      description:
+        "Start watching one of the person's apps for them, once they've said yes (\"keep an eye on my Slack\"). Wisp looks for changes on its own, at no token cost, and wakes you with what changed. It uses the key from your connector for that app, or one you give in `key` (ask before making a key for them). For apps with no easy key (Google, Meta, school or bank sites), use service \"browser\" with config.url and config.lookFor: you'll be woken every few hours to look in your computer's browser. Tell them what you'll watch and that they can stop it any time.",
+      inputSchema: {
+        service: z.enum(["slack", "github", "notion", "linear", "jira", "stripe", "gdrive", "gmail", "gcal", "browser"]),
+        key: z.record(z.string(), z.string()).optional().describe("values for this watch alone, named like the connector's (GITHUB_TOKEN, SLACK_BOT_TOKEN…)"),
+        config: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional().describe("Slack: channels (names); Stripe: types; browser: url and lookFor"),
+        label: z.string().optional().describe("what the person sees, e.g. \"Canvas assignments\""),
+        every_minutes: z.number().optional().describe("how often to look; browser watches: 120 or more"),
+      },
+    },
+    safe(async ({ service, key, config, label, every_minutes }) => {
+      const w = await client.startWatch({ service, key, config, label, everyMinutes: every_minutes });
+      return text(
+        `Watching ${w.label} (${w.id}). ${w.estimate.note}${w.backgroundOn ? "" : " Background work is off for them, so changes will wait until it's on: ask them, then use settings_change with enabled true."}`,
+      );
+    }),
+  );
+
+  server.registerTool(
+    "watch_stop",
+    {
+      description: "Stop watching something for the person, when they ask or it no longer matters. Changes it saw are dropped.",
+      inputSchema: { watch_id: z.string() },
+    },
+    safe(async ({ watch_id }) => {
+      await client.stopWatch(watch_id);
+      return text("Stopped.");
     }),
   );
 
@@ -469,18 +525,23 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     "setup_step",
     {
       description:
-        "During your first chat with the person you work for (Wisp shows the steps under \"Getting to know\"), record each setup step once it's done or skipped, with a one-line summary. role: the job title they agreed you'd take; Wisp makes it your role. accounts: the accounts or sites they named. done: true when the setup is over.",
+        "During your first chat with the person you work for (Wisp shows the steps under \"Getting to know\"), record each setup step once it's done or skipped, with a one-line summary. role: the job title they agreed you'd take; Wisp makes it your role. accounts: the accounts or sites they named. watch: only in your reply to their yes, the accounts they said you may keep an eye on; Wisp starts a watch for each. done: true when the setup is over.",
       inputSchema: {
         step: z.enum(SETUP_STEPS).optional(),
         summary: z.string().optional().describe("what you learned or did, one line: \"Wants ads and social posts managed\""),
         role: z.string().optional().describe("for step role, once they agree: \"Business manager\""),
         accounts: z.array(z.string()).optional().describe("for step accounts: [\"Google Ads\", \"Instagram\"]"),
+        watch: z
+          .array(z.object({ service: z.enum(WATCH_SERVICES), label: z.string().optional(), url: z.string().optional().describe("browser: the site"), lookFor: z.string().optional().describe("browser: what to look for there") }))
+          .optional()
+          .describe("after they said yes: [{service: \"gmail\"}, {service: \"browser\", label: \"Google Ads\", url: \"https://ads.google.com\", lookFor: \"campaigns paused or over budget\"}]"),
         done: z.boolean().optional(),
       },
     },
-    safe(async ({ step, summary, role, accounts, done }) => {
-      const r = await client.setupStep({ step, summary, role, accounts, done });
-      return text(r.done ? "Setup finished. Wrap up with a concrete offer." : `Noted.${r.left.length ? ` Still to do: ${r.left.join(", ")}.` : " That's every step: call setup_step with done: true and wrap up."}`);
+    safe(async ({ step, summary, role, accounts, watch, done }) => {
+      const r = await client.setupStep({ step, summary, role, accounts, watch, done });
+      const watched = r.watched.map((w) => (w.watching ? `Watching ${w.label}.` : `Couldn't watch ${w.label}: ${w.why}`)).join(" ");
+      return text([watched, r.done ? "Setup finished. Wrap up with a concrete offer." : `Noted.${r.left.length ? ` Still to do: ${r.left.join(", ")}.` : " That's every step: call setup_step with done: true and wrap up."}`].filter(Boolean).join(" "));
     }),
   );
 
@@ -634,6 +695,88 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
         await fs.writeFile(dest, f.data);
         return text(`Saved to ${dest}.`);
       }),
+    );
+  }
+
+  // --- storage (the Storage mod: only there when this agent has some) -------------------------
+
+  const storages = await client.storageMine().catch(() => []);
+  if (storages.length) {
+    const which = z.string().describe(`which storage: ${storages.map((s) => `"${s.name}"`).join(", ")}`);
+    const where = storages.map((s) => `${s.name}: ${s.folders.map((f) => `${f.path} (${f.access === "write" ? "read and change" : "read only"})`).join(", ")}`).join("; ");
+    const asked = (r: { status: string; message: string }) => text(r.message);
+
+    server.registerTool(
+      "storage_list",
+      { description: `List a folder on the person's storage. Without a path, shows the folders you may use. You may use: ${where}.`, inputSchema: { storage: which, path: z.string().optional().describe('e.g. "/Clients/Acme"') } },
+      safe(async ({ storage, path: p }) => {
+        const r = await client.storageList(storage, p);
+        if ("folders" in r) return json(r.folders);
+        return text(r.entries.map((e) => `${e.type === "folder" ? "[folder] " : ""}${e.path}${e.size !== null ? ` (${e.size} bytes)` : ""}${e.modified ? `, ${e.modified}` : ""}`).join("\n") || `(${r.path} is empty)`);
+      }),
+    );
+
+    server.registerTool(
+      "storage_read",
+      { description: "Read a file on the person's storage: text comes back as text and pictures are shown to you. For anything else, or files over 5 MB, use storage_download.", inputSchema: { storage: which, path: z.string() } },
+      safe(async ({ storage, path: p }) => {
+        const f = await client.storageRead(storage, p);
+        if (f.text !== undefined) return text(f.text.slice(0, 100_000));
+        if (/^image\/(png|jpeg|gif|webp)$/.test(f.mime) && f.base64) return { content: [{ type: "image" as const, data: f.base64, mimeType: f.mime }, { type: "text" as const, text: f.name }] };
+        return text(`${f.name} is ${f.mime} (${f.size} bytes); use storage_download to get it as a file.`);
+      }),
+    );
+
+    server.registerTool(
+      "storage_search",
+      { description: "Find files and folders on the person's storage whose names contain some text, inside the folders you may use (or one of them).", inputSchema: { storage: which, query: z.string(), path: z.string().optional() } },
+      safe(async ({ storage, query, path: p }) => {
+        const hits = await client.storageSearch(storage, query, p);
+        return text(hits.map((e) => `${e.type === "folder" ? "[folder] " : ""}${e.path}`).join("\n") || "Nothing found.");
+      }),
+    );
+
+    server.registerTool(
+      "storage_download",
+      {
+        description: `Copy a file from the person's storage into Wisp, so you can attach it to a message (its file id)${opts.localFiles !== false ? " and, with dest_dir, save it on your computer" : ""}.`,
+        inputSchema: { storage: which, path: z.string(), ...(opts.localFiles !== false ? { dest_dir: z.string().optional() } : {}) },
+      },
+      safe(async ({ storage, path: p, dest_dir }: { storage: string; path: string; dest_dir?: string }) => {
+        const f = await client.storageToWisp(storage, p);
+        if (!dest_dir || opts.localFiles === false) return text(`Copied ${f.name} into Wisp as ${f.id} (${f.size} bytes).`);
+        const got = await client.downloadFile(f.id);
+        await fs.mkdir(dest_dir, { recursive: true });
+        const dest = path.join(dest_dir, path.basename(got.name));
+        await fs.writeFile(dest, got.data);
+        return text(`Saved to ${dest} (Wisp file ${f.id}).`);
+      }),
+    );
+
+    server.registerTool(
+      "storage_upload",
+      {
+        description: `Put a file on the person's storage at a path (its full path, including the file name). Give a Wisp file id${opts.localFiles !== false ? " or a local_path on your computer" : ""}. A person is asked first, unless they said "Always in this folder"; then end your turn.`,
+        inputSchema: { storage: which, path: z.string().describe('e.g. "/Clients/Acme/Q3-report.pdf"'), file_id: z.string().optional(), ...(opts.localFiles !== false ? { local_path: z.string().optional() } : {}) },
+      },
+      safe(async ({ storage, path: p, file_id, local_path }: { storage: string; path: string; file_id?: string; local_path?: string }) => {
+        let fileId = file_id;
+        if (!fileId && local_path && opts.localFiles !== false) fileId = (await client.uploadFile(path.basename(local_path), await fs.readFile(local_path), guessMime(local_path))).id;
+        if (!fileId) throw new Error("give file_id or local_path");
+        return asked(await client.storageChange(storage, "put", p, fileId));
+      }),
+    );
+
+    server.registerTool(
+      "storage_mkdir",
+      { description: "Make a folder on the person's storage. A person is asked first, unless they said \"Always in this folder\".", inputSchema: { storage: which, path: z.string() } },
+      safe(async ({ storage, path: p }) => asked(await client.storageChange(storage, "mkdir", p))),
+    );
+
+    server.registerTool(
+      "storage_delete",
+      { description: "Delete a file or folder on the person's storage. A person is always asked first; end your turn after.", inputSchema: { storage: which, path: z.string() } },
+      safe(async ({ storage, path: p }) => asked(await client.storageChange(storage, "delete", p))),
     );
   }
 

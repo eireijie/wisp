@@ -68,11 +68,13 @@ import { holdsSecret } from "./connectors.ts";
 import { connectionProblem, registerModelsApi } from "./api-models.ts";
 import { modelsForHarness } from "./model-connections.ts";
 import { registerBackgroundApi } from "./api-background.ts";
+import { registerWatchesApi } from "./api-watches.ts";
 import { registerLeadApi, workspaceLead } from "./lead.ts";
 import { registerJoinApi } from "./join.ts";
 import { registerPairingApi } from "./pairing.ts";
 import { registerReachApi } from "./api-reach.ts";
 import { registerLoginsApi } from "./api-logins.ts";
+import { registerStorageApi } from "./api-storage.ts";
 import { registerTeamDraftApi } from "./team-drafts.ts";
 import { registerRemoteMcp } from "./remote-mcp.ts";
 import { agentPolicy } from "./policy.ts";
@@ -2479,12 +2481,14 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerVoiceApi(app, hub, { need });
   registerBackgroundApi(app, hub, { need, parse, requesterOf });
   registerSetupApi(app, hub, { need, parse });
+  registerWatchesApi(app, hub, { need, parse, requesterOf });
   registerLeadApi(app, hub, { need, parse });
   registerUpdateApi(app, hub, { need });
   registerJoinApi(app, hub, { need, parse });
   registerPairingApi(app, hub, { need, parse });
   registerReachApi(app, hub, { need, parse });
   registerLoginsApi(app, hub, { need, parse, requesterOf });
+  registerStorageApi(app, hub, { need, parse, requesterOf, channelVisible, dataDir: opts.dataDir, filesDir: opts.filesDir });
   registerTeamDraftApi(app, hub, { need, parse });
   registerRemoteMcp(app, hub, { need, parse, deviceOwnerOf });
 

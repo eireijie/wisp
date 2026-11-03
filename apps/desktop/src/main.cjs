@@ -14,6 +14,9 @@ const engine = require("./engine.cjs");
 const { GITHUB_URL } = require("./repo.cjs");
 const { isPairingLink, registerProtocols } = require("./protocol.cjs");
 const cloud = require("./cloud.cjs");
+const doSignIn = require("./cloud-providers/do-sign-in.cjs");
+const rustdesk = require("./rustdesk.cjs");
+const { hasBattery } = require("./machine.cjs");
 const screenCode = require("./screen-code.cjs");
 const { reachableAddresses } = require("./addresses.cjs");
 const { Discovery, JoinClient } = require("./join.cjs");
@@ -39,7 +42,7 @@ const discovery = new Discovery(() => {
 let joining = null;
 let openOnboarding = false;
 
-/** @type {{ autoUpdate?: boolean, mode?: "local" | "remote", hubUrl?: string, cloud?: { provider: "hetzner", id: number, name: string, ip: string, location: string, type: string }, cloudPending?: { server: { id: number, name: string, ip: string, location: string, type: string }, key: string, dismissed?: boolean }, wispDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyOverFullscreen?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
+/** @type {{ autoUpdate?: boolean, mode?: "local" | "remote", hubUrl?: string, cloud?: { provider: "digitalocean" | "hetzner" | "vultr", id: number | string, name: string, ip: string, location: string, type: string }, cloudPending?: { server: { provider?: string, id: number | string, name: string, ip: string, location: string, type: string }, key: string, dismissed?: boolean }, wispDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyOverFullscreen?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
 let config = {};
 try {
   config = JSON.parse(fs.readFileSync(CONFIG, "utf8"));
@@ -628,7 +631,10 @@ async function removalContext() {
   } else if (config.mode === "remote" && config.hubUrl) {
     warnings.push({ text: `Your Wisp at ${hostOf(config.hubUrl)} stays as it is, with its chats and memory. This computer shows as offline there until you remove it in Devices.` });
   }
-  if (config.cloud) warnings.push({ bad: true, text: `Your cloud server ${config.cloud.name} keeps running and Hetzner keeps billing you. Delete it in your Hetzner account if you're done with it.` });
+  if (config.cloud) {
+    const by = cloud.provider(config.cloud.provider ?? "hetzner").name;
+    warnings.push({ bad: true, text: `Your cloud server ${config.cloud.name} keeps running and ${by} keeps billing you. Delete it in your ${by} account if you're done with it.` });
+  }
   return { facts, warnings };
 }
 
@@ -847,9 +853,11 @@ const fromSetup = (e) => isPage(mainFrameUrl(e, win) ?? "", SETUP_PAGE);
 const fromHub = (e) => onOrigin(mainFrameUrl(e, win) ?? "", hubOrigin);
 const setup = (name, fn) => ipcMain.handle(name, (e, ...args) => (fromSetup(e) ? fn(...args) : null));
 
-setup("setup:check", () => {
+setup("setup:check", async () => {
   const found = engine.runtime(config.wispDir);
-  return { problem: found.problem ?? null, platform: process.platform, hubUrl: config.hubUrl ?? "", mode: config.mode ?? null, device: config.device ?? true, deviceName: deviceName() };
+  // a laptop sleeps and travels, so the first question starts on "No" there
+  const laptop = await hasBattery();
+  return { problem: found.problem ?? null, platform: process.platform, hubUrl: config.hubUrl ?? "", mode: config.mode ?? null, device: config.device ?? true, deviceName: deviceName(), laptop };
 });
 
 /** Create: run a server on this computer; the setup page says when, then opens it (setup:open). */
@@ -893,44 +901,89 @@ setup("setup:poll-join", () => {
 });
 
 /**
- * Create one in your cloud account: a server in the person's own Hetzner project, which Hetzner
- * bills them for. The API token comes from the setup page with each call and is never kept here:
- * not in memory after the call, not in desktop.json. Only where the server is gets saved.
+ * Cloud: a server in the person's own account at a cloud provider, which the provider bills them
+ * for. The API token (or signed-in token) comes from the setup page with each call and is never
+ * kept here: not in memory after the call, not in desktop.json. Only where the server is gets saved.
  */
-setup("setup:cloud-plans", async (token) => {
+setup("setup:cloud-providers", () =>
+  cloud.PROVIDERS.map((p) => ({ id: p.id, name: p.name, signIn: !!p.signIn, signInUrl: p.signInUrl, billingUrl: p.billingUrl })));
+
+/** "Sign in with DigitalOcean": the browser signs in and comes back with a token for setup. */
+let signingIn = null;
+setup("setup:cloud-sign-in", async () => {
+  signingIn?.cancel();
+  const handle = doSignIn.signIn({ openExternal: (url) => shell.openExternal(url) });
+  signingIn = handle;
   try {
-    return { ok: true, ...(await cloud.plans(String(token || "").trim())) };
+    const token = await handle.done;
+    win?.show();
+    win?.focus();
+    return { ok: true, token };
+  } catch (err) {
+    return { ok: false, error: err.message, cancelled: !!err.cancelled };
+  } finally {
+    if (signingIn === handle) signingIn = null;
+  }
+});
+setup("setup:cloud-sign-in-cancel", () => { signingIn?.cancel(); return { ok: true }; });
+
+/**
+ * A token the person just copied, if it looks like this provider's: checked only while the token
+ * screen asks (when its window comes back into focus), and nothing else on the clipboard is kept.
+ */
+setup("setup:clipboard-token", async (providerId) => {
+  try {
+    // newer Electron reads the clipboard asynchronously
+    const text = String((await clipboard.readText()) ?? "").trim();
+    return cloud.provider(providerId).looksLikeToken(text) ? text : null;
+  } catch {
+    return null;
+  }
+});
+
+/** The sizes the setup page offers, per location, with the nearest location and the recommended size. */
+setup("setup:cloud-plans", async (providerId, token) => {
+  try {
+    const r = await cloud.plans(String(token || "").trim(), { provider: providerId });
+    const choices = Object.fromEntries(r.locations.map((l) => [l.name, cloud.sizeChoices(r.plans, l.name)]));
+    const locations = r.locations.filter((l) => choices[l.name].length);
+    return { ok: true, currency: r.currency, locations, choices, nearest: cloud.nearestLocation(locations) };
   } catch (err) {
     return { ok: false, error: err.message };
   }
 });
 
+const pendingFor = (server) => ({ provider: server.provider, id: server.id, name: server.name, ip: server.ip, location: server.location, type: server.type });
+
 /**
  * A server that was created but didn't finish setting up keeps its setup key here (`cloudPending`),
  * even across restarts: only that key can make its first account, so "Keep waiting" (`resume`, the
- * server's id) picks it up again instead of leaving it unusable.
+ * server's id) picks it up again instead of leaving it unusable. When it's done, the setup page
+ * opens Wisp itself (setup:open), after the RustDesk step if there is one.
  */
-setup("setup:cloud-create", async (token, { type, location, account, device: asDevice = true, resume = null } = {}) => {
+setup("setup:cloud-create", async (providerId, token, { type, location, account, device: asDevice = false, resume = null } = {}) => {
   const pending = resume != null && config.cloudPending?.server?.id === resume ? config.cloudPending : undefined;
+  const which = pending ? (pending.server.provider ?? "hetzner") : providerId;
   try {
     const r = await cloud.createWisp(
-      { token: String(token || "").trim(), type, location, account },
+      { provider: which, token: String(token || "").trim(), type, location, account },
       { onStep: (step) => win?.webContents.send("setup:cloud-step", step), resume: pending },
     );
     const { id, name, ip } = r.server;
     config.cloudPending = undefined;
-    switchTo({ mode: "remote", hubUrl: r.url, device: !!asDevice, cloud: { provider: "hetzner", id, name, ip, location: r.server.location, type: r.server.type } });
+    switchTo({ mode: "remote", hubUrl: r.url, device: !!asDevice, cloud: { provider: which, id, name, ip, location: r.server.location, type: r.server.type } });
     signInOnOpen(r.url, r.session);
-    connect();
+    // a signed-in token is only for setup; end it now rather than in an hour
+    if (cloud.provider(which).signIn) doSignIn.revoke(String(token || "").trim());
     return { ok: true, url: r.url };
   } catch (err) {
     if (err.server && err.key) {
-      config.cloudPending = { server: { id: err.server.id, name: err.server.name, ip: err.server.ip, location: err.server.location, type: err.server.type }, key: err.key };
+      config.cloudPending = { server: pendingFor(err.server), key: err.key };
       pendingCloudOpen = true;
       save();
       refresh();
     }
-    return { ok: false, error: err.message, server: err.server ? { id: err.server.id, name: err.server.name, ip: err.server.ip } : null };
+    return { ok: false, error: err.message, server: err.server ? pendingFor(err.server) : null };
   }
 });
 
@@ -939,9 +992,10 @@ setup("setup:cloud-keep", () => {
   return connect();
 });
 
-setup("setup:cloud-delete", async (token, id) => {
+setup("setup:cloud-delete", async (providerId, token, id) => {
+  const which = config.cloudPending?.server?.id === id ? (config.cloudPending.server.provider ?? "hetzner") : providerId;
   try {
-    await cloud.deleteServer(String(token || "").trim(), id);
+    await cloud.deleteServer(String(token || "").trim(), id, { provider: which });
     if (config.cloudPending?.server?.id === id) {
       config.cloudPending = undefined;
       pendingCloudOpen = false;
@@ -952,6 +1006,20 @@ setup("setup:cloud-delete", async (token, id) => {
   } catch (err) {
     return { ok: false, error: err.message };
   }
+});
+
+/**
+ * RustDesk, offered when agents will use this computer: installed here (asked on the page), its
+ * ID saved in node.json so the device shows it on its page.
+ */
+setup("setup:rustdesk-status", () => ({ installed: rustdesk.installed(), id: engine.readNodeConfig().rustdesk?.id ?? null }));
+setup("setup:rustdesk-install", async () => {
+  const r = await rustdesk.install();
+  if (!r.ok) return r;
+  const id = await rustdesk.startAndReadId();
+  if (!id) return { ok: false, error: "RustDesk is installed but hasn't shown an ID yet. Open RustDesk once, then press Check again." };
+  engine.writeNodeConfig({ rustdesk: { id } });
+  return { ok: true, id };
 });
 
 /** The account was made by the app, so hand its session to the web app when the hub first opens. */

@@ -133,6 +133,18 @@ CREATE TABLE IF NOT EXISTS approvals (
   status TEXT NOT NULL CHECK (status IN ('pending','approved','denied')), decided_by TEXT, note TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL, decided_at TEXT
 );
+CREATE TABLE IF NOT EXISTS storage_connections (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL, service TEXT NOT NULL, kind TEXT NOT NULL, url TEXT, account TEXT NOT NULL DEFAULT '',
+  sign_in TEXT NOT NULL, login_item_id TEXT, secret_enc TEXT, folders_json TEXT NOT NULL DEFAULT '[]',
+  all_agents INTEGER NOT NULL DEFAULT 0, always_json TEXT NOT NULL DEFAULT '[]', problem TEXT,
+  created_by TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS storage_agents (
+  connection_id TEXT NOT NULL REFERENCES storage_connections(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  PRIMARY KEY (connection_id, agent_id)
+);
 CREATE TABLE IF NOT EXISTS routines (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE, name TEXT NOT NULL, note_path TEXT NOT NULL,
@@ -268,6 +280,30 @@ CREATE TABLE IF NOT EXISTS computer_catalogs (
   catalog_json TEXT NOT NULL, updated_at TEXT NOT NULL,
   PRIMARY KEY (node_id, computer_id)
 );
+CREATE TABLE IF NOT EXISTS watches (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, service TEXT NOT NULL, label TEXT NOT NULL,
+  connector_id TEXT REFERENCES connectors(id) ON DELETE CASCADE, secret_json TEXT NOT NULL DEFAULT '{}', config_json TEXT NOT NULL DEFAULT '{}',
+  cursor TEXT, every_minutes INTEGER NOT NULL, paused INTEGER NOT NULL DEFAULT 0,
+  last_polled_at TEXT, next_poll_at TEXT, last_error TEXT, created_by TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS watch_agents (
+  watch_id TEXT NOT NULL REFERENCES watches(id) ON DELETE CASCADE, agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  PRIMARY KEY (watch_id, agent_id)
+);
+CREATE TABLE IF NOT EXISTS app_events (
+  id TEXT PRIMARY KEY, watch_id TEXT NOT NULL REFERENCES watches(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE, user_id TEXT NOT NULL,
+  service TEXT NOT NULL, kind TEXT NOT NULL, item_id TEXT NOT NULL, title TEXT NOT NULL, url TEXT, actor TEXT, preview TEXT,
+  happened_at TEXT NOT NULL, created_at TEXT NOT NULL, run_id TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS app_events_once ON app_events(watch_id, agent_id, item_id, happened_at);
+CREATE INDEX IF NOT EXISTS app_events_waiting ON app_events(run_id, agent_id);
+CREATE TABLE IF NOT EXISTS mentions (
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  about TEXT NOT NULL, message_id TEXT, said_at TEXT NOT NULL, answered_at TEXT,
+  PRIMARY KEY (agent_id, user_id, about)
+);
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   keys_json TEXT NOT NULL, created_at TEXT NOT NULL
@@ -325,6 +361,8 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["approvals", "login_json", "TEXT"],
   // an ask-me step of a team's flow: which request and step this approval answers
   ["approvals", "flow_json", "TEXT"],
+  // an agent asking to change a file on a storage (the Storage mod)
+  ["approvals", "storage_json", "TEXT"],
   // last_run_at is when a run was requested; this is when one actually finished
   ["routines", "last_completed_at", "TEXT"],
   ["messages", "edited_at", "TEXT"],

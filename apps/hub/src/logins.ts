@@ -199,6 +199,15 @@ export class Logins {
     return result;
   }
 
+  /**
+   * A login's username and password, read from the password manager now and not kept: the Storage
+   * mod signs in to a file server with it.
+   */
+  async credentials(workspaceId: string, itemId: string): Promise<{ username: string; password: string }> {
+    const { username, password } = await (await this.source(workspaceId)).secret(itemId);
+    return { username, password };
+  }
+
   /** What the agent hears after a fill, in a sentence. */
   say = say;
 

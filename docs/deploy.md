@@ -34,19 +34,27 @@ Back up the whole folder, and the memory folder too if you moved it. The vault i
 
 To keep Wisp and your agents running when your computers are off, put it on a server you rent. Agents you make in setup live on that server. You sign in to their harnesses from Wisp, and those sign-ins stay on the server. The Wisp project doesn't host anything or take payment for it. The server is in **your own** cloud account, and the provider bills you directly.
 
-### From the desktop app (Hetzner)
+### From the desktop app
 
-On first run (or **Create or Join Another Server…** in the menu bar), choose **Create one in your cloud account**:
+On first run (or **Create or Join Another Server…** in the menu bar), Wisp asks two questions: is this computer on all day, and should agents use its apps too. A computer that sleeps or travels gets **Cloud** as the recommendation. Then:
 
-1. In the [Hetzner Console](https://console.hetzner.com), open a project, go to **Security → API tokens → Generate API token**, choose **Read & Write**, and paste it into Wisp.
-2. Pick a location and a size. The prices come straight from Hetzner's API each time, per month, including the IPv4 address. Hetzner bills by the hour, up to that monthly price. Wisp suggests the cheapest size with 8 GB of memory. Wisp itself takes about 1 GB, and each agent with its own computer can use up to 4 GB more, so a 4 GB server fits one agent computer with little room to spare, and 2 GB only fits agents that don't have one.
-3. Enter your name, email and password for the new Wisp, then **Create server**.
+1. **Connect a cloud account.** DigitalOcean is the default: **Sign in with DigitalOcean** opens your browser, you sign in (or sign up), and you come back. There's no token to copy. Hetzner (cheapest in Europe) and Vultr are under **Change**, and both ask for an API token: Hetzner's from **Security → API tokens** with **Read & Write** in a project, Vultr's from **Account → API** with all addresses allowed. If you copy the token while Wisp is open, it offers to use it.
+2. **Choose a size.** Wisp picks the region nearest your time zone and offers 2, 4 and 8 GB, priced live from the provider's API per month (with Hetzner's IPv4 address). **4 GB is recommended**: Wisp takes about 1 GB, and an agent's computer is capped at 4 GB but idles near 1.5 GB, so 4 GB runs Wisp and a first agent with a computer. Move to 8 GB when a second agent gets its own computer. 2 GB only fits agents without computers. All three providers bill by the hour up to that monthly price.
+3. Enter your name, email and password for the new Wisp, then **Start Wisp**.
 
-The app creates an Ubuntu 24.04 server named `wisp-xxxxxx` (labelled `managed-by=wisp`) with [`docker/cloud-init.yaml`](../docker/cloud-init.yaml) as its first-boot script. It waits until Wisp answers over HTTPS (usually 3–5 minutes), makes your account, and opens it, signed in. If the server doesn't come up in time, the app offers to delete it.
+The app creates an Ubuntu 24.04 server named `wisp-xxxxxx` with [`docker/cloud-init.yaml`](../docker/cloud-init.yaml) as its first-boot script, and shows each step with its own time: creating, starting, installing Wisp, making your account (usually 3–5 minutes). When a step fails, it says what to do: add a payment method, finish the provider's account check, pick another size, or keep waiting or delete a server that didn't finish. If you said agents should use this computer, it joins the new Wisp too, and Wisp offers [RustDesk](#watch-your-computer-from-anywhere-rustdesk) before opening your Wisp, signed in.
 
-**Where the token goes:** only to `api.hetzner.cloud`. It's held in the setup window's memory while the server is created and is never written to disk. It's gone once the window moves on to your Wisp. The app keeps only which server it made (id, name, IP) in its `desktop.json`. You can delete the token in Hetzner afterwards. Wisp doesn't need it again.
+**Where the token goes:** only to the provider's API (`api.digitalocean.com`, `api.hetzner.cloud` or `api.vultr.com`). It's held in the setup window's memory while the server is created and is never written to disk. A DigitalOcean sign-in only allows creating, reading and deleting servers, lasts an hour, and is revoked as soon as the server is ready. The app keeps only which server it made (provider, id, name, IP) in its `desktop.json`.
 
-**To stop paying,** delete the server in the Hetzner Console. Back up `/opt/wisp/data` and `/opt/wisp/device` first if you want to keep anything.
+**To stop paying,** delete the server in your provider's console. Back up `/opt/wisp/data` and `/opt/wisp/device` first if you want to keep anything.
+
+**Adding a provider** (a future Wisp Cloud included) is one module in [`apps/desktop/src/cloud-providers/`](../apps/desktop/src/cloud-providers/) with the same calls: list sizes with prices, create a server with the start script, check on it, delete it. Waiting for HTTPS, the first account and resuming a server that didn't finish are shared.
+
+### Watch your computer from anywhere (RustDesk)
+
+When agents use your own computer, Wisp recommends [RustDesk](https://rustdesk.com) so you can see or take over its screen from your phone. It's free and open source (AGPL-3.0), installed as its own unchanged app: Homebrew or its `.dmg` on a Mac, winget or its installer on Windows, rustdesk.com on Linux. Wisp shows its ID on the computer's page, and the password is yours: set it in RustDesk and keep it in your password manager. On a Mac it's the only way to see the screen remotely, since Wisp's own live view (VNC behind your screen code) works on Linux and Windows. `wisp node rustdesk` does the same from a terminal.
+
+RustDesk's public relays are meant for testing and now ask the person connecting to sign in with Google or GitHub. Over Tailscale, connect to the computer's Tailscale address directly instead, with no relay. Running RustDesk's own relay (`hbbs`/`hbbr`, TCP 21115–21117 and UDP 21116) on your Wisp server is possible but not set up by Wisp yet.
 
 ### What the server runs
 
@@ -72,12 +80,16 @@ Paste [`docker/cloud-init.yaml`](../docker/cloud-init.yaml) into the "user data"
 
 ### Why these providers and not others
 
-| | Hetzner Cloud | DigitalOcean |
-| --- | --- | --- |
-| In the app | Yes: paste an API token | Not yet. Use the script by hand |
-| Smallest size that fits | 2 vCPU / 4 GB shared (CX23, or CAX11 on Arm), a few euros a month. Hetzner changed its prices twice in 2026, so the app shows them live from the API | A 2 GB Basic Droplet, roughly twice Hetzner's price |
-| API | `POST /v1/servers` with `user_data` (up to 32 KiB) | `POST /v2/droplets` with `user_data` (up to 64 KiB) |
-| Connecting without a token | No OAuth for third-party apps | OAuth: a "Connect DigitalOcean" button would work once the Wisp project registers an OAuth app. Its docs now describe PKCE for desktop apps, but recent reports say the token exchange still wants a client secret. Needs testing before we build on it |
+Checked on 2 November 2026, for 4 GB, per month, IPv4 included:
+
+| | DigitalOcean (default) | Hetzner | Vultr |
+| --- | --- | --- | --- |
+| Price | $24, the same everywhere | €5.99 in Europe; €32.49 in the US | $20, the same everywhere |
+| Connecting | Sign in: Wisp registers itself as a desktop app (OAuth with PKCE, no client secret) | Paste a project token | Paste an API key (it can't be limited to servers) |
+| Sign-up | Card or PayPal; $5 credit for new accounts | Card; may ask for ID and a selfie | Card |
+| Catch | About 4× Hetzner's European price | Raised prices twice in 2026; cheap sizes often sold out | No sign-in |
+
+Linode costs the same as DigitalOcean but its OAuth needs an app the project registers. Hostinger, Contabo and OVH are only cheap on 12–24 month prepaid terms, without hourly billing or cloud-init, which doesn't suit servers an app creates and deletes.
 
 Both give you a whole virtual machine, so Docker runs normally. That's all agent computers need: on a Linux device they're Docker containers from `docker/computer`, with no nested virtualization. To run agents on the cloud server itself, [connect it as a device](../INSTALL.md#4-install-a-device) using the hub URL and token from **Devices → Add device**, then sign in to your agent CLIs.
 

@@ -3,6 +3,7 @@ import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabe
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Logins } from "./logins.ts";
+import { Storage } from "./storage.ts";
 import { Discussions } from "./discussions.ts";
 import { Apns } from "./apns.ts";
 import { Fcm } from "./fcm.ts";
@@ -10,6 +11,7 @@ import { Reach } from "./reach.ts";
 import { Routines } from "./routines.ts";
 import { TeamSchedules } from "./team-schedules.ts";
 import { BACKGROUND_THREAD, Background } from "./background.ts";
+import { Watches } from "./watches.ts";
 import { AutoMemory, MEMORY_THREAD } from "./auto-memory.ts";
 import { Push } from "./push.ts";
 import { Loops } from "./loops.ts";
@@ -81,9 +83,12 @@ export class Hub {
   readonly computers: Computers;
   /** logins agents fill from the person's password manager */
   readonly logins: Logins;
+  /** files on the person's own storage (the Storage mod) */
+  readonly storage: Storage;
   readonly routines: Routines;
   readonly schedules: TeamSchedules;
   readonly background: Background;
+  readonly watches: Watches;
   readonly loops: Loops;
   /** memory passes after meaningful work, and the daily tidy of the graph */
   readonly autoMemory: AutoMemory;
@@ -133,9 +138,11 @@ export class Hub {
     this.flows = new TeamFlows(this);
     this.computers = new Computers(this);
     this.logins = new Logins(this);
+    this.storage = new Storage(this);
     this.routines = new Routines(this);
     this.schedules = new TeamSchedules(this);
     this.background = new Background(this);
+    this.watches = new Watches(this);
     this.loops = new Loops(this);
     this.autoMemory = new AutoMemory(this);
     this.push = new Push(this);
@@ -249,6 +256,7 @@ export class Hub {
     this.routines.stop();
     this.schedules.stop();
     this.background.stop();
+    this.watches.stop();
     this.autoMemory.stop();
     for (const c of this.clients) c.socket.terminate();
     for (const n of this.nodes.values()) n.socket.terminate();
@@ -1006,7 +1014,10 @@ export class Hub {
         continue;
       }
       const runId = this.store.createRun({ agentId, channelId: msg.channelId, threadId, triggerMessageId: msg.id, hop: msg.hop, requestedBy });
-      if (msg.author.kind === "user") this.background.heardFrom(agentId, msg.author.id);
+      if (msg.author.kind === "user") {
+        this.background.heardFrom(agentId, msg.author.id);
+        this.watches.personWrote(agentId, msg.author.id);
+      }
       if (!agent.nodeId) this.postSystem(msg, `${this.handleOf(agentId)} isn't connected to a device yet. The request is queued.`);
       else if (!this.isNodeOnline(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)} is offline. The request is queued until its device reconnects.`);
       else if (this.isNodePaused(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)}'s device is paused. The request is queued until it's resumed there.`);
@@ -1590,6 +1601,7 @@ export class Hub {
     await this.ensureSharedSkills(agent.id);
     const skills = this.skills.promptSection(agent.id, { learn: agentPolicy(this, agent.workspaceId).learnSkills });
     const connectors = this.connectors.promptSection(agent.id);
+    const storage = this.storage.promptSection(agent);
     const soulNote = agent.settings.soulLocked
       ? "Your soul is locked by your owner; don't try to edit it."
       : "As you learn who you are, you may refine it with memory_write on me/SOUL.md. Keep it short.";
@@ -1621,6 +1633,7 @@ export class Hub {
       this.computerSection(agent.id),
       skills ? `\n${skills}` : "",
       connectors ? `\n${connectors}` : "",
+      storage ? `\n${storage}` : "",
       routines ? `\n${routines}` : "",
       discussion ? `\n${discussion}` : "",
       background,

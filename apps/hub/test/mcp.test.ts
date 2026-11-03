@@ -99,6 +99,9 @@ describe("wisp-mcp", () => {
       "task_update",
       "team_setup",
       "teams_list",
+      "watch_list",
+      "watch_start",
+      "watch_stop",
     ]);
   });
 

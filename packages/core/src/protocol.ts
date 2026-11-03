@@ -308,6 +308,8 @@ export type ClientEvent =
   /** skills or connectors were added, changed, removed, given to agents, learned or used; refetch GET /api/skills (and /api/connectors) */
   | { type: "skills_changed" }
   | { type: "background_changed"; agentId: string }
+  /** a watch on someone's app was added, changed or stopped; refetch GET /api/watches */
+  | { type: "watches_changed" }
   /** an agent changed a setting or mod for someone, or someone undid one */
   | { type: "changes_changed" }
   | { type: "tasks_changed" }

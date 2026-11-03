@@ -13,19 +13,21 @@ struct Features: Codable, Hashable {
   var buddy = true
   var invite = true
   var remoteDesktop = true
+  /** needs setting up before it does anything, so it's off until someone adds it */
+  var storage = false
 
   static let everything = Features()
   static let simple = Features(background: false, routines: false, teach: false, tasks: false, voice: false, buddy: false, invite: false, remoteDesktop: false)
 
-  init(background: Bool = true, routines: Bool = true, teach: Bool = true, tasks: Bool = true, voice: Bool = true, buddy: Bool = true, invite: Bool = true, remoteDesktop: Bool = true) {
+  init(background: Bool = true, routines: Bool = true, teach: Bool = true, tasks: Bool = true, voice: Bool = true, buddy: Bool = true, invite: Bool = true, remoteDesktop: Bool = true, storage: Bool = false) {
     self.background = background; self.routines = routines; self.teach = teach
-    self.tasks = tasks; self.voice = voice; self.buddy = buddy; self.invite = invite; self.remoteDesktop = remoteDesktop
+    self.tasks = tasks; self.voice = voice; self.buddy = buddy; self.invite = invite; self.remoteDesktop = remoteDesktop; self.storage = storage
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: FeatureKey.self)
     self.init()
-    for key in FeatureKey.allCases { self[key] = (try? c.decodeIfPresent(Bool.self, forKey: key)) ?? true }
+    for key in FeatureKey.allCases { self[key] = (try? c.decodeIfPresent(Bool.self, forKey: key)) ?? (key != .storage) }
   }
 
   func encode(to encoder: Encoder) throws {
@@ -44,6 +46,7 @@ struct Features: Codable, Hashable {
       case .buddy: buddy
       case .invite: invite
       case .remoteDesktop: remoteDesktop
+      case .storage: storage
       }
     }
     set {
@@ -56,17 +59,18 @@ struct Features: Codable, Hashable {
       case .buddy: buddy = newValue
       case .invite: invite = newValue
       case .remoteDesktop: remoteDesktop = newValue
+      case .storage: storage = newValue
       }
     }
   }
 
   var onCount: Int { FeatureKey.allCases.filter { self[$0] }.count }
-  /** Simple (all off), Everything (all on) or Custom, as the Quick start control shows it. */
-  var preset: String { onCount == 0 ? "simple" : onCount == FeatureKey.allCases.count ? "everything" : "custom" }
+  /** Simple (all off), Everything (all on but Storage, which needs setting up) or Custom, as the Quick start control shows it. */
+  var preset: String { onCount == 0 ? "simple" : self == .everything ? "everything" : "custom" }
 }
 
 enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
-  case background, routines, teach, tasks, voice, buddy, invite, remoteDesktop
+  case background, routines, teach, tasks, voice, buddy, invite, remoteDesktop, storage
   var id: String { rawValue }
 
   enum Group: String, CaseIterable {
@@ -91,6 +95,7 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
     case .buddy: "Desk buddy"
     case .invite: "Invite people"
     case .remoteDesktop: "Remote desktop"
+    case .storage: "Storage"
     }
   }
 
@@ -104,6 +109,7 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
     case .buddy: "A small ghost on your desktop that shows what your agents are up to."
     case .invite: "Let other people into this workspace. Adds a People page and lets agents answer more than just you."
     case .remoteDesktop: "Reach your devices from anywhere with RustDesk, from each device's page."
+    case .storage: "Let agents use files on your Nextcloud, NAS, Google Drive or Dropbox."
     }
   }
 
@@ -111,7 +117,7 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
     switch self {
     case .background, .routines, .teach: .own
     case .tasks: .many
-    case .voice, .buddy, .invite, .remoteDesktop: .extras
+    case .voice, .buddy, .invite, .remoteDesktop, .storage: .extras
     }
   }
 
@@ -125,6 +131,7 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
     case .buddy: "theatermask.and.paintbrush"
     case .invite: "person.badge.plus"
     case .remoteDesktop: "display"
+    case .storage: "externaldrive"
     }
   }
 }
