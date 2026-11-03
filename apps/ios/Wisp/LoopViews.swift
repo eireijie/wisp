@@ -164,14 +164,49 @@ struct ReminderSheet: View {
   }
 }
 
-/** The small "Checking back" line over a bubble the agent wrote on its own. */
+/**
+ * The small "Checking back" line over a bubble the agent wrote on its own; "Checking back on the
+ * 9:14 AM chat" when it picks up an earlier chat, and a tap goes to where that chat starts.
+ */
 struct CheckbackLabel: View {
+  @Environment(Store.self) private var store
+  @Environment(\.scrollToMessage) private var scrollTo
+  var message: Message? = nil
+
+  private var context: MessageContext? { message?.context }
+  /** the chat's first message is loaded here, so there's somewhere to go */
+  private var reachable: Bool {
+    guard let message, let context else { return false }
+    return scrollTo != nil && store.message(context.conversationId, in: message.channelId) != nil
+  }
+
   var body: some View {
-    Label { Text("Checking back") } icon: { Image(systemName: "arrow.uturn.backward").font(.system(size: 11, weight: .medium)) }
-      .labelStyle(.titleAndIcon)
-      .font(.system(size: 12))
-      .foregroundStyle(Palette.faint)
-      .padding(.leading, 4).padding(.top, 6)
+    let icon = Image(systemName: "arrow.uturn.backward").font(.system(size: 11, weight: .medium))
+    Group {
+      if let context {
+        let name = ChatFormat.chatName(context.date)
+        if reachable {
+          Button { scrollTo?(context.conversationId) } label: {
+            HStack(spacing: 5) {
+              icon
+              Text("Checking back on ") + Text(name).foregroundStyle(Palette.muted).underline(true, color: Palette.faint.opacity(0.5))
+            }
+            .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .accessibilityLabel("Checking back on \(name)")
+          .accessibilityHint("Goes to where that chat starts")
+        } else {
+          HStack(spacing: 5) { icon; Text("Checking back on \(name)") }
+        }
+      } else {
+        HStack(spacing: 5) { icon; Text("Checking back") }
+      }
+    }
+    .lineLimit(1)
+    .font(.system(size: 12))
+    .foregroundStyle(Palette.faint)
+    .padding(.leading, 4).padding(.top, 6)
   }
 }
 

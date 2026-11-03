@@ -7,6 +7,7 @@ import type { AgentEvent } from "@wisp/core";
 import { WispClient } from "@wisp/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
+import { makeRoomFor } from "./room.ts";
 import { afterQuietHours, BACKOFF_CEILING_MINUTES, inQuietHours, NOTHING_TO_WATCH, parseWhen, QUIET_LATELY, startOfDay } from "../src/background.ts";
 import type { Hub } from "../src/hub.ts";
 import { openDb } from "../src/db.ts";
@@ -52,6 +53,9 @@ const waitFor = async <T>(fn: () => Promise<T | undefined> | T | undefined, ms =
 const idle = () => waitFor(() => !hub.store.db.prepare("SELECT 1 FROM runs WHERE status IN ('queued','running')").get() || undefined);
 const dm = () => hub.store.dmChannel(hub.store.agent(agentId)!.workspaceId, me, agentId);
 
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = async (body: Parameters<typeof makeRoomFor>[2]) => (await makeRoomFor(hub, owner, body)).data;
+
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-background-"));
   const built = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
@@ -62,7 +66,7 @@ beforeAll(async () => {
   close = () => built.app.close();
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WispClient({ url, token: setup.token });
-  await owner.request("POST", "/api/channels", { name: "general" });
+  await room({ name: "general" });
   const { node, token } = await owner.request("POST", "/api/nodes", { name: "box" });
   me = (hub.store.db.prepare("SELECT id FROM users").get() as { id: string }).id;
   agentId = (await owner.request("POST", "/api/agents", { handle: "dot", name: "Dot", harness: "custom", nodeId: node.id })).id;

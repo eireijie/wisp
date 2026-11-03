@@ -16,6 +16,7 @@ import { mkdirSync } from "node:fs";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { hashCode } from "../../node/src/screen-lock.ts";
 import { buildHub } from "../src/app.ts";
+import { makeRoomFor } from "./room.ts";
 import type { Hub } from "../src/hub.ts";
 
 // a 1x1 JPEG
@@ -115,6 +116,9 @@ const allMessages = async (): Promise<Message[]> => {
   return out;
 };
 
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = async (body: Parameters<typeof makeRoomFor>[2]) => (await makeRoomFor(hub, owner, body)).data;
+
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-computers-"));
   // a fake VNC server: says hello like RFB, then echoes
@@ -191,7 +195,7 @@ beforeAll(async () => {
 
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WispClient({ url, token: setup.token });
-  await owner.request("POST", "/api/channels", { name: "general" });
+  await room({ name: "general" });
   const created = await owner.request("POST", "/api/nodes", { name: "box" });
   nodeId = created.node.id;
   const agent = await owner.request("POST", "/api/agents", { handle: "nova", name: "Nova", harness: "custom", nodeId, settings: { respondTo: "anyone" } });

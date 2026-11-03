@@ -22,12 +22,12 @@ import { slashQuery, useAgentCommands, useSlashMenu, type SlashItem } from "../c
 import { ActivityPill, runActivity, stopRuns } from "../components/ActivityPill.tsx";
 import { RightPane } from "../components/RightPane.tsx";
 import { workKind, workSummary } from "../components/agentActivity.ts";
-import { ActionSheet, ActionToolbar, DeleteMessageDialog, EditMessageDialog, useLongPress, useMessageActionList } from "../components/MessageActions.tsx";
+import { DeleteMessageDialog, EditMessageDialog, MessageMenu, ReactionBadges, SWIPE_ARM, useLongPress, useMessageActionList, useSwipeToThread } from "../components/MessageActions.tsx";
 import { useChangedSinceMount, useFreshIds } from "../motion.ts";
 import { NotifyDialog, TeamInfo, useChannelMembers, type InfoTab } from "../components/TeamInfo.tsx";
 import { useFeature } from "../features.ts";
 import { useDevices } from "../devices.ts";
-import { isGrouped, needsStamp, snippetOf, stampLabel, toolLine } from "../chatFormat.ts";
+import { chatName, isGrouped, needsStamp, snippetOf, stampLabel, startsChat, toolLine } from "../chatFormat.ts";
 import { openDm } from "../openDm.ts";
 import { CheckbackLabel, ClosedLine, LoopParts } from "../components/Loops.tsx";
 
@@ -582,7 +582,7 @@ function MessageList({ channel, readMark, onAddAgent, onMembers, messageId }: { 
     <div className="relative flex-1 min-h-0">
       <div
         ref={ref}
-        className="h-full overflow-y-auto pt-2 pb-2"
+        className="h-full overflow-y-auto overscroll-x-none pt-2 pb-2"
         onScroll={(e) => {
           const el = e.currentTarget;
           const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
@@ -591,16 +591,18 @@ function MessageList({ channel, readMark, onAddAgent, onMembers, messageId }: { 
         }}
       >
         <div className="mx-auto w-full max-w-3xl">
+        <LatestChat.Provider value={messages.at(-1)?.conversationId ?? null}>
         {history.controls}
         {!history.error && empty && !runs.length && <ChannelIntro channel={channel} onAddAgent={onAddAgent} onMembers={onMembers} />}
         {messages.map((m, i) => {
-          const stamp = needsStamp(messages[i - 1], m);
+          const chat = startsChat(messages[i - 1], m);
+          const stamp = chat || needsStamp(messages[i - 1], m);
           const grouped = !stamp && isGrouped(messages[i - 1], m) && m.id !== firstNew;
           const next = messages[i + 1];
-          const last = !next || needsStamp(m, next) || !isGrouped(m, next) || next.id === firstNew;
+          const last = !next || startsChat(m, next) || needsStamp(m, next) || !isGrouped(m, next) || next.id === firstNew;
           return (
             <div key={m.id}>
-              {stamp && <TimeDivider at={m.createdAt} />}
+              {chat ? <ChatDivider at={m.createdAt} chat={m.conversationId!} messages={messages} /> : stamp && <TimeDivider at={m.createdAt} />}
               {m.id === firstNew && (
                 <div ref={dividerRef} className="flex items-center gap-3 px-5 my-2 text-[11px] font-medium tracking-wide text-accent-text">
                   <span className="h-px flex-1 bg-accent/40" /> NEW <span className="h-px flex-1 bg-accent/40" />
@@ -614,6 +616,7 @@ function MessageList({ channel, readMark, onAddAgent, onMembers, messageId }: { 
         {runs.map((r) => (
           <StreamingItem key={r.runId} run={r} />
         ))}
+        </LatestChat.Provider>
         </div>
       </div>
       {!atBottom && (
@@ -635,6 +638,53 @@ function MessageList({ channel, readMark, onAddAgent, onMembers, messageId }: { 
 function TimeDivider({ at }: { at: string }) {
   const { clock } = usePrefs();
   return <div className="px-5 py-3 text-center text-[13px] text-faint">{stampLabel(at, (d) => clockTime(d, clock))}</div>;
+}
+
+/** The chat that's going on now in this list: a reply into an earlier one says when that was. */
+const LatestChat = createContext<string | null>(null);
+
+/**
+ * Where a new chat starts, after a quiet break: a line with its date. Clicking it offers
+ * "Continue this chat", a reply to that chat's last message, which brings it back for the agent.
+ */
+function ChatDivider({ at, chat, messages }: { at: string; chat: string; messages: Message[] }) {
+  const { clock } = usePrefs();
+  const names = useNames();
+  const meId = useStore((s) => s.me?.user.id);
+  const latest = useContext(LatestChat);
+  const label = stampLabel(at, (d) => clockTime(d, clock));
+  const last = [...messages].reverse().find((m) => m.conversationId === chat && m.author.id !== "system" && !m.deletedAt);
+  const items =
+    last && chat !== latest
+      ? [
+          {
+            label: "Continue this chat",
+            icon: <CornerUpLeft size={15} />,
+            onSelect: () => {
+              const name = last.author.kind === "user" && last.author.id === meId ? "you" : last.author.kind === "agent" ? (names.agent(last.author.id)?.name ?? "agent") : (names.member(last.author.id)?.name ?? "Someone");
+              startReply(last, `${name} · ${stampLabel(last.createdAt, (d) => clockTime(d, clock))}`);
+            },
+          },
+        ]
+      : [];
+  return (
+    <div className="flex items-center gap-3 px-5 pt-4 pb-2 text-[12px] font-medium text-muted" role={items.length ? undefined : "separator"} aria-label={items.length ? undefined : `New chat, ${label}`}>
+      <span className="h-px flex-1 bg-line" aria-hidden />
+      {items.length ? (
+        <Menu
+          items={items}
+          trigger={(open, toggle) => (
+            <button type="button" onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Chat from ${label}`} className={cx("-mx-2 rounded-md px-2 py-1 hover:text-ink", open && "text-ink")}>
+              {label}
+            </button>
+          )}
+        />
+      ) : (
+        <span>{label}</span>
+      )}
+      <span className="h-px flex-1 bg-line" aria-hidden />
+    </div>
+  );
 }
 
 /** What a brand-new chat says: who you're talking to, or how to get a team going. */
@@ -708,6 +758,21 @@ function flashMessage(id: string): boolean {
   el.classList.add("bg-accent-soft");
   setTimeout(() => el.classList.remove("bg-accent-soft"), 1600);
   return true;
+}
+
+/** Show where an earlier chat starts: its first message still on screen, or the chat opened at its first message. */
+function openChat(channelId: string, chat: string) {
+  const first = Array.from(document.querySelectorAll<HTMLElement>("[data-chat]")).find((x) => x.dataset.chat === chat)?.dataset.messageId;
+  if (!flashMessage(first ?? chat)) go({ view: "chat", channelId, threadId: null, messageId: chat });
+}
+
+/** Press-and-hold and swipe both listen to the same touches. */
+function mergeTouch(a: Partial<Record<"onTouchStart" | "onTouchMove" | "onTouchEnd" | "onTouchCancel", (e: React.TouchEvent) => void>>, b: typeof a) {
+  const both = (k: keyof typeof a) => (e: React.TouchEvent) => {
+    a[k]?.(e);
+    b[k]?.(e);
+  };
+  return { onTouchStart: both("onTouchStart"), onTouchMove: both("onTouchMove"), onTouchEnd: both("onTouchEnd"), onTouchCancel: both("onTouchCancel") };
 }
 
 // --- one message --------------------------------------------------------------------------------
@@ -814,7 +879,9 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
   const colors = useHandleColors();
   const html = useMemo(() => (m.body ? renderMarkdown(m.body, { handles, colors }) : ""), [m.body, handles, colors]);
   const cards = useMemo(() => linkCards(m.body), [m.body]);
-  const [sheet, setSheet] = useState(false);
+  const [menu, setMenu] = useState<{ at: { x: number; y: number } | null } | null>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const colRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -830,14 +897,24 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
   const meId = useStore((s) => s.me?.user.id);
   const mine = m.author.kind === "user" && m.author.id === meId;
   const startsAt = composerThread ?? undefined;
+  // a reply into an earlier chat says which one, in the bar above the message box
+  const latest = useContext(LatestChat);
+  const earlier = !!m.conversationId && !!latest && m.conversationId !== latest;
+  const toggleReaction = useStore((s) => s.toggleReaction);
   const actions = useMessageActionList(m, {
-    onReply: () => startReply(m, name, startsAt),
+    onReply: () => startReply(m, earlier ? `${mine ? "you" : name} · ${stampLabel(m.createdAt, (d) => clockTime(d, clock))}` : name, startsAt),
     // a message already in a thread opens a sub-thread; the thread's own first message has nowhere deeper to go
     onThread: onReplies,
     onEdit: () => setEditing(true),
     onDelete: () => setDeleting(true),
   });
-  const press = useLongPress(() => setSheet(true), !m.deletedAt && actions.length > 0);
+  const press = useLongPress(() => setMenu({ at: null }), !m.deletedAt && actions.length > 0);
+  const swipe = useSwipeToThread(!m.deletedAt ? onReplies : undefined);
+  const touch = mergeTouch(press, swipe.handlers);
+  const canReact = !m.deletedAt && actions.some((a) => a.id === "reply");
+  const reacted = (m.reactions ?? []).filter((r) => r.actors.some((a) => a.kind === "user" && a.id === meId)).map((r) => r.emoji);
+  const react = (emoji: string) => void toggleReaction(m.id, emoji).catch((e) => alert((e as Error).message));
+  const openMenu = (at: { x: number; y: number } | null) => !m.deletedAt && actions.length > 0 && setMenu({ at });
   const hasChange = m.parts.some((p) => p.type === "change");
   const quote = m.replyTo;
   const showBubble = !m.deletedAt && (!!html || !!quote) && !hasChange;
@@ -846,8 +923,19 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
   return (
     <div
       data-message-id={m.id}
-      {...press}
-      className={cx("msg-press group relative px-3 md:px-5 flex items-end gap-2 rounded-lg transition-colors", mine ? "justify-end" : "justify-start", last ? "pb-1.5" : "pb-[3px]", !grouped && "pt-1")}
+      data-chat={m.conversationId}
+      {...touch}
+      onContextMenu={(e) => {
+        press.onContextMenu?.(e);
+        if (e.defaultPrevented || window.matchMedia("(hover: none)").matches) return;
+        // text you selected in it keeps the browser's own menu, for copying a part
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed && e.currentTarget.contains(sel.anchorNode)) return;
+        e.preventDefault();
+        openMenu({ x: e.clientX, y: e.clientY });
+      }}
+      onWheel={swipe.handlers.onWheel}
+      className={cx("msg-press relative px-3 md:px-5 flex items-end gap-2 rounded-lg transition-colors", mine ? "justify-end" : "justify-start", last ? "pb-1.5" : "pb-[3px]", !grouped && "pt-1", m.reactions?.some((r) => r.actors.length) && "pt-3.5")}
     >
       {showAvatar && (
         <div className="w-8 shrink-0 self-end">
@@ -861,7 +949,31 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
             ))}
         </div>
       )}
-      <div className={cx("min-w-0 flex flex-col max-w-[84%] md:max-w-[36rem]", mine ? "items-end" : "items-start")}>
+      <div
+        ref={colRef}
+        tabIndex={m.deletedAt ? undefined : 0}
+        aria-haspopup={m.deletedAt ? undefined : "menu"}
+        aria-label={m.deletedAt ? undefined : `${mine ? "You" : name}: ${snippetOf(m) || "message"}. Press Enter for actions.`}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " " || e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+            e.preventDefault();
+            openMenu(null);
+          }
+        }}
+        data-dragging={swipe.dragging}
+        style={swipe.dx ? { transform: `translateX(${swipe.dx}px)` } : undefined}
+        className={cx("m-swipe relative min-w-0 flex flex-col max-w-[84%] md:max-w-[36rem] rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring touch-pan-y", mine ? "items-end" : "items-start")}
+      >
+        {swipe.dx > 0 && (
+          <span
+            aria-hidden
+            className={cx("absolute -left-10 top-1/2 -mt-3.5 size-7 rounded-full grid place-items-center transition-colors", swipe.dx >= SWIPE_ARM ? "bg-accent text-accent-ink" : "bg-chip text-muted")}
+            style={{ opacity: Math.min(swipe.dx / SWIPE_ARM, 1), transform: `scale(${0.6 + 0.4 * Math.min(swipe.dx / SWIPE_ARM, 1)})` }}
+          >
+            <MessageSquare size={14} />
+          </span>
+        )}
         {!grouped && !home && !mine && (
           <div className="px-3.5 pb-0.5 text-[12px] text-muted flex items-center gap-1.5" title={agent ? `Agent · ${harnessLabel(agent.harness)}` : undefined}>
             {name}
@@ -873,12 +985,18 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
             <Pin size={11} /> Pinned
           </span>
         )}
-        {!m.deletedAt && m.parts.some((p) => p.type === "checkback") && <CheckbackLabel />}
+        {!m.deletedAt && m.parts.some((p) => p.type === "checkback") && (
+          <CheckbackLabel
+            from={m.context ? chatName(m.context.at, (d) => clockTime(d, clock)) : undefined}
+            onFrom={m.context ? () => openChat(m.channelId, m.context!.conversationId) : undefined}
+          />
+        )}
         {m.deletedAt ? (
           <div className="bubble them text-body text-muted italic">This message was deleted.</div>
         ) : (
           showBubble && (
-            <div className={cx("bubble text-[15px] md:text-[15px]", mine ? "me" : "them", arrived && (mine ? "m-bubble-me" : "m-bubble-them"))} title={time}>
+            <div ref={bubbleRef} className={cx("bubble relative text-[15px] md:text-[15px]", mine ? "me" : "them", arrived && (mine ? "m-bubble-me" : "m-bubble-them"))} title={time}>
+              {!!m.reactions?.length && <ReactionBadges reactions={m.reactions} meId={meId} mine={mine} onToggle={react} />}
               {quote && (
                 <button
                   type="button"
@@ -888,7 +1006,11 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
                   }}
                   aria-label="Go to the message this replies to"
                 >
-                  <b className="block font-medium">{quote.author.kind === "user" && quote.author.id === meId ? "You" : (quote.author.kind === "agent" ? names.agent(quote.author.id)?.name : names.member(quote.author.id)?.name) ?? "Someone"}</b>
+                  <b className="block font-medium">
+                    {quote.author.kind === "user" && quote.author.id === meId ? "You" : (quote.author.kind === "agent" ? names.agent(quote.author.id)?.name : names.member(quote.author.id)?.name) ?? "Someone"}
+                    {/* from an earlier chat: when it was said */}
+                    {quote.createdAt && quote.conversationId && m.conversationId && quote.conversationId !== m.conversationId && <span className="font-normal opacity-80"> · {stampLabel(quote.createdAt, (d) => clockTime(d, clock))}</span>}
+                  </b>
                   <span className="line-clamp-2">{quote.deleted ? "This message was deleted." : quote.snippet}</span>
                 </button>
               )}
@@ -930,16 +1052,22 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
           </button>
         )}
       </div>
-      {!m.deletedAt && <ActionToolbar actions={actions} side={mine ? "right" : "left"} />}
-      {sheet && (
-        <ActionSheet
+      {menu && (
+        <MessageMenu
           actions={actions}
-          onClose={() => setSheet(false)}
+          reacted={reacted}
+          onReact={canReact ? react : undefined}
+          at={menu.at}
+          mine={mine}
+          source={bubbleRef.current ?? colRef.current}
           preview={
-            <div className={cx("bubble text-body", mine ? "me" : "them")}>
-              <div className="prose-w line-clamp-6" dangerouslySetInnerHTML={{ __html: html || "&nbsp;" }} />
-            </div>
+            bubbleRef.current ? (
+              <div className={cx("bubble !max-w-none text-[15px]", mine ? "me" : "them")}>
+                <div className="prose-w line-clamp-[12]" dangerouslySetInnerHTML={{ __html: html || "&nbsp;" }} />
+              </div>
+            ) : undefined
           }
+          onClose={() => setMenu(null)}
         />
       )}
       {editing && <EditMessageDialog m={m} onClose={() => setEditing(false)} />}
@@ -1186,7 +1314,7 @@ function ThreadPanel({ channelId, rootId, agentId, messageId }: { channelId: str
         <ThreadHeader channelId={channelId} parent={parent} onBack={parent ? () => open(parent) : close} onClose={close} />
       )}
       {!parent && <FlowStrip channelId={channelId} threadId={rootId} />}
-      <div ref={ref} className="flex-1 overflow-y-auto py-3">
+      <div ref={ref} className="flex-1 overflow-y-auto overscroll-x-none py-3">
         {history.controls}
         {removed && <p role="status" className="px-5 py-2 text-xs text-muted">This message was deleted.</p>}
         {!removed && root && (handoff && handoff.type === "task" ? <HandoffBrief m={root} taskId={handoff.taskId} /> : <ThreadRoot m={root} composerThread={rootId} />)}
@@ -1798,7 +1926,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
             ref={ta}
             rows={1}
             value={text}
-            placeholder={replyTo ? `Reply to ${replyTo.name}` : channel?.kind === "dm" && !threadId ? `${placeholder}, or type / for commands` : placeholder}
+            placeholder={replyTo ? `Reply to ${replyTo.name.split(" · ")[0]}` : channel?.kind === "dm" && !threadId ? `${placeholder}, or type / for commands` : placeholder}
             aria-label={placeholder}
             onChange={(e) => {
               setText(e.target.value);

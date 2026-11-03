@@ -10,6 +10,7 @@ import { WispClient } from "@wisp/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { readSecret } from "../../node/src/model-login.ts";
 import { buildHub } from "../src/app.ts";
+import { makeRoomFor } from "./room.ts";
 import type { Hub } from "../src/hub.ts";
 import { renewalDue } from "../src/model-connections.ts";
 
@@ -116,6 +117,9 @@ async function message(channel: string, text: string, from = "codex") {
   return calls.at(-1)!;
 }
 
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = async (body: Parameters<typeof makeRoomFor>[2]) => (await makeRoomFor(hub, owner, body)).data;
+
 beforeAll(async () => {
   dir = await fsp.mkdtemp(path.join(os.tmpdir(), "wisp-models-"));
   const built = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
@@ -135,7 +139,7 @@ beforeAll(async () => {
   close = () => built.app.close();
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WispClient({ url, token: setup.token });
-  await owner.request("POST", "/api/channels", { name: "general" });
+  await room({ name: "general" });
   me = (hub.store.db.prepare("SELECT id FROM users").get() as { id: string }).id;
   // a second person in the organization
   await owner.request("PUT", "/api/features", { invite: true });
@@ -630,7 +634,7 @@ describe("renewed sign-ins come back only from the run they were handed to", () 
 
 /** A channel of its own with these agents in it (general's wake-up limit is used up by now). */
 async function channelWith(name: string, agentIds: string[]) {
-  return owner.request("POST", "/api/channels", { name, members: agentIds.map((id) => ({ kind: "agent", id })) });
+  return room({ name, members: agentIds.map((id) => ({ kind: "agent" as const, id })) });
 }
 
 describe("models across a harness switch", () => {

@@ -12,6 +12,34 @@ enum ChatFormat {
     return m.date.timeIntervalSince(prev.date) > 30 * 60 || !calendar.isDate(prev.date, inSameDayAs: m.date)
   }
 
+  /**
+   * A new chat starts at this message: its chat differs from the one before it, or it's the first
+   * message loaded and opens its chat. Messages without a chat (threads, older hubs) never start one.
+   */
+  static func startsChat(_ prev: Message?, _ m: Message) -> Bool {
+    guard let chat = m.conversationId else { return false }
+    guard let prev else { return m.id == chat }
+    return prev.conversationId != chat
+  }
+
+  /** Anything drawn between two messages (a chat divider or a time label) breaks their grouping. */
+  static func breaks(_ prev: Message?, _ m: Message, calendar: Calendar = .current) -> Bool {
+    startsChat(prev, m) || needsStamp(prev, m, calendar: calendar)
+  }
+
+  /** The last loaded message of a chat, which "Continue this chat" replies to. */
+  static func lastOfChat(_ chat: String, in list: [Message]) -> Message? {
+    list.last { $0.conversationId == chat && $0.author.id != "system" && $0.deletedAt == nil }
+  }
+
+  /** "the 9:14 AM chat", "yesterday's 9:14 AM chat", "the Oct 23, 9:14 AM chat": what a check-back points at. */
+  static func chatName(_ date: Date, now: Date = Date(), calendar: Calendar = .current, locale: Locale = .current) -> String {
+    let time = date.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(locale))
+    if calendar.isDate(date, inSameDayAs: now) { return "the \(time) chat" }
+    if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) { return "yesterday's \(time) chat" }
+    return "the \(date.formatted(Date.FormatStyle().month(.abbreviated).day().locale(locale))), \(time) chat"
+  }
+
   /** "Today 9:30 PM", "Yesterday 4:02 PM", "Oct 23, 9:30 AM". */
   static func stamp(_ date: Date, now: Date = Date(), calendar: Calendar = .current, locale: Locale = .current) -> String {
     let time = date.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(locale))

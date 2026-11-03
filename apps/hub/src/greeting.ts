@@ -57,7 +57,7 @@ const GUIDE: Record<SetupStep, StepGuide> = {
   checkins: {
     ask: "How often should I check in with you, and are there hours I should stay quiet?",
     how: () =>
-      `Ask how often to check in and when to stay quiet. Apply it with settings_read then settings_change (background work on, how often, quiet hours, what to keep an eye on: the accounts they named). If they'd rather you only answer when asked, turn background work off. Save it as a preference.`,
+      `Ask how often to check in and when to stay quiet, and offer to keep an eye on the accounts they named. Apply it with settings_read then settings_change (background work on, how often, quiet hours, what to keep an eye on). Once they say yes to watching an account and you have watch_start, start a watch for it (service "browser" with its url for sites like Google Ads or Instagram). If they'd rather you only answer when asked, turn background work off. Save it as a preference.`,
   },
   boundaries: {
     ask: "Is there anything I should never do without asking you first?",
@@ -134,6 +134,22 @@ export function greetNewAgent(hub: Hub, agent: Agent, userId: string | null | un
   return msg;
 }
 
+/**
+ * The chat a person's message belongs to while their setup is going: the one the hello started,
+ * so a quiet break mid-setup doesn't start a fresh chat (and a fresh harness session) halfway through.
+ */
+export function setupChat(hub: Hub, m: { channelId: string; threadId?: string | null; author: { kind: string; id: string } }): string | null {
+  if (m.threadId || m.author.kind !== "user") return null;
+  const { store } = hub;
+  for (const member of store.channelMembers(m.channelId)) {
+    if (member.kind !== "agent") continue;
+    const agent = store.agent(member.id);
+    const s = agent && activeSetup(agent, m.channelId);
+    if (s?.userId === m.author.id && s.greetingId) return store.message(s.greetingId)?.conversationId ?? null;
+  }
+  return null;
+}
+
 /** The person wrote in the setup DM: keep what they said. A setup takes at most SETUP_REPLIES of their messages. */
 export function recordSetupReply(hub: Hub, msg: Message): void {
   if (msg.author.kind !== "user" || msg.threadId) return;
@@ -176,9 +192,10 @@ export function recordSetupStep(hub: Hub, agent: Agent, step: { step?: SetupStep
 
 /**
  * The accounts a person named at setup, for whatever keeps an eye on them for this agent.
- * Hook for the connector watchers (session "connector-events"): when they land, register a watch
- * here for each account the agent can reach. Until then the agent watches them through its
- * background work, whose focus the setup asks it to set.
+ * Hook for the connector watchers (PR 74, "connector-events"): watches need the person's yes, so
+ * the agent starts them itself with watch_start during the check-ins step; this is where the hub
+ * can act on the list on its own (suggest a watch service per account, say). Until then the agent
+ * keeps an eye on them through its background work, whose focus the setup asks it to set.
  */
 export function watchSetupAccounts(_hub: Hub, _agent: Agent, _userId: string, _accounts: string[]): void {}
 

@@ -7,6 +7,7 @@ import type { CommandOption, MessagePart } from "@wisp/core";
 import { WispClient } from "@wisp/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
+import { makeRoomFor } from "./room.ts";
 import { holdsSecret } from "../src/connectors.ts";
 import { openDb } from "../src/db.ts";
 import type { Hub } from "../src/hub.ts";
@@ -59,6 +60,9 @@ const replyTo = async (text: string) => {
 const skillParts = (m: { parts: MessagePart[] }) => m.parts.filter((p) => p.type === "skill");
 const fileOf = (agent: string, slug: string) => hub.vaults.primary.read(`agents/${agent}/skills/${slug}/SKILL.md`).then((n) => n.content, () => null);
 
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = async (body: Parameters<typeof makeRoomFor>[2]) => (await makeRoomFor(hub, owner, body)).data;
+
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-learned-"));
   const built = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
@@ -69,7 +73,7 @@ beforeAll(async () => {
   close = () => built.app.close();
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WispClient({ url, token: setup.token });
-  await owner.request("POST", "/api/channels", { name: "general" });
+  await room({ name: "general" });
   const { node, token } = await owner.request("POST", "/api/nodes", { name: "box" });
   me = (hub.store.db.prepare("SELECT id FROM users").get() as { id: string }).id;
   agentId = (await owner.request("POST", "/api/agents", { handle: "ghosty", name: "Ghosty", harness: "custom", nodeId: node.id })).id;

@@ -13,6 +13,7 @@ import { Store } from "../src/store.ts";
 import { workspaceLead } from "../src/lead.ts";
 import { foldTeams } from "../src/fold-teams.ts";
 import { teamProblem } from "@wisp/core";
+import { makeRoom } from "./room.ts";
 
 let dir: string;
 let base: string;
@@ -102,6 +103,9 @@ async function waitFor<T>(fn: () => Promise<T | undefined>, ms = 3000): Promise<
 }
 
 let general: string;
+let who: { workspaceId: string; userId: string };
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = (body: Parameters<typeof makeRoom>[2]) => makeRoom(hub, who, body);
 let atlas: any;
 let nova: any;
 let nodeToken: string;
@@ -119,7 +123,9 @@ beforeAll(async () => {
 
   const setup = await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", features: "everything", workspaceName: "Test" }, "");
   token = setup.data.token;
-  await api("POST", "/api/channels", { name: "general" });
+  const me = (await api("GET", "/api/me")).data;
+  who = { workspaceId: me.workspace.id, userId: me.user.id };
+  room({ name: "general" });
   general = (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === "general").id;
 
   const n = await api("POST", "/api/nodes", { name: "box" });
@@ -201,7 +207,7 @@ describe("hub", () => {
     expect(run.type === "run" && run.run.prompt).toContain("the original remark");
     // a plain message has no reference; a target from another channel is refused
     expect((await channelMessages()).find((m) => m.id === orig.id)!.replyToId).toBeUndefined();
-    const other = (await api("POST", "/api/channels", { name: "reply-other" })).data.id;
+    const other = (room({ name: "reply-other" })).data.id;
     expect((await api("POST", `/api/channels/${other}/messages`, { body: "x", replyToId: orig.id })).status).toBe(400);
     // deleting the original leaves the quote, marked deleted
     await api("DELETE", `/api/messages/${orig.id}`);
@@ -740,7 +746,7 @@ describe("upgrading from v0.1", () => {
 describe("agent settings", () => {
   let ch: string;
   beforeAll(async () => {
-    ch = (await api("POST", "/api/channels", { name: "settings-test" })).data.id;
+    ch = (room({ name: "settings-test" })).data.id;
   });
 
   it("gives new agents a starter soul, and sends soul then instructions in every prompt", async () => {
@@ -832,7 +838,7 @@ describe("agent settings", () => {
 
 describe("workspace features", () => {
   it("doesn't react 👀 when an agent picks up a message (the working bubble says it)", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "eyes" })).data.id;
+    const ch = (room({ name: "eyes" })).data.id;
     const sent = (await api("POST", `/api/channels/${ch}/messages`, { body: "@nova ping" })).data;
     await new Promise((r) => setTimeout(r, 300));
     const m = (await api<{ messages: Message[] }>("GET", `/api/channels/${ch}/messages`)).data.messages.find((x) => x.id === sent.id);
@@ -849,7 +855,7 @@ describe("workspace features", () => {
   });
 
   it("tracks unread messages per person", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "unread-test" })).data.id;
+    const ch = (room({ name: "unread-test" })).data.id;
     await api("POST", `/api/channels/${ch}/messages`, { body: "mine doesn't count" });
     const node2 = { "x-wisp-agent": nova.id };
     await api("POST", `/api/channels/${ch}/messages`, { body: "from nova" }, nodeToken, node2);
@@ -864,7 +870,7 @@ describe("workspace features", () => {
   });
 
   it("joins and leaves channels", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "join-test" })).data.id;
+    const ch = (room({ name: "join-test" })).data.id;
     await api("POST", `/api/channels/${ch}/leave`);
     expect((await api<any[]>("GET", "/api/channels")).data.find((c) => c.id === ch).joined).toBe(false);
     await api("POST", `/api/channels/${ch}/join`);
@@ -873,7 +879,7 @@ describe("workspace features", () => {
 
   it("groups channels into sections", async () => {
     const sec = (await api("POST", "/api/sections", { name: "Product", emoji: "🛠" })).data;
-    const ch = (await api("POST", "/api/channels", { name: "design", sectionId: sec.id })).data;
+    const ch = (room({ name: "design", sectionId: sec.id })).data;
     expect(ch.sectionId).toBe(sec.id);
     await api("PATCH", `/api/sections/${sec.id}`, { name: "Product team" });
     expect((await api<any[]>("GET", "/api/sections")).data.find((s) => s.id === sec.id).name).toBe("Product team");
@@ -928,7 +934,7 @@ describe("agent context", () => {
     expect(ctx.lastRunAt).toBeTruthy();
     // another conversation has its own context
     expect((await api("GET", `/api/agents/${atlas.id}/context?channel=${general}`)).data.contextUsed).toBe(4321);
-    const other = (await api("POST", "/api/channels", { name: "ctx-empty" })).data.id;
+    const other = (room({ name: "ctx-empty" })).data.id;
     expect((await api("GET", `/api/agents/${atlas.id}/context?channel=${other}`)).data.contextUsed).toBeNull();
   });
 
@@ -1079,7 +1085,10 @@ describe("review by someone else", () => {
     expect((await api("POST", `/api/tasks/${review.id}/merge`, undefined, nodeToken, as(kim))).status).toBe(200);
 
     // alone on its team, the work goes to the workspace's lead, unless that's the builder
-    const solo = await makeTeam({ name: "loner", leadId: lia.id, repo: "/srv/loner" });
+    // (a team made before the two-agent minimum: the API wouldn't make one now, so shrink it in the store)
+    const solo = await makeTeam({ name: "loner", leadId: lia.id, repo: "/srv/loner", members: [{ agentId: kim.id }] });
+    const loner = hub.store.channel(solo.channelId)!.settings.team!;
+    hub.store.updateChannel(solo.channelId, { settings: { team: { ...loner, nodes: loner.nodes.filter((n) => n.agentId === lia.id), edges: [] } } });
     await api("PUT", "/api/settings/lead", { leadId: lia.id });
     const alone = (await api<any>("POST", "/api/tasks", { to: "lia", title: "Fix typo", brief: "x", channelId: solo.channelId })).data;
     await api("PATCH", `/api/tasks/${alone.id}`, { status: "done", result: "done" }, nodeToken, as(lia));
@@ -1188,7 +1197,7 @@ describe("runs that go wrong", () => {
   });
 
   it("explains a harness that needs signing in, in the channel and on the agent's page", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "signin" })).data.id;
+    const ch = (room({ name: "signin" })).data.id;
     await api("POST", `/api/channels/${ch}/messages`, { body: "@atlas expired token" });
     const status = await waitFor(async () => (await channelMessagesIn(ch)).flatMap((m) => m.parts).find((p) => p.type === "status" && p.text.startsWith("Run failed")));
     expect(status.type === "status" && status.text).toBe("Run failed: Claude Code on test-node isn't signed in. Open Settings → Harnesses, sign in to Claude Code on test-node, then ask again.");
@@ -1198,7 +1207,7 @@ describe("runs that go wrong", () => {
 
   it("offers the next step on a failed run, and trying again starts a new run", async () => {
     const before = node.runs.length;
-    const ch = (await api("POST", "/api/channels", { name: "try-again" })).data.id;
+    const ch = (room({ name: "try-again" })).data.id;
     await api("POST", `/api/channels/${ch}/messages`, { body: "@atlas expired token" });
     const part = await waitFor(async () => (await channelMessagesIn(ch)).flatMap((m) => m.parts).find((p) => p.type === "run_failed"));
     expect(part).toMatchObject({ retry: true, fix: "signin" });
@@ -1219,7 +1228,7 @@ describe("runs that go wrong", () => {
   });
 
   it("says so when a prompt can't even be built", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "no-prompt" })).data.id;
+    const ch = (room({ name: "no-prompt" })).data.id;
     const original = hub.buildPrompt;
     hub.buildPrompt = async () => {
       throw new Error("vault exploded");
@@ -1235,7 +1244,7 @@ describe("runs that go wrong", () => {
   });
 
   it("ignores a device's late run_done after the run was cancelled", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "late" })).data.id;
+    const ch = (room({ name: "late" })).data.id;
     const n = node.held.length;
     await api("POST", `/api/channels/${ch}/messages`, { body: "@nova hold on" });
     const runId = await waitFor(async () => node.held[n]);

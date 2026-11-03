@@ -131,6 +131,8 @@ describe("a new agent speaks first", () => {
     // no computer: it says so and offers to get one, instead of trying to open sites
     expect(prompt).toContain("You don't have a computer");
     expect(prompt).toContain("Agents → you → Computer");
+    // watches only after a yes, through the agent's own tool
+    expect(prompt).toContain("Once they say yes to watching an account and you have watch_start");
     expect(said(id).at(-1)!.body).toBe("Managing ads, social media posts, or both?");
 
     await answer(id, "Both");
@@ -211,6 +213,22 @@ describe("a new agent speaks first", () => {
     expect(prompt).toContain('- "one more"');
   });
 
+  it("keeps the setup in one chat across a quiet break", async () => {
+    const id = await make("ike");
+    const hello = said(id)[0];
+    // the hello was three hours ago: long enough that a reply would normally start a fresh chat
+    const earlier = new Date(Date.now() - 3 * 3600_000).toISOString();
+    hub.store.db.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(earlier, hello.id);
+    onReply = async () => "Got it. Which accounts?";
+    const prompt = await answer(id, "Book my travel");
+    const [, mine, reply] = said(id);
+    expect(mine.conversationId).toBe(hello.conversationId);
+    expect(reply.conversationId).toBe(hello.conversationId);
+    expect(prompt).not.toContain("after a quiet break");
+    expect(prompt).toContain("Hey, I'm Ike!");
+    expect(prompt).toContain("## Getting to know Me");
+  });
+
   it("asks for a sign-in first when Wisp knows the harness isn't signed in, with no error", async () => {
     const catalog = hub.store.nodeCatalog(nodeId);
     hub.store.db.prepare("UPDATE nodes SET catalog_json = ? WHERE id = ?").run(JSON.stringify([...catalog.filter((h) => h.harness !== "claude-code"), { ...(catalog.find((h) => h.harness === "claude-code") ?? { harness: "claude-code", models: [] }), accounts: { default: false } }]), nodeId);
@@ -224,8 +242,9 @@ describe("a new agent speaks first", () => {
 
   it("greets whoever its maker works for when an agent makes one", async () => {
     const lead = await make("ian");
-    const node = (agentId: string, isLead = false) => ({ agentId, lead: isLead, x: 0, y: 0 });
-    await owner.request("POST", "/api/channels", { name: "crew", settings: { team: { nodes: [node(lead, true)], edges: [] } } });
+    const mate = await make("jo");
+    const node = (agentId: string, isLead = false, x = 0) => ({ agentId, lead: isLead, x, y: 0 });
+    await owner.request("POST", "/api/channels", { name: "crew", settings: { team: { nodes: [node(lead, true), node(mate, false, 240)], edges: [{ from: lead, to: mate }] } } });
     await owner.request("PUT", "/api/settings/agents", { leadsCreateAgents: true });
     const { token } = await owner.request<{ token: string }>("POST", `/api/agents/${lead}/token`);
     const made = await new WispClient({ url, token }).request<{ id: string }>("POST", "/api/agents/spawn", { name: "Scout", role: "Researcher" });
