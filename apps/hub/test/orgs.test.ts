@@ -6,6 +6,7 @@ import WebSocket from "ws";
 import { FEATURE_PRESETS } from "@wisp/core";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
+import { makeRoomAs } from "./room.ts";
 
 let dir: string;
 let base: string;
@@ -35,12 +36,15 @@ async function start() {
 
 const login = async (email: string) => (await api<{ token: string }>("POST", "/api/auth/login", { email, password: "password123" }, "")).data.token;
 
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = (body: Parameters<typeof makeRoomAs>[3], token = owner) => makeRoomAs(hub, base, token, body);
+
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-orgs-"));
   await start();
   const setup = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", workspaceName: "Home" }, "")).data;
   owner = setup.token;
-  await api("POST", "/api/channels", { name: "general" });
+  await room({ name: "general" });
   firstOrg = setup.workspace.id;
 });
 
@@ -264,7 +268,7 @@ describe("organizations", () => {
     // the same handle is free in the other organization
     expect((await api("POST", "/api/agents", { handle: "scout", name: "Scout", harness: "custom" })).status).toBe(200);
     expect((await api(`PATCH`, `/api/agents/${a.id}`, { name: "Nope" })).status).toBe(404);
-    expect((await api("POST", "/api/channels", { name: "side-only" }, secondToken)).status).toBe(200);
+    expect((await room({ name: "side-only" }, secondToken)).status).toBe(200);
     expect((await api<any[]>("GET", "/api/channels")).data.map((c) => c.name)).not.toContain("side-only");
 
     await api("PUT", "/api/vault/note", { path: "shared/secret-plan.md", content: "# Secret plan\n\nlaunch on friday" }, secondToken);
@@ -282,7 +286,7 @@ describe("organizations", () => {
 
   it("lets someone already signed in join another organization with an invite", async () => {
     await api("PUT", "/api/features", { invite: true }, secondToken);
-    await api("POST", "/api/channels", { name: "general" }, secondToken);
+    await room({ name: "general" }, secondToken);
     const inv = (await api("POST", "/api/invites", { role: "member" }, secondToken)).data;
     const sam = await login("sam@example.com");
     expect((await api("POST", "/api/invites/join", { code: "bogus" }, sam)).status).toBe(404);

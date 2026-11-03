@@ -65,9 +65,11 @@ struct ChannelView: View {
         ForEach(Array(list.enumerated()), id: \.element.id) { i, m in
           let prev = i > 0 ? list[i - 1] : nil
           let next = i + 1 < list.count ? list[i + 1] : nil
-          let stamp = ChatFormat.needsStamp(prev, m)
-          if stamp { TimeDivider(date: m.date) }
-          MessageRow(message: m, compact: !stamp && ChatFormat.groups(prev, m), last: next == nil || ChatFormat.needsStamp(m, next!) || !ChatFormat.groups(m, next!), replies: store.replyCounts[m.id] ?? 0,
+          let chat = ChatFormat.startsChat(prev, m)
+          let stamp = chat || ChatFormat.needsStamp(prev, m)
+          if chat { ChatDivider(date: m.date, onContinue: continueAction(m.conversationId)) }
+          else if stamp { TimeDivider(date: m.date) }
+          MessageRow(message: m, compact: !stamp && ChatFormat.groups(prev, m), last: next == nil || ChatFormat.breaks(m, next!) || !ChatFormat.groups(m, next!), replies: store.replyCounts[m.id] ?? 0,
             thread: ThreadRef(channelId: channel.id, rootId: m.id), working: inThreads.filter { store.activityThread[$0.id] == m.id || (store.activityPath[$0.id] ?? []).contains(m.id) })
             .arrival(mine: m.author == Actor(kind: .user, id: store.me?.id ?? ""))
         }
@@ -160,6 +162,13 @@ struct ChannelView: View {
     .onDisappear {
       if store.openChannel == channel.id { store.openChannel = nil }
     }
+    .messageActionsHost()
+  }
+
+  /** "Continue this chat" on a chat's divider: a reply to the chat's last loaded message. */
+  private func continueAction(_ chat: String?) -> (() -> Void)? {
+    guard let chat, let last = ChatFormat.lastOfChat(chat, in: list), store.canReply(last) else { return nil }
+    return { store.startReply(last, thread: nil) }
   }
 
   /** reloads what the agent runs on when a reply lands or its settings change */
@@ -355,7 +364,7 @@ struct ThreadView: View {
           let next = i + 1 < replies.count ? replies[i + 1] : nil
           let stamp = i > 0 && ChatFormat.needsStamp(prev, m)
           if stamp { TimeDivider(date: m.date) }
-          MessageRow(message: m, compact: !stamp && ChatFormat.groups(prev, m), last: next == nil || ChatFormat.needsStamp(m, next!) || !ChatFormat.groups(m, next!), replies: store.replyCounts[m.id] ?? 0,
+          MessageRow(message: m, compact: !stamp && ChatFormat.groups(prev, m), last: next == nil || ChatFormat.breaks(m, next!) || !ChatFormat.groups(m, next!), replies: store.replyCounts[m.id] ?? 0,
             thread: ThreadRef(channelId: ref.channelId, rootId: m.id, from: ref.rootId),
             working: below.filter { store.activityThread[$0.id] == m.id || (store.activityPath[$0.id] ?? []).contains(m.id) },
             composerThread: ref.rootId)
@@ -416,6 +425,7 @@ struct ThreadView: View {
     }
     .onAppear { store.openThreads[ref.rootId] = ref.channelId }
     .onDisappear { store.openThreads[ref.rootId] = nil }
+    .messageActionsHost()
   }
 
   private var dmAgent: Agent? { channel.flatMap { store.dmAgent($0) } }
@@ -862,9 +872,10 @@ struct Composer: View {
   private func replyBar(_ target: ReplyTarget) -> some View {
     HStack(spacing: 10) {
       Image(systemName: "arrowshape.turn.up.left").font(.system(size: 14)).foregroundStyle(Palette.muted)
-      Rectangle().fill(Palette.text).frame(width: 2)
+      Rectangle().fill(Palette.text).frame(width: 2, height: 32)
       VStack(alignment: .leading, spacing: 0) {
-        Text("Replying to \(target.name)").font(.system(size: 13, weight: .semibold))
+        (Text("Replying to \(target.name)").font(.system(size: 13, weight: .semibold)) + Text(target.when.map { " · \($0)" } ?? "").font(.system(size: 13)).foregroundStyle(Palette.muted))
+          .lineLimit(1)
         Text(target.snippet).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1)
       }
       .fixedSize(horizontal: false, vertical: true)

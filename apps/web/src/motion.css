@@ -89,26 +89,30 @@ a.rounded-full,
 .m-work { animation: m-work 220ms ease-out backwards; }
 .m-swap { animation: m-swap 300ms var(--pop) backwards; }
 
-/* the message hover toolbar slides in (visibility keeps it out of the tab order and the reader's way until shown) */
-.m-toolbar {
-  display: flex;
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(6px) scale(0.96);
-  transition: opacity 120ms ease-out, transform 200ms var(--pop), visibility 0s 200ms;
+/* the message menu: at the pointer it springs open; on a phone the message lifts and rises to fit */
+@keyframes m-lift-rise { from { transform: translateY(0); } }
+@keyframes m-react-in { 0% { opacity: 0; scale: 0.3; translate: 0 8px; } 60% { opacity: 1; } }
+.m-msgmenu { animation: m-pop-in 260ms var(--pop) backwards; }
+.m-msgmenu.m-lift { transform: translateY(var(--shift, 0)); animation: m-lift-rise 420ms var(--soft) backwards; }
+.m-msgmenu.m-lift [role="menu"] { animation: m-pop-in 340ms var(--pop) 40ms backwards; transform-origin: 30% 0; }
+.m-msgmenu.m-lift [data-taps] { animation: m-pop-in 360ms var(--pop) 60ms backwards; transform-origin: 30% 100%; }
+.m-tap { animation: m-pop-in 320ms var(--pop) backwards; transition: transform 160ms var(--pop), background-color 160ms ease-out; }
+.m-tap:hover, .m-tap:focus-visible { transform: scale(1.12); }
+.m-tap:active { transform: scale(0.9); }
+.m-msgmenu[data-closing="true"], .m-lift-scrim[data-closing="true"] { animation: m-fade 140ms ease-in reverse both; pointer-events: none; }
+.m-lift-scrim { animation: m-fade 220ms ease-out backwards; }
+.m-react { animation: m-react-in 460ms var(--pop) backwards; }
+/* a frosted surface for the menu and its reactions */
+.m-glass {
+  background: color-mix(in oklab, var(--control) 74%, transparent);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  border: 1px solid var(--control-line);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 0.28);
 }
-.group:hover > .m-toolbar,
-.group:focus-within > .m-toolbar,
-.m-toolbar:hover {
-  visibility: visible;
-  opacity: 1;
-  pointer-events: auto;
-  transform: none;
-  transition-delay: 0s;
-}
-.m-toolbar[data-side="right"] { transform-origin: 100% 100%; }
-.m-toolbar[data-side="left"] { transform-origin: 0 100%; }
+/* swiping a message toward its thread: it follows the finger, then springs back */
+.m-swipe { transition: transform 450ms var(--pop); }
+.m-swipe[data-dragging="true"] { transition: none; }
 
 /* menus and popovers spring from their trigger: 280ms in, 180ms out (origin is set where they open) */
 .m-menu { animation: m-pop-in 280ms var(--pop) backwards; }
@@ -183,7 +187,7 @@ button[role="switch"]:active:not(:disabled) .m-knob { scale: 1.2 1; }
   .m-tabs,
   .m-badge,
   .m-knob,
-  .m-toolbar {
+  .m-swipe {
     transition-property: opacity, background-color, color, border-color !important;
     transition-duration: 120ms !important;
     transition-delay: 0s !important;
@@ -191,7 +195,9 @@ button[role="switch"]:active:not(:disabled) .m-knob { scale: 1.2 1; }
   }
   :is(button.rounded-full, a.rounded-full, .circle, .m-press):active:not(:disabled) { transform: none; }
   button[role="switch"]:active:not(:disabled) .m-knob { scale: 1; }
-  .m-toolbar { transform: none; }
+  .m-msgmenu.m-lift { animation: m-fade 120ms ease-out backwards !important; }
+  .m-msgmenu, .m-msgmenu [role="menu"], .m-msgmenu [data-taps], .m-tap, .m-react, .m-lift-scrim { animation: m-fade 120ms ease-out backwards !important; }
+  .m-tap:hover, .m-tap:focus-visible, .m-tap:active { transform: none; }
   .m-under[data-open="true"] { transform: none; }
   .m-tabs[data-away="true"] { transform: none; }
   .m-badge[data-zero="true"] { transform: none; }
@@ -206,7 +212,7 @@ button[role="switch"]:active:not(:disabled) .m-knob { scale: 1.2 1; }
   html[data-sheet] #root { transform: none; border-radius: 0; }
 }
 /* the same, when the person turns motion down in Settings (the app's rule already makes it instant) */
-:root[data-motion="reduce"] .m-toolbar,
+:root[data-motion="reduce"] .m-tap,
 :root[data-motion="reduce"] .m-under[data-open="true"],
 :root[data-motion="reduce"] .m-tabs[data-away="true"],
 :root[data-motion="reduce"] .m-badge[data-zero="true"] { transform: none; }

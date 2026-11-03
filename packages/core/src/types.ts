@@ -300,6 +300,9 @@ export interface Reaction {
   actors: Actor[];
 }
 
+/** The quick reactions on top of a message's menu, in order. */
+export const TAPBACKS = ["❤️", "👍", "👎", "😂", "‼️", "❓"] as const;
+
 /** The message a reply quotes, as it reads now. Filled in by the hub when messages are sent out. */
 export interface ReplyQuote {
   id: string;
@@ -307,6 +310,9 @@ export interface ReplyQuote {
   /** the start of its text (or the file it carried); empty when it was deleted */
   snippet: string;
   deleted?: boolean;
+  /** when it was written, and the chat it's in (top-level messages): a quote from an earlier chat shows its date */
+  createdAt?: string;
+  conversationId?: string;
 }
 
 export interface Message {
@@ -322,6 +328,13 @@ export interface Message {
   /** set when this message replies to another one in the same channel: a quote, not a thread */
   replyToId?: string;
   replyTo?: ReplyQuote;
+  /**
+   * The chat it's part of, at the top of a DM or team (see CONVERSATION_GAP_MS): the id of the
+   * chat's first message. Thread messages have none.
+   */
+  conversationId?: string;
+  /** an earlier chat this message brings back (a reply into it, a check-back on it): its id and when it started */
+  context?: { conversationId: string; at: string };
   createdAt: string;
   /** set when its author changed the text */
   editedAt?: string;

@@ -5,6 +5,7 @@ import path from "node:path";
 import type { Approval, TeamDraft, TeamFlow, TeamStep } from "@wisp/core";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
+import { makeRoomAs } from "./room.ts";
 
 let dir: string;
 let base: string;
@@ -45,7 +46,12 @@ afterAll(async () => {
 
 /** A step as the builder writes it: its own agent, prompt and inputs. */
 const step = (id: string, handle: string | null, extra: Partial<TeamStep> = {}): Partial<TeamStep> => ({ id, roleId: "", kind: "do", action: id, agentId: handle ? agents[handle].id : null, next: null, ...extra });
-const team = (steps: Partial<TeamStep>[]) => ({ nodes: [], edges: [], roles: [], steps });
+/** A team needs two agents: when the steps use fewer, a bench role (no step) holds another one. */
+const team = (steps: Partial<TeamStep>[]) => {
+  const used = new Set(steps.map((s) => s.agentId).filter(Boolean));
+  const spare = used.size >= 2 ? null : Object.values(agents).find((a) => !used.has(a.id));
+  return { nodes: [], edges: [], roles: spare ? [{ id: "bench", name: "Bench", description: "", agentId: spare.id }] : [], steps };
+};
 const channel = async (name: string, steps: Partial<TeamStep>[]) => (await api("POST", "/api/channels", { name, settings: { team: team(steps) } })).data;
 const say = (ch: { id: string }, body = "Ship dark mode") => api("POST", `/api/channels/${ch.id}/messages`, { body });
 const flowsOf = async (channelId: string) => (await api<TeamFlow[]>("GET", `/api/channels/${channelId}/flows`)).data;
@@ -399,7 +405,7 @@ describe("handing work to another team", () => {
   });
 
   it("wakes the lead of a team that has no steps", async () => {
-    const plain = (await api("POST", "/api/channels", { name: "plain-team", settings: { team: { nodes: [{ agentId: agents.pixel.id, lead: true, x: 0, y: 0 }], edges: [] } } })).data;
+    const plain = (await api("POST", "/api/channels", { name: "plain-team", settings: { team: { nodes: [{ agentId: agents.pixel.id, lead: true, x: 0, y: 0 }, { agentId: agents.sol.id, lead: false, x: 0, y: 0 }], edges: [{ from: agents.pixel.id, to: agents.sol.id }] } } })).data;
     const ch = await channel("hand-off-plain", [step("a", "atlas"), step("tell", null, { kind: "handoff", inputs: ["a"], handoffTo: plain.id, waitForReply: true })]);
     await say(ch);
     await finish("atlas", openIn("atlas", ch.id)!.id, "Please look");
@@ -515,7 +521,7 @@ describe("saving a flow chart", () => {
   it("says what's wrong in plain words", async () => {
     const bad = async (steps: Partial<TeamStep>[]) => (await api("POST", "/api/channels", { name: `bad-${Math.random().toString(36).slice(2, 8)}`, settings: { team: team(steps) } })).data.error as string;
     expect(await bad([step("a", "atlas", { inputs: ["b"] }), step("b", "sol", { inputs: ["a"] })])).toMatch(/circle/);
-    expect(await bad([step("a", null)])).toMatch(/Pick an agent/);
+    expect(await bad([step("a", null), step("b", "atlas"), step("c", "sol")])).toMatch(/Pick an agent/);
     expect(await bad([step("a", "atlas"), step("r", "sol", { kind: "review", inputs: ["a"] })])).toMatch(/sends work back/);
     expect(await bad([step("a", "atlas"), step("h", null, { kind: "handoff", inputs: ["a"], handoffTo: "nope" })])).toMatch(/team that isn't here/);
     expect(await bad([step("a", "atlas", { inputs: ["zzz"] })])).toMatch(/isn't there/);
@@ -628,7 +634,8 @@ describe("an agent drawing a team from a sentence", () => {
 
 describe("an agent setting up a flow chart in words", () => {
   it("takes inputs for steps that run together and an ask-me step", async () => {
-    const ch = (await api("POST", "/api/channels", { name: "described-graph" })).data;
+    // a plain chat for the agent to turn into a team (the API only makes teams of two or more)
+    const ch = (await makeRoomAs(hub, base, owner, { name: "described-graph" })).data;
     const r = await api("PUT", `/api/channels/${ch.id}/team-steps`, {
       roles: [
         { name: "Planner", description: "Plans.", agent: "atlas" },

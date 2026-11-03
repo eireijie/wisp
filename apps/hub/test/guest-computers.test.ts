@@ -8,6 +8,7 @@ import type { FastifyInstance } from "fastify";
 import type { ClientEvent, Computer, MessagePart } from "@wisp/core";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
+import { makeRoom } from "./room.ts";
 
 let dir: string;
 let app: FastifyInstance;
@@ -29,8 +30,10 @@ beforeAll(async () => {
   ({ app, hub } = await buildHub({ dataDir: dir, setupCode: false }));
   const setup = await api("POST", "/api/setup", "", { email: "owner@example.com", name: "Owner", password: "password123", features: "everything" });
   owner = setup.json().token;
-  await api("POST", "/api/channels", owner, { name: "general" });
-  users.owner = (await api("GET", "/api/me")).json().user.id;
+  const me = (await api("GET", "/api/me")).json();
+  users.owner = me.user.id;
+  // a plain chat room: the API only makes teams of two or more agents
+  makeRoom(hub, { workspaceId: me.workspace.id, userId: me.user.id }, { name: "general" });
   for (const role of ["guest", "member"] as const) {
     const email = `${role}@example.com`;
     await api("POST", "/api/members", owner, { email, name: role, password: "password123", role });

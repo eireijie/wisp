@@ -6,6 +6,7 @@ import path from "node:path";
 import { buildHub } from "../src/app.ts";
 import { openDb } from "../src/db.ts";
 import type { Hub } from "../src/hub.ts";
+import { makeRoomAs } from "./room.ts";
 
 /** What an invited member can and can't do to the owner's machine and secrets. */
 
@@ -57,6 +58,9 @@ const fakeServers = (answer: (url: string) => Response = () => new Response(null
   }) as typeof fetch;
 };
 
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = (body: Parameters<typeof makeRoomAs>[3], token = owner) => makeRoomAs(hub, base, token, body);
+
 beforeAll(async () => {
   dir = await fsp.mkdtemp(path.join(os.tmpdir(), "wisp-member-security-"));
   const built = await buildHub({ dataDir: dir, setupCode: false, logger: { stream: { write: (line: string) => void logged.push(line) } } });
@@ -65,7 +69,7 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
   owner = (await api("POST", "/api/setup", { email: "o@example.com", name: "Owner", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
-  await api("POST", "/api/channels", { name: "general" }, owner);
+  await room({ name: "general" }, owner);
   member = await invite("member", "m@example.com");
   guest = await invite("guest", "g@example.com");
   const { node } = (await api("POST", "/api/nodes", { name: "Owner's Mac" }, owner)).data;

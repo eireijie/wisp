@@ -21,3 +21,4 @@ export * from "./features.ts";
 export * from "./repo.ts";
 export * from "./env.ts";
 export * from "./models.ts";
+export * from "./conversations.ts";

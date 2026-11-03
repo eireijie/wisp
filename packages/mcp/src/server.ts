@@ -65,12 +65,15 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
 
   server.registerTool(
     "chat_read",
-    { description: "Read recent messages from a channel, or a thread when thread_id is given.", inputSchema: { channel: z.string(), thread_id: z.string().optional(), limit: z.number().int().min(1).max(100).optional() } },
-    safe(async ({ channel, thread_id, limit }) => {
+    {
+      description: "Read recent messages from a channel, or a thread when thread_id is given. Use before (a time from an earlier line) to read further back, into earlier chats.",
+      inputSchema: { channel: z.string(), thread_id: z.string().optional(), limit: z.number().int().min(1).max(100).optional(), before: z.string().optional() },
+    },
+    safe(async ({ channel, thread_id, limit, before }) => {
       const ch = await resolveChannel(channel);
-      const [{ messages }, agents] = await Promise.all([client.messages(ch.id, { thread: thread_id, limit: limit ?? 30 }), client.agents()]);
+      const [{ messages }, agents] = await Promise.all([client.messages(ch.id, { thread: thread_id, limit: limit ?? 30, before }), client.agents()]);
       const names = new Map(agents.map((a) => [a.id, `@${a.handle}`]));
-      return text(messages.map((m) => `[${m.id}] ${m.author.kind === "agent" ? names.get(m.author.id) : m.author.id === "system" ? "system" : "human"}: ${m.body}`).join("\n") || "(no messages)");
+      return text(messages.map((m) => `[${m.id}] ${m.createdAt} ${m.author.kind === "agent" ? names.get(m.author.id) : m.author.id === "system" ? "system" : "human"}: ${m.body}`).join("\n") || "(no messages)");
     }),
   );
 
@@ -835,8 +838,9 @@ function guessMime(p: string): string {
 }
 
 /** The hints after a save, in a few short lines ("" when there are none). */
-export function saveHints(r: { similar?: { path: string; title: string }[]; linkable?: string[] } | null | undefined): string {
+export function saveHints(r: { similar?: { path: string; title: string }[]; linkable?: string[]; linked?: string[] } | null | undefined): string {
   const out: string[] = [];
+  if (r?.linked?.length) out.push(`It linked to nothing, so Wisp added "Related: ${r.linked.join(", ")}". Change it if a better note fits.`);
   if (r?.similar?.length) out.push(`Similar notes (if it's the same idea, merge into one and delete the other):\n${r.similar.map((s) => `- ${s.path} (${s.title})`).join("\n")}`);
   if (r?.linkable?.length) out.push(`Mentions you could link: ${r.linkable.join(", ")}`);
   return out.length ? `\n${out.join("\n")}` : "";

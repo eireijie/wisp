@@ -6,12 +6,15 @@ import type { HarnessAdapter } from "@wisp/adapters";
 import { WispClient } from "@wisp/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
+import type { Hub } from "../src/hub.ts";
+import { makeRoomFor } from "./room.ts";
 
 let dir: string;
 let home: string;
 let url: string;
 let close: () => Promise<void>;
 let daemon: NodeDaemon;
+let hub: Hub;
 let owner: WispClient;
 let sam: WispClient;
 let nodeId: string;
@@ -66,19 +69,24 @@ const waitFor = async <T>(fn: () => Promise<T | undefined>, ms = 6000): Promise<
 };
 const status = (p: Promise<unknown>) => p.then(() => 200, (e) => e.status as number);
 
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = async (body: Parameters<typeof makeRoomFor>[2]) => (await makeRoomFor(hub, owner, body)).data;
+
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-harness-settings-"));
   home = path.join(dir, "home");
   await fs.mkdir(path.join(home, ".hermes", "skills", "notes"), { recursive: true });
   await fs.writeFile(path.join(home, ".hermes", "config.yaml"), "model:\n  default: claude-sonnet-5.5\n  provider: openrouter\n");
   await fs.writeFile(path.join(home, ".hermes", "skills", "notes", "SKILL.md"), "---\nname: notes\ndescription: Keep notes\n---\nWrite them down.\n");
-  const { app } = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
+  const built = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
+  const { app } = built;
+  hub = built.hub;
   await app.listen({ port: 0, host: "127.0.0.1" });
   url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();
   const post = (p: string, body: unknown) => fetch(url + p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
   owner = new WispClient({ url, token: (await post("/api/setup", { email: "me@example.com", name: "Me", password: "password123" })).token });
-  await owner.request("POST", "/api/channels", { name: "general" });
+  await room({ name: "general" });
   await owner.request("PUT", "/api/features", { invite: true });
   const inv = await owner.request<{ code: string }>("POST", "/api/invites", { role: "member", days: 1 });
   sam = new WispClient({ url, token: (await post("/api/invites/accept", { code: inv.code, name: "Sam", email: "sam@example.com", password: "password123" })).token });

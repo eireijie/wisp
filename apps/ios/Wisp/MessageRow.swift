@@ -16,11 +16,13 @@ struct MessageRow: View {
   var working: [Agent] = []
   /** the thread whose message bar "Reply" fills (nil: the chat's own) */
   var composerThread: String? = nil
+  @Environment(\.messageActions) private var actions
+  @ReduceMotion private var reduceMotion
   @State private var toolsOpen = false
-  @State private var editing = false
-  @State private var deleting = false
-  @State private var error: String?
-  @State private var failure: String?
+  /** how far the message is swiped to the right */
+  @State private var dx: CGFloat = 0
+  @State private var bubbleBox = FrameBox()
+  @State private var columnBox = FrameBox()
 
   private var tools: [(name: String, line: String)] {
     message.parts.compactMap { if case .toolCall(let n, let line, _) = $0 { (n, line.isEmpty ? n : line) } else { nil } }
@@ -96,61 +98,80 @@ struct MessageRow: View {
   private var hasChange: Bool { message.parts.contains { if case .change = $0 { true } else { false } } }
   private var showsBubble: Bool { message.deletedAt == nil && (!message.body.isEmpty || message.replyTo != nil) && !hasChange }
 
+  private var held: Bool { actions?.held?.message.id == message.id }
+  private var hasReactions: Bool { (message.reactions ?? []).contains { !$0.actors.isEmpty } }
+  /** a swipe to the right opens this message's thread */
+  private var swipeThread: ThreadRef? { message.deletedAt == nil ? thread : nil }
+
   private var row: some View {
     VStack(spacing: 0) {
-    HStack(alignment: .bottom, spacing: 8) {
-      if mine {
-        Spacer(minLength: 56)
-      } else if !home {
-        Group {
-          if last {
-            if message.author.kind == .agent { AgentAvatar(agent: store.agent(message.author.id), size: 24, showStatus: false) }
-            else { PersonAvatar(name: store.name(of: message.author), size: 24) }
-          } else { Color.clear }
+    ZStack(alignment: .leading) {
+      if swipeThread != nil && dx > 0 { SwipeThreadIcon(dx: dx).padding(.leading, mine ? 0 : -4) }
+      HStack(alignment: .bottom, spacing: 8) {
+        if mine {
+          Spacer(minLength: 56)
+        } else if !home {
+          Group {
+            if last {
+              if message.author.kind == .agent { AgentAvatar(agent: store.agent(message.author.id), size: 24, showStatus: false) }
+              else { PersonAvatar(name: store.name(of: message.author), size: 24) }
+            } else { Color.clear }
+          }
+          .frame(width: 24, height: 24)
         }
-        .frame(width: 24, height: 24)
+        column
+        if !mine { Spacer(minLength: home ? 56 : 40) }
       }
-      column
-      if !mine { Spacer(minLength: home ? 56 : 40) }
+      .offset(x: dx)
     }
       // the agent let the chat go: a quiet line across the chat, not part of the bubble
       if Loops.isClosed(message) { ClosedLine(message: message) }
     }
     .padding(.horizontal, 16)
-    .padding(.top, compact ? 0 : 4)
+    .padding(.top, (compact ? 0 : 4) + (hasReactions && showsBubble ? 12 : 0))
     .padding(.bottom, last ? 4 : 1)
     .background {
       if flashed == message.id { Palette.blue.opacity(0.14) }
     }
     .animation(.easeOut(duration: 0.5), value: flashed)
     .contentShape(Rectangle())
+    .opacity(held ? 0 : 1)
     .id(message.id)
-    .contextMenu {
-      if store.canReply(message) { Button("Reply", systemImage: "arrowshape.turn.up.left") { store.startReply(message, thread: composerThread) } }
-      if let thread, message.deletedAt == nil { NavigationLink(value: thread) { Label("Reply in thread", systemImage: "bubble.left") } }
-      if !message.body.isEmpty { Button("Copy text", systemImage: "doc.on.doc") { UIPasteboard.general.string = message.body } }
-      if store.canPin(message) {
-        Button(pinned ? "Unpin" : "Pin to team", systemImage: pinned ? "pin.slash" : "pin") {
-          Task { do { try await store.setPinned(message, !pinned) } catch { failure = error.localizedDescription } }
-        }
-      }
-      if store.canEdit(message) { Button("Edit", systemImage: "pencil") { editing = true } }
-      if store.canDelete(message) { Button("Delete", systemImage: "trash", role: .destructive) { deleting = true } }
-    }
-    .sheet(isPresented: $editing) { EditMessageSheet(message: message) }
-    .alert("Couldn't do that", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
-      Button("OK") {}
-    } message: { Text(failure ?? "") }
-    .confirmationDialog("Delete this message?", isPresented: $deleting, titleVisibility: .visible) {
-      Button("Delete message", role: .destructive) {
-        Task {
-          do { try await store.deleteMessage(message) } catch { self.error = error.localizedDescription }
-        }
-      }
-    } message: { Text("Everyone will see “This message was deleted.” instead. Replies in its thread stay.") }
-    .alert("Couldn't delete it", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-      Button("OK") {}
-    } message: { Text(error ?? "") }
+    .gesture(HoldGesture { hold() })
+    .gesture(SwipeRightGesture(changed: swiped, ended: swipeEnded))
+    .accessibilityElement(children: .contain)
+  }
+
+  /** Opens this message's menu over the chat. */
+  private func hold() {
+    // a press that turned into a swipe never opens the menu
+    guard let actions, dx == 0, message.author.id != "system", message.deletedAt == nil else { return }
+    let bubble = showsBubble && bubbleBox.frame != .zero
+    actions.held = .init(message: message, frame: bubble ? bubbleBox.frame : columnBox.frame, mine: mine, bubble: bubble, thread: message.deletedAt == nil ? thread : nil, composerThread: composerThread)
+  }
+
+  private func swiped(_ raw: CGFloat) {
+    guard swipeThread != nil else { return }
+    let next = SwipeMath.offset(raw, reduceMotion: reduceMotion)
+    if (next >= SwipeMath.arm) != (dx >= SwipeMath.arm) && next >= SwipeMath.arm { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+    dx = next
+  }
+
+  private func swipeEnded(_ raw: CGFloat, cancelled: Bool) {
+    let open = !cancelled && dx >= SwipeMath.arm
+    withAnimation(reduceMotion ? Motion.reduced : .spring(response: 0.42, dampingFraction: 0.7)) { dx = 0 }
+    if open, let swipeThread { actions?.thread = swipeThread }
+  }
+
+  /** What VoiceOver offers on a message: the same things as press and hold. */
+  @ViewBuilder private var voiceOverActions: some View {
+    if store.canReply(message) { Button("Reply") { store.startReply(message, thread: composerThread) } }
+    if let swipeThread { Button("Reply in thread") { actions?.thread = swipeThread } }
+    if store.canReact(message) { Button("React…") { hold() } }
+    if !message.body.isEmpty { Button("Copy") { UIPasteboard.general.string = message.body } }
+    if store.canPin(message) { Button(pinned ? "Unpin" : "Pin to team") { actions?.setPinned(message, !pinned, store: store) } }
+    if store.canEdit(message) { Button("Edit") { actions?.editing = message } }
+    if store.canDelete(message) { Button("Delete") { actions?.deleting = message } }
   }
 
   private var column: some View {
@@ -164,7 +185,7 @@ struct MessageRow: View {
         } else if mine && pinned {
           Label("Pinned", systemImage: "pin.fill").font(.system(size: 11)).foregroundStyle(Palette.faint).padding(.trailing, 6)
         }
-        if !mine && message.deletedAt == nil && Loops.isCheckback(message) { CheckbackLabel() }
+        if !mine && message.deletedAt == nil && Loops.isCheckback(message) { CheckbackLabel(message: message) }
         if message.deletedAt != nil {
           Text("This message was deleted.").font(.system(size: 15)).italic().foregroundStyle(Palette.muted)
             .padding(.horizontal, 13).padding(.vertical, 9)
@@ -172,11 +193,18 @@ struct MessageRow: View {
         } else if showsBubble {
           Bubble(side: mine ? .mine : .theirs) {
             VStack(alignment: .leading, spacing: 6) {
-              if let quote = message.replyTo { QuoteBlock(quote: quote, side: mine ? .mine : .theirs) }
-              if !message.body.isEmpty { MarkdownText(message.body, edited: message.editedAt != nil) }
+              if let quote = message.replyTo { QuoteBlock(quote: quote, side: mine ? .mine : .theirs, chat: message.conversationId) }
+              if !message.body.isEmpty { MarkdownText(message.body, edited: message.editedAt != nil, selectable: false) }
             }
           }
+          .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { bubbleBox.frame = $0 }
+          .accessibilityElement(children: .combine)
+          .accessibilityActions { voiceOverActions }
+          .overlay(alignment: mine ? .topLeading : .topTrailing) {
+            if hasReactions { ReactionBadges(message: message).offset(x: mine ? -12 : 12, y: -16) }
+          }
         }
+        if !showsBubble && message.deletedAt == nil && hasReactions { ReactionBadges(message: message) }
         ForEach(Array(message.parts.enumerated()), id: \.offset) { _, part in
           PartView(part: part, message: message)
         }
@@ -204,6 +232,7 @@ struct MessageRow: View {
           .padding(.top, 2)
         }
     }
+    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { columnBox.frame = $0 }
   }
 
   /** "Ran 4 tools" on a pill; it opens the list of what each one did. */
@@ -380,7 +409,9 @@ struct MarkdownText: View {
   var source: String
   /** its author changed it: "(edited)" at the end, like the web app */
   var edited = false
-  init(_ s: String, edited: Bool = false) { source = s; self.edited = edited }
+  /** off in a chat bubble, where press and hold opens the message's menu (Copy is there) */
+  var selectable = true
+  init(_ s: String, edited: Bool = false, selectable: Bool = true) { source = s; self.edited = edited; self.selectable = selectable }
 
   var body: some View {
     Group {
@@ -391,8 +422,15 @@ struct MarkdownText: View {
       }
     }
       .font(.system(size: 15))
-      .textSelection(.enabled)
+      .modifier(Selectable(on: selectable))
       .fixedSize(horizontal: false, vertical: true)
+  }
+
+  private struct Selectable: ViewModifier {
+    var on: Bool
+    func body(content: Content) -> some View {
+      if on { content.textSelection(.enabled) } else { content }
+    }
   }
 
   private var attributed: AttributedString {

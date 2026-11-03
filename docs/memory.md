@@ -85,3 +85,23 @@ Wisp assembles context for each run alongside the conversation and request:
 Agents save information about people with `memory_remember`, and people can inspect, correct or delete it on **About you**. Claude Code's automatic device-local memory is disabled for Wisp runs so this information can be kept in the shared vault.
 
 Sessions connected through `wisp-mcp` receive memory context at initialization and can request fresh context with `memory_context`. Skills assigned to an agent are stored in its private folder and listed in its prompt; see [Connectors and skills](adapters.md#connectors-and-skills).
+
+## How agents keep memory up to date
+
+Agents save as they work: their built-in memory skill tells them to search first, update the note that's already there, and link related notes with `[[wikilinks]]`. The hub also enforces this on every save an agent makes, without any model calls:
+
+- A save that holds a password, key, token or card number is refused. Agents write where the secret lives instead.
+- A new note that repeats an existing one (nearly the same words, or the same title and much of the same text) is refused, and the agent is told which note to update.
+- A note that links to nothing gets a `Related:` line linking the notes it mentions or is closest to, so the graph doesn't grow islands.
+
+Models don't always save when a prompt asks them to, so the hub also looks at how each chat run ended. If the run did real work (several tool calls), finished a task, ended a discussion with a decision, or the person said something lasting ("I prefer…", "we decided…", "from now on…"), and the agent saved nothing, the hub queues a short **memory pass**. Once the chat has been quiet for 3 minutes (or at most 20 minutes after the first item), the agent gets one fresh run in its own conversation with what happened, and saves or updates linked notes. Nothing is posted in the chat. When the agent does the same kind of task again (similar request, same tools, within 30 days) or the person shows it how to do something, the pass also asks it to save the steps as a skill (`skill_save`), unless it already has a skill for that or skill learning is off.
+
+Memory passes cost model tokens, so they are kept small:
+
+- They count against the person's daily background allowance and use the model and effort picked for background checks (low effort by default). Past 80% of the allowance they stop until the next day.
+- At most 8 passes per agent and person a day, one at a time per agent, and runs close together share one pass.
+- No pass when the agent already saved during the run, or when the run was a quick answer.
+
+Once a day the hub tidies recent notes in `shared/` and agents' folders (no model): notes nothing links to and that link nothing get a `Related:` line, and notes in an agent's folder that look like the same idea are handed to that agent's next pass to merge.
+
+Every save is a git commit credited to the agent; saves from a memory pass say "memory pass after work in …" in their message. Open a note's History to see who changed it and **Restore** an earlier version, or delete a note that shouldn't have been saved. An owner can turn memory passes off with `PUT /api/settings/agents` and `{"autoMemory": false}`; the save guards above always apply.
