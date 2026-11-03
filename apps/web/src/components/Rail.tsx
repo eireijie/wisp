@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { Blocks, BookOpen, Ellipsis, LifeBuoy, ListTodo, Store } from "lucide-react";
+import { Blocks, BookOpen, Ellipsis, HardDrive, LifeBuoy, ListTodo, Store } from "lucide-react";
 import { useFeatures } from "../features.ts";
 import { useStore, useInboxCount, useChatsUnread } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
@@ -67,6 +67,7 @@ export function useMoreItems(guest: boolean, size = 16): { label: string; icon: 
   return [
     { label: "Memory", icon: <BookOpen {...icon} />, to: { view: "vault", path: null } },
     ...(!guest && features.tasks ? [{ label: "Tasks", icon: <ListTodo {...icon} />, to: { view: "tasks" } as Route }] : []),
+    ...(!guest && features.storage ? [{ label: "Storage", icon: <HardDrive {...icon} />, to: { view: "settings", page: "storage" } as Route }] : []),
     ...(!guest ? [{ label: "Marketplace", icon: <Store {...icon} />, to: { view: "marketplace" } as Route }, { label: "Mods", icon: <Blocks {...icon} />, to: { view: "mods" } as Route }] : []),
     { label: "Help", icon: <LifeBuoy {...icon} />, to: { view: "help" } },
   ];

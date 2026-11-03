@@ -280,7 +280,9 @@ export class Storage {
       throw e instanceof StorageError ? e : new StorageError(`Couldn't reach ${new URL(base).host}: ${e.message}`, 502);
     });
     if (!root || root.type !== "folder") throw new StorageError(`${base} isn't a WebDAV folder. Check the address.`, 400);
-    return this.insert({ workspaceId, userId, name: c.name?.trim() || STORAGE_SERVICES[c.service].name, service: c.service, url: base, account: username, signIn, loginItemId: c.loginItemId ?? null, secret });
+    // "Other server" says nothing about which one; its address does
+    const name = c.name?.trim() || (c.service === "webdav" ? new URL(base).hostname : STORAGE_SERVICES[c.service].name);
+    return this.insert({ workspaceId, userId, name, service: c.service, url: base, account: username, signIn, loginItemId: c.loginItemId ?? null, secret });
   }
 
   /**
