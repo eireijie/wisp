@@ -173,8 +173,10 @@ describe("a new agent speaks first", () => {
     const id = await make("dee");
     const comp = hub.store.createComputer({ workspaceId: hub.store.agent(id)!.workspaceId, name: "Dee's desk", kind: "vm", nodeId, config: { cpus: 2, memoryGb: 4 }, status: "ready" });
     hub.store.updateAgent(id, { computerId: comp.id });
-    onReply = async () => "What do you need?";
-    const prompt = await answer(id, "Help with my store");
+    // the computer isn't real, so look at the prompt the reply would get instead of running it
+    const msg = hub.postMessage({ channelId: dmOf(id).id, author: { kind: "user", id: me }, body: "Help with my store", route: false });
+    const prompt = await hub.buildPrompt(id, dmOf(id).id, null, msg.id);
+    hub.store.updateAgent(id, { computerId: null });
     expect(prompt).toContain("open each account's site in your computer's browser");
     expect(prompt).toContain("ask first; change nothing until they say yes");
     expect(prompt).toContain("Sign in only with login_fill");
