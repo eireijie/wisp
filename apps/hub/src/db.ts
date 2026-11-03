@@ -280,6 +280,30 @@ CREATE TABLE IF NOT EXISTS computer_catalogs (
   catalog_json TEXT NOT NULL, updated_at TEXT NOT NULL,
   PRIMARY KEY (node_id, computer_id)
 );
+CREATE TABLE IF NOT EXISTS watches (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, service TEXT NOT NULL, label TEXT NOT NULL,
+  connector_id TEXT REFERENCES connectors(id) ON DELETE CASCADE, secret_json TEXT NOT NULL DEFAULT '{}', config_json TEXT NOT NULL DEFAULT '{}',
+  cursor TEXT, every_minutes INTEGER NOT NULL, paused INTEGER NOT NULL DEFAULT 0,
+  last_polled_at TEXT, next_poll_at TEXT, last_error TEXT, created_by TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS watch_agents (
+  watch_id TEXT NOT NULL REFERENCES watches(id) ON DELETE CASCADE, agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  PRIMARY KEY (watch_id, agent_id)
+);
+CREATE TABLE IF NOT EXISTS app_events (
+  id TEXT PRIMARY KEY, watch_id TEXT NOT NULL REFERENCES watches(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE, user_id TEXT NOT NULL,
+  service TEXT NOT NULL, kind TEXT NOT NULL, item_id TEXT NOT NULL, title TEXT NOT NULL, url TEXT, actor TEXT, preview TEXT,
+  happened_at TEXT NOT NULL, created_at TEXT NOT NULL, run_id TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS app_events_once ON app_events(watch_id, agent_id, item_id, happened_at);
+CREATE INDEX IF NOT EXISTS app_events_waiting ON app_events(run_id, agent_id);
+CREATE TABLE IF NOT EXISTS mentions (
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  about TEXT NOT NULL, message_id TEXT, said_at TEXT NOT NULL, answered_at TEXT,
+  PRIMARY KEY (agent_id, user_id, about)
+);
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   keys_json TEXT NOT NULL, created_at TEXT NOT NULL

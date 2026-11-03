@@ -1,98 +1,62 @@
 const { envVar } = require("./env.cjs");
-// "Create one in your cloud account": a Wisp server in the person's own Hetzner Cloud project,
-// billed to them by Hetzner. The app asks Hetzner for a server with docker/cloud-init.yaml as its
-// first-boot script, waits until the hub answers over HTTPS, and makes the first account with the
-// setup key only this app knows. The API token is only ever passed in, used and dropped: nothing
-// here keeps or saves it.
+// "Cloud": a Wisp server in the person's own account at a cloud provider, billed to them by that
+// provider. The app asks the provider for a server with docker/cloud-init.yaml as its first-boot
+// script, waits until the hub answers over HTTPS, and makes the first account with the setup key
+// only this app knows. The API token is only ever passed in, used and dropped: nothing here keeps or
+// saves it. Each provider is one module in cloud-providers/ with the same five calls, so another
+// one (a future Wisp Cloud included) is one more module.
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const { CloudError, timedOut, timeoutError } = require("./cloud-providers/shared.cjs");
+const PROVIDERS = require("./cloud-providers/index.cjs");
+const { nearestLocation } = require("./cloud-providers/places.cjs");
 
 const PLACEHOLDER = "__WISP_SETUP_KEY__";
-const IMAGE = "ubuntu-24.04";
-/** Override the API (and the hub's address) to run the whole flow against a mock. */
-const hetznerApi = () => envVar("HETZNER_API", process.env) ?? "https://api.hetzner.cloud/v1";
 
-class CloudError extends Error {}
-const timedOut = (err) => err?.name === "TimeoutError" || err?.name === "AbortError";
-const timeoutError = () => Object.assign(new CloudError("The request timed out. Try again."), { code: "timed_out", retryable: true });
-
-/** One Hetzner API call, with its errors said the way a person needs to hear them. */
-async function hetzner(token, method, route, body, { fetchImpl = fetch } = {}) {
-  let res;
-  try {
-    res = await fetchImpl(new URL(hetznerApi() + route), {
-      method,
-      headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(30_000),
-    });
-  } catch (err) {
-    if (timedOut(err)) throw timeoutError();
-    throw new CloudError(`Couldn't reach Hetzner (${err.cause?.code || err.message}). Check your internet connection.`);
-  }
-  if (res.status === 204) return {};
-  const data = await res.json().catch((err) => { if (timedOut(err)) throw timeoutError(); return {}; });
-  if (res.ok) return data;
-  const code = data.error?.code;
-  const message = data.error?.message || `Hetzner said ${res.status}`;
-  if (res.status === 401) throw new CloudError("Hetzner didn't accept that token. Copy it again, all of it.");
-  if (res.status === 403 || code === "forbidden") throw new CloudError("That token can only read. Make a new one with Read & Write access.");
-  if (code === "resource_limit_exceeded") throw new CloudError(`Your Hetzner project is at its limit: ${message}. Ask Hetzner to raise it, or delete a server you don't need.`);
-  if (code === "resource_unavailable") throw new CloudError("Hetzner has no servers of that size left in that location right now. Pick another size or location.");
-  if (res.status === 429) throw new CloudError("Hetzner is limiting requests. Wait a minute and try again.");
-  throw new CloudError(message);
+function provider(id = PROVIDERS[0].id) {
+  const p = PROVIDERS.find((x) => x.id === id);
+  if (!p) throw new CloudError(`Wisp doesn't know the cloud provider "${id}".`);
+  return p;
 }
-
-/** Every page of a list (server types are more than one page). */
-async function all(token, route, key, opts) {
-  const out = [];
-  for (let page = 1; page; ) {
-    const data = await hetzner(token, "GET", `${route}${route.includes("?") ? "&" : "?"}page=${page}&per_page=50`, null, opts);
-    out.push(...(data[key] || []));
-    page = data.meta?.pagination?.next_page || 0;
-  }
-  return out;
-}
-
-const money = (p) => Number(p?.price_monthly?.gross ?? NaN);
 
 /**
  * What can be created with this token: locations, and each size in each location with its monthly
- * price including the IPv4 address (Hetzner bills that separately), cheapest first. Shared-CPU
- * sizes with 2–16 GB only, without a menu of 40. The hub and its device take about 1 GB, and a
- * first agent's computer is given up to 4 GB; setup.html recommends a size from that.
- * Prices come from Hetzner every time, so they're whatever Hetzner charges today.
+ * price (including anything billed on top, like Hetzner's IPv4 address), cheapest first.
  */
-async function plans(token, opts = {}) {
-  const [types, pricing, locations] = await Promise.all([
-    all(token, "/server_types", "server_types", opts),
-    hetzner(token, "GET", "/pricing", null, opts),
-    all(token, "/locations", "locations", opts),
-  ]);
-  const currency = pricing.pricing?.currency || "EUR";
-  const ipv4 = new Map((pricing.pricing?.primary_ips?.find((p) => p.type === "ipv4")?.prices ?? []).map((p) => [p.location, money(p)]));
-  const list = [];
-  for (const t of types) {
-    if (t.deprecated || t.deprecation || t.cpu_type !== "shared" || t.memory < 2 || t.memory > 16) continue;
-    const where = t.locations ?? t.prices.map((p) => ({ name: p.location }));
-    for (const loc of where) {
-      if (loc.available === false || loc.deprecation) continue;
-      const server = money(t.prices.find((p) => p.location === loc.name));
-      if (!Number.isFinite(server)) continue;
-      const ip = ipv4.get(loc.name) ?? 0;
-      list.push({ type: t.name, location: loc.name, cores: t.cores, memory: t.memory, disk: t.disk, arch: t.architecture, monthly: round(server + ip), server: round(server), ipv4: round(ip) });
-    }
-  }
-  list.sort((a, b) => a.monthly - b.monthly || a.memory - b.memory);
-  const used = new Set(list.map((p) => p.location));
-  return {
-    currency,
-    locations: locations.filter((l) => used.has(l.name)).map((l) => ({ name: l.name, city: l.city, country: l.country, zone: l.network_zone })),
-    plans: list,
-  };
+async function plans(token, { provider: id, ...opts } = {}) {
+  const r = await provider(id).plans(token, opts);
+  r.plans.sort((a, b) => a.monthly - b.monthly || a.memory - b.memory);
+  return r;
 }
-const round = (n) => Math.round(n * 100) / 100;
+
+/**
+ * The sizes offered at a location: the cheapest of each of 2, 4 and 8 GB (x86 first, so every agent
+ * image runs), with the recommended one marked.
+ */
+function sizeChoices(list, location) {
+  const here = list.filter((p) => p.location === location);
+  const rec = recommendedPlan(here);
+  const out = [];
+  for (const gb of [2, 4, 8]) {
+    const tier = here.filter((p) => p.memory === gb);
+    const p = tier.find((x) => x.arch !== "arm") || tier[0];
+    if (p) out.push({ ...p, recommended: p === rec });
+  }
+  if (rec && !out.some((p) => p.recommended)) out.push({ ...rec, recommended: true });
+  return out.sort((a, b) => a.memory - b.memory);
+}
+
+/**
+ * The size to start with: the cheapest with at least 4 GB (the hub and its device take about 1 GB,
+ * and one agent's computer fits beside them), preferring x86 so every agent image runs, with Arm
+ * only when x86 isn't there. A bigger server is a resize away when more agents get computers.
+ */
+function recommendedPlan(list) {
+  const fits = (p) => p.memory >= RECOMMENDED_GB;
+  return list.find((p) => fits(p) && p.arch !== "arm") || list.find(fits) || list[list.length - 1] || null;
+}
+const RECOMMENDED_GB = 4;
 
 /**
  * docker/cloud-init.yaml with a fresh setup key as the key file's content. Only that line: the
@@ -121,41 +85,35 @@ function hubUrls(ip) {
 const sleepFor = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Create a Wisp in the person's Hetzner project and make its first account. `onStep(id)` hears
+ * Create a Wisp in the person's cloud account and make its first account. `onStep(id)` hears
  * "create", "boot", "https" and "account" as each starts. On failure after the server exists, the
  * error carries it (`err.server`) and its setup key (`err.key`), so the person can delete it, or keep
  * waiting: `resume: { server, key }` picks the same server up again instead of creating another,
  * since only that key can make its first account.
  */
-async function createWisp({ token, type, location, account }, { fetchImpl = fetch, sleep = sleepFor, onStep = () => {}, bootMs = 5 * 60_000, httpsMs = 15 * 60_000, template, resume } = {}) {
+async function createWisp({ provider: id, token, type, location, account }, { fetchImpl = fetch, sleep = sleepFor, onStep = () => {}, bootMs = 5 * 60_000, httpsMs = 15 * 60_000, template, resume } = {}) {
   const opts = { fetchImpl };
+  // a server left from before there was a choice of provider is a Hetzner one
+  const cloud = provider(id ?? resume?.server?.provider ?? (resume ? "hetzner" : undefined));
   let key;
   let server;
   if (resume?.server?.id && resume.key) {
     key = resume.key;
-    server = { ...resume.server };
+    server = { provider: cloud.id, ...resume.server };
   } else {
     key = crypto.randomBytes(24).toString("base64url");
     const name = `wisp-${crypto.randomBytes(3).toString("hex")}`;
     onStep("create");
-    const created = await hetzner(token, "POST", "/servers", {
-      name,
-      server_type: type,
-      location,
-      image: IMAGE,
-      user_data: userData(key, template),
-      labels: { "managed-by": "wisp" },
-      public_net: { enable_ipv4: true, enable_ipv6: true },
-    }, opts);
-    server = { id: created.server.id, name, ip: created.server.public_net?.ipv4?.ip || "", location, type };
+    const created = await cloud.create(token, { name, type, location, userData: userData(key, template) }, opts);
+    server = { provider: cloud.id, id: created.id, name, ip: created.ip, location, type };
   }
 
   try {
     onStep("boot");
     for (const until = Date.now() + bootMs; ; ) {
-      const s = (await hetzner(token, "GET", `/servers/${server.id}`, null, opts)).server;
-      server.ip = s.public_net?.ipv4?.ip || server.ip;
-      if (s.status === "running" && server.ip) break;
+      const s = await cloud.status(token, server.id, opts);
+      server.ip = s.ip || server.ip;
+      if (s.running && server.ip) break;
       if (Date.now() > until) throw new CloudError("The server didn't start in time.");
       await sleep(3000);
     }
@@ -212,8 +170,8 @@ async function claim(url, key, { name, email, password }, { fetchImpl = fetch, t
 }
 
 /** Delete a server this flow created (when the person gives up on one that didn't come up). */
-async function deleteServer(token, id, opts) {
-  await hetzner(token, "DELETE", `/servers/${id}`, null, opts);
+async function deleteServer(token, id, { provider: which, ...opts } = {}) {
+  await provider(which).remove(token, id, opts);
 }
 
-module.exports = { CloudError, plans, userData, templatePath, hubUrls, createWisp, waitForHub, claim, deleteServer, PLACEHOLDER };
+module.exports = { CloudError, PROVIDERS, provider, plans, recommendedPlan, sizeChoices, nearestLocation, userData, templatePath, hubUrls, createWisp, waitForHub, claim, deleteServer, PLACEHOLDER };

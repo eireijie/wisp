@@ -5,7 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 function fixture(state: Record<string, any> = { step: "cloud", server: { id: 42, name: "saved-server", ip: "203.0.113.7", type: "cx23", location: "fsn1" } }) {
   const elements = new Map<string, any>();
   const element = (id: string) => {
-    if (!elements.has(id)) elements.set(id, { hidden: true, value: "", textContent: "", checked: true, focus: vi.fn(), replaceChildren: vi.fn(), append: vi.fn(), style: {} });
+    if (!elements.has(id)) {
+      const attrs: Record<string, string> = {};
+      elements.set(id, { hidden: true, value: "", textContent: "", checked: true, focus: vi.fn(), replaceChildren: vi.fn(), append: vi.fn(), style: {}, dataset: {}, classList: { add: vi.fn(), remove: vi.fn() }, addEventListener: vi.fn(), setAttribute: (k: string, v: string) => (attrs[k] = v), getAttribute: (k: string) => attrs[k] ?? null });
+    }
     return elements.get(id)!;
   };
   const setup = {
@@ -13,16 +16,19 @@ function fixture(state: Record<string, any> = { step: "cloud", server: { id: 42,
     requestJoin: vi.fn(async () => ({ ok: true, code: "482913", host: "mac.local", expiresAt: new Date(Date.now() + 600000).toISOString() })),
     pollJoin: vi.fn(async (): Promise<any> => ({ ok: true, status: "pending" })),
     create: vi.fn(async (): Promise<any> => ({ ok: true })), open: vi.fn(),
-    cloudKeep: vi.fn(), check: async () => ({}), onCloudStep: vi.fn(), cloudPlans: vi.fn(async () => ({ ok: true, plans: [], locations: [], currency: "EUR" })), cloudCreate: vi.fn(async () => ({ ok: true, url: "https://hub" })),
+    cloudKeep: vi.fn(), check: async () => ({}), onCloudStep: vi.fn(), cloudPlans: vi.fn(async () => ({ ok: true, locations: [], choices: {}, currency: "EUR" })), cloudCreate: vi.fn(async () => ({ ok: true, url: "https://hub" })),
+    cloudProviders: vi.fn(async () => [{ id: "digitalocean", name: "DigitalOcean", signIn: true }, { id: "hetzner", name: "Hetzner", signIn: false, signInUrl: "https://console.hetzner.com/projects" }]),
+    rustdeskStatus: vi.fn(async () => ({ installed: false, id: null })),
   };
   const timers = new Map<number, () => Promise<void>>();
   let timerId = 0;
   const html = readFileSync(new URL("../src/setup.html", import.meta.url), "utf8");
   const code = html.match(/<script>([\s\S]*?)<\/script>/)![1];
   runInNewContext(code, {
-    window: { wispSetup: setup, addEventListener: vi.fn() }, location: { search: `?state=${encodeURIComponent(JSON.stringify(state))}` },
+    window: { wispSetup: setup, addEventListener: vi.fn(), dispatchEvent: vi.fn() }, Event: class {}, location: { search: `?state=${encodeURIComponent(JSON.stringify(state))}` },
     setTimeout: (fn: () => Promise<void>) => { timers.set(++timerId, fn); return timerId; },
     clearTimeout: (id: number) => timers.delete(id),
+    setInterval: () => 0, clearInterval: () => {},
     URLSearchParams, URL, Intl, Option: class {},
     document: { getElementById: element, querySelectorAll: () => [], querySelector: () => null, createElement: () => ({ append: vi.fn() }) },
   });
@@ -41,11 +47,14 @@ describe("resuming cloud setup after relaunch", () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(f.element("cloud").hidden).toBe(false);
     expect(f.element("cloud-fail-actions").hidden).toBe(false);
-    expect(f.element("cloud-fail-hint").textContent).toContain("saved-server");
+    expect(f.element("cloud-progress-sub").textContent).toContain("saved-server");
+    // a server from before there was a choice is a Hetzner one, so it's Hetzner's token it asks for
+    expect(f.element("p-name").textContent).toBe("Hetzner");
     f.element("cloud-wait").onclick();
     expect(f.element("cloud-connect").hidden).toBe(false);
     f.element("cloud-token").value = "token";
-    await f.element("cloud-token-form").onsubmit({ preventDefault() {} });
+    f.element("cloud-token-form").onsubmit({ preventDefault() {} });
+    await new Promise((resolve) => setImmediate(resolve));
     expect(f.element("cloud-choose").hidden).toBe(false);
     expect(f.element("cloud-go").textContent).toBe("Keep waiting");
     f.element("cloud-name").value = "Ada";
@@ -53,7 +62,7 @@ describe("resuming cloud setup after relaunch", () => {
     f.element("cloud-password").value = "password";
     f.element("cloud-form").onsubmit({ preventDefault() {} });
     await new Promise((resolve) => setImmediate(resolve));
-    expect(f.setup.cloudCreate).toHaveBeenCalledWith("token", expect.objectContaining({ resume: 42, account: { name: "Ada", email: "ada@example.com", password: "password" } }));
+    expect(f.setup.cloudCreate).toHaveBeenCalledWith("hetzner", "token", expect.objectContaining({ resume: 42, account: { name: "Ada", email: "ada@example.com", password: "password" } }));
   });
 });
 
@@ -73,7 +82,9 @@ describe("Wisp first launch", () => {
     const f = fixture({});
     await new Promise((resolve) => setImmediate(resolve));
     expect(f.element("welcome").hidden).toBe(false);
+    // a desktop that stays on: Self-Host is recommended, and Continue goes there
     f.element("pick-create").onclick();
+    f.element("welcome-go").onclick();
     expect(f.element("create").hidden).toBe(false);
     expect(f.setup.create).not.toHaveBeenCalled();
     const installing = f.element("create-go").onclick();
@@ -82,7 +93,7 @@ describe("Wisp first launch", () => {
     expect(f.setup.create).toHaveBeenCalledWith({ device: true });
     expect(f.element("ready").hidden).toBe(false);
     expect(f.setup.open).not.toHaveBeenCalled();
-    f.element("ready-go").onclick();
+    await f.element("ready-go").onclick();
     expect(f.setup.open).toHaveBeenCalledOnce();
     expect(f.element("starting").hidden).toBe(false);
   });
