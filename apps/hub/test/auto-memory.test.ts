@@ -286,3 +286,29 @@ describe("the daily tidy", () => {
     expect(prompts[0]).toMatch(/may say the same thing: agents\/[^ ]+\/standup-time\.md and agents\/[^ ]+\/standup\.md/);
   });
 });
+
+describe("memory passes and chats that split after a quiet break", () => {
+  it("see the request from the new chat, keep out of it, and post nothing that moves it", async () => {
+    // everything so far happened long ago: the next message starts a new chat
+    const rows = hub.store.db.prepare("SELECT id, created_at FROM messages").all() as { id: string; created_at: string }[];
+    for (const r of rows) hub.store.db.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(new Date(Date.parse(r.created_at) - 3 * 3600_000).toISOString(), r.id);
+    hub.store.db.prepare("UPDATE runs SET created_at = ? WHERE kind = 'memory'").run(new Date(Date.now() - 2 * 86_400_000).toISOString());
+    calls = ["mcp__calendar__search", "mcp__calendar__create", "mcp__gmail__draft"];
+    onChat = async () => "Booked the dentist for Tuesday at 3 and drafted the confirmation.";
+    await say("book my dentist appointment for next week");
+    const asked = hub.store.messages(dm().id).find((m) => m.body === "book my dentist appointment for next week")!;
+    expect(asked.conversationId).toBe(asked.id);
+    const before = hub.store.messages(dm().id).length;
+    await later();
+    const pass = passes().at(-1)!;
+    expect(pass.status).toBe("done");
+    expect(prompts.at(-1)).toMatch(/Sam wrote: "book my dentist appointment for next week"/);
+    // the pass runs on its own: no chat of its own, nothing posted in the chat
+    expect(hub.chatOfRun({ threadId: pass.threadId, triggerMessageId: "", kind: "memory" })).toBeUndefined();
+    expect(hub.store.messages(dm().id)).toHaveLength(before);
+    // so the person's next message is still part of the same chat
+    onChat = async () => "ok";
+    await say("thanks");
+    expect(hub.store.messages(dm().id).find((m) => m.body === "thanks")!.conversationId).toBe(asked.id);
+  });
+});

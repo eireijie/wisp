@@ -65,12 +65,15 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
 
   server.registerTool(
     "chat_read",
-    { description: "Read recent messages from a channel, or a thread when thread_id is given.", inputSchema: { channel: z.string(), thread_id: z.string().optional(), limit: z.number().int().min(1).max(100).optional() } },
-    safe(async ({ channel, thread_id, limit }) => {
+    {
+      description: "Read recent messages from a channel, or a thread when thread_id is given. Use before (a time from an earlier line) to read further back, into earlier chats.",
+      inputSchema: { channel: z.string(), thread_id: z.string().optional(), limit: z.number().int().min(1).max(100).optional(), before: z.string().optional() },
+    },
+    safe(async ({ channel, thread_id, limit, before }) => {
       const ch = await resolveChannel(channel);
-      const [{ messages }, agents] = await Promise.all([client.messages(ch.id, { thread: thread_id, limit: limit ?? 30 }), client.agents()]);
+      const [{ messages }, agents] = await Promise.all([client.messages(ch.id, { thread: thread_id, limit: limit ?? 30, before }), client.agents()]);
       const names = new Map(agents.map((a) => [a.id, `@${a.handle}`]));
-      return text(messages.map((m) => `[${m.id}] ${m.author.kind === "agent" ? names.get(m.author.id) : m.author.id === "system" ? "system" : "human"}: ${m.body}`).join("\n") || "(no messages)");
+      return text(messages.map((m) => `[${m.id}] ${m.createdAt} ${m.author.kind === "agent" ? names.get(m.author.id) : m.author.id === "system" ? "system" : "human"}: ${m.body}`).join("\n") || "(no messages)");
     }),
   );
 

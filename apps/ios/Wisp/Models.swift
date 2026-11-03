@@ -278,6 +278,17 @@ struct ReplyQuote: Codable, Hashable {
   var author: Actor
   var snippet: String
   var deleted: Bool?
+  /** when the quoted message was written, and the chat it's in (top-level messages): a quote from an earlier chat shows its date */
+  var createdAt: String?
+  var conversationId: String?
+}
+
+/** An earlier chat a message brings back (a reply into it, or an agent checking back on it): its id and when it started. */
+struct MessageContext: Codable, Hashable {
+  var conversationId: String
+  var at: String
+
+  var date: Date { Wire.date(at) ?? .distantPast }
 }
 
 /** A JSON value read loosely, for the parts of a tool call the app only shows as words. */
@@ -307,6 +318,10 @@ struct Message: Codable, Identifiable, Hashable {
   /** set when this replies to another message in the same chat: a quote, not a thread */
   var replyToId: String?
   var replyTo: ReplyQuote?
+  /** the chat it's part of at the top of a DM or team (the id of the chat's first message); threads have none, nor do old hubs */
+  var conversationId: String? = nil
+  /** an earlier chat this message brings back */
+  var context: MessageContext? = nil
   var createdAt: String
   /** set when its author changed the text */
   var editedAt: String?

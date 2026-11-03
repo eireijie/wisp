@@ -209,6 +209,7 @@
 		E634476885F6605FB395EA4E /* MemoryChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3A016B2F78112857AB3BE55 /* MemoryChrome.swift */; };
 		E904871712B489BE33EF1A36 /* Store+Apps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39D09F091D36482B5219EC47 /* Store+Apps.swift */; };
 		EAA9CC2BAC7912E83F596694 /* ChatBubbleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E470000F792F045D1B32CABD /* ChatBubbleTests.swift */; };
+		EE0159DCC3FE1642812A0D3E /* MessageMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4626D798B61F4EAC93059E67 /* MessageMenu.swift */; };
 		EE7A2A6D3F4FFAEC65C0689F /* MemoryStorageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F99A7581839946D00DED4AE9 /* MemoryStorageView.swift */; };
 		EEF288865DAEBA2FB9A51CF3 /* ComputerSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427014BD7056144AB66EB153 /* ComputerSheets.swift */; };
 		F63E45F22611AB754B66052E /* OrgSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDC9272C1D8F0DE89742E656 /* OrgSwitcher.swift */; };
@@ -296,6 +297,7 @@
 		436D2142FE91CCAE42633EE1 /* MemoryAccessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryAccessView.swift; sourceTree = "<group>"; };
 		461B0D858BB1689720B5B994 /* OrgFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgFeatureTests.swift; sourceTree = "<group>"; };
 		461CA50681B82AD94C6D39B1 /* ComputerFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerFiles.swift; sourceTree = "<group>"; };
+		4626D798B61F4EAC93059E67 /* MessageMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageMenu.swift; sourceTree = "<group>"; };
 		462E88A8D90E3BE1B374905F /* Store+Memory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Store+Memory.swift"; sourceTree = "<group>"; };
 		481E171E84A0C9E6CF428E40 /* AgentComputerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentComputerView.swift; sourceTree = "<group>"; };
 		4D91AA7F66CBF8D27658004F /* Schedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Schedule.swift; sourceTree = "<group>"; };
@@ -642,6 +644,7 @@
 				93536BA19702CAAE5D09BE6F /* MemoryModels.swift */,
 				F99A7581839946D00DED4AE9 /* MemoryStorageView.swift */,
 				F63DC27D29325FC666533969 /* MemoryView.swift */,
+				4626D798B61F4EAC93059E67 /* MessageMenu.swift */,
 				529E3A264685FF6C6DCFE695 /* MessageRow.swift */,
 				9A7CCCC14E8D7B790B54764E /* ModelConnections.swift */,
 				5E82C1A0EDF072A656171B27 /* Models.swift */,
@@ -998,6 +1001,7 @@
 				6F7B59FAD4261AA7D15A7B59 /* MemoryModels.swift in Sources */,
 				EE7A2A6D3F4FFAEC65C0689F /* MemoryStorageView.swift in Sources */,
 				CA09638570A01741A8C6E8A9 /* MemoryView.swift in Sources */,
+				EE0159DCC3FE1642812A0D3E /* MessageMenu.swift in Sources */,
 				B38EC76DB4369DCFE64A440D /* MessageRow.swift in Sources */,
 				3799C45ADAA3389B00C8A1FC /* ModelConnections.swift in Sources */,
 				7FBC6E0DB4D7138174EE8421 /* Models.swift in Sources */,

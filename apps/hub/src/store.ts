@@ -1,4 +1,4 @@
-import { channelTeams, chartFromSteps, cleanRulePath, hasSteps, isGraphTeam, migrateTeam, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type OwnRemoteDesktop, type BackgroundWork, type Followup, type Change, type ChatLoop } from "@wisp/core";
+import { channelTeams, chartFromSteps, cleanRulePath, hasSteps, isGraphTeam, migrateTeam, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type OwnRemoteDesktop, type BackgroundWork, type Followup, type Change, type ChatLoop, conversationFor } from "@wisp/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -837,12 +837,49 @@ export class Store {
 
   // --- messages -------------------------------------------------------------
 
-  insertMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null }): Message {
+  insertMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; conversationId?: string | null; contextId?: string | null }): Message {
     const msg: Message = { id: id("msg"), channelId: m.channelId, threadId: m.threadId ?? null, author: m.author, body: m.body, parts: m.parts ?? [], hop: m.hop ?? 0, createdAt: now(), ...(m.replyToId ? { replyToId: m.replyToId } : {}) };
+    // the top of a DM or team splits into chats after a quiet break; threads don't
+    let contextId = m.contextId ?? null;
+    if (!msg.threadId) {
+      const latest = this.latestWritten(msg.channelId);
+      const natural = msg.author.id === "system" ? (latest?.conversationId ?? msg.id) : conversationFor(latest, msg);
+      // a reply to an earlier request stays in that request's chat, unless someone has written in a
+      // newer chat since: then it lands in the chat going on now and brings its own back with it
+      const current = latest && (latest.conversationId || latest.id);
+      if (m.conversationId && (!latest || current === m.conversationId)) msg.conversationId = m.conversationId;
+      else {
+        msg.conversationId = natural;
+        if (m.conversationId) contextId = m.conversationId;
+      }
+    }
+    if (!msg.conversationId || contextId === msg.conversationId) contextId = null;
     this.db
-      .prepare("INSERT INTO messages (id, channel_id, thread_id, author_kind, author_id, body, parts_json, hop, created_at, reply_to_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(msg.id, msg.channelId, msg.threadId, msg.author.kind, msg.author.id, msg.body, JSON.stringify(msg.parts), msg.hop, msg.createdAt, msg.replyToId ?? null);
-    return this.withReplyQuote(msg);
+      .prepare("INSERT INTO messages (id, channel_id, thread_id, author_kind, author_id, body, parts_json, hop, created_at, reply_to_id, conversation_id, context_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(msg.id, msg.channelId, msg.threadId, msg.author.kind, msg.author.id, msg.body, JSON.stringify(msg.parts), msg.hop, msg.createdAt, msg.replyToId ?? null, msg.conversationId ?? null, contextId);
+    return this.withReplyQuote(contextId ? { ...msg, contextId } : msg);
+  }
+
+  /** The latest top-level message someone wrote in a channel (not Wisp's own notices): where its current chat stands. */
+  latestWritten(channelId: string): { id: string; createdAt: string; authorId: string; conversationId: string | null } | undefined {
+    const r = this.db.prepare("SELECT id, created_at, author_id, conversation_id FROM messages WHERE channel_id = ? AND thread_id IS NULL AND author_id != 'system' ORDER BY created_at DESC, rowid DESC LIMIT 1").get(channelId) as { id: string; created_at: string; author_id: string; conversation_id: string | null } | undefined;
+    return r && { id: r.id, createdAt: r.created_at, authorId: r.author_id, conversationId: r.conversation_id };
+  }
+
+  /** When a chat started: its first message that's still there (the very first may have been deleted). */
+  chatStart(conversationId: string): string | undefined {
+    return (this.db.prepare("SELECT MIN(created_at) AS at FROM messages WHERE conversation_id = ?").get(conversationId) as { at: string | null }).at ?? undefined;
+  }
+
+  /** The last messages of one chat, oldest first. */
+  conversationMessages(conversationId: string, limit = 20): Message[] {
+    return (this.db.prepare("SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?").all(conversationId, limit) as MessageRow[]).map(toMessage).reverse();
+  }
+
+  /** Earlier chats that messages in this one brought back (replies into them, check-backs on them), latest first. */
+  contextsOf(conversationId: string): string[] {
+    const rows = this.db.prepare("SELECT context_id FROM messages WHERE conversation_id = ? AND context_id IS NOT NULL GROUP BY context_id ORDER BY MAX(created_at) DESC").all(conversationId) as { context_id: string }[];
+    return rows.map((r) => r.context_id);
   }
 
   deleteMessage(messageId: string) {
@@ -930,13 +967,19 @@ export class Store {
   }
 
   /** A reply with the message it quotes attached, as that message reads now. */
-  withReplyQuote(m: Message): Message {
-    if (!m.replyToId) return m;
-    const q = this.message(m.replyToId);
-    if (!q || q.channelId !== m.channelId) return m;
+  withReplyQuote(m: Message & { contextId?: string }): Message {
+    const { contextId, ...rest } = m;
+    let out: Message = rest;
+    if (contextId) {
+      const at = this.chatStart(contextId);
+      if (at) out = { ...out, context: { conversationId: contextId, at } };
+    }
+    if (!out.replyToId) return out;
+    const q = this.message(out.replyToId);
+    if (!q || q.channelId !== out.channelId) return out;
     const file = q.parts.find((p) => p.type === "file");
     const text = q.body.replace(/\s+/g, " ").trim() || (file && file.type === "file" ? file.name : "");
-    return { ...m, replyTo: { id: q.id, author: q.author, snippet: q.deletedAt ? "" : text.length > 140 ? `${text.slice(0, 140)}…` : text, ...(q.deletedAt ? { deleted: true } : {}) } };
+    return { ...out, replyTo: { id: q.id, author: q.author, snippet: q.deletedAt ? "" : text.length > 140 ? `${text.slice(0, 140)}…` : text, ...(q.deletedAt ? { deleted: true } : {}), createdAt: q.createdAt, ...(q.conversationId ? { conversationId: q.conversationId } : {}) } };
   }
 
   /** Messages with their reactions and the messages they quote attached. */
@@ -1578,9 +1621,12 @@ type MessageRow = {
   edited_at: string | null;
   deleted_at: string | null;
   reply_to_id: string | null;
+  conversation_id?: string | null;
+  context_id?: string | null;
 };
 
-function toMessage(r: MessageRow): Message {
+/** A message as stored; `contextId` is turned into `context` (with its start time) by withReplyQuote. */
+function toMessage(r: MessageRow): Message & { contextId?: string } {
   return {
     id: r.id,
     channelId: r.channel_id,
@@ -1593,6 +1639,8 @@ function toMessage(r: MessageRow): Message {
     ...(r.edited_at ? { editedAt: r.edited_at } : {}),
     ...(r.deleted_at ? { deletedAt: r.deleted_at } : {}),
     ...(r.reply_to_id ? { replyToId: r.reply_to_id } : {}),
+    ...(r.conversation_id ? { conversationId: r.conversation_id } : {}),
+    ...(r.context_id ? { contextId: r.context_id } : {}),
   };
 }
 
