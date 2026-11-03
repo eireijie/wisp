@@ -234,10 +234,24 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     const c = need(req, reply);
     if (!c) return;
     if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only" });
-    const body = parse(z.object({ text: z.string().trim().min(1).max(20_000), fileIds: z.array(z.string()).max(20).default([]), replies: z.array(z.string()).default([]).transform((r) => r.map((x) => x.trim().slice(0, 40)).filter(Boolean).slice(0, 4)) }), req.body, reply);
+    const body = parse(
+      z.object({
+        text: z.string().trim().min(1).max(20_000),
+        fileIds: z.array(z.string()).max(20).default([]),
+        replies: z.array(z.string()).default([]).transform((r) => r.map((x) => x.trim().slice(0, 40)).filter(Boolean).slice(0, 4)),
+        // what it's about ("notion:<page id>"), so it's only ever raised once
+        about: z.string().trim().max(200).optional(),
+      }),
+      req.body,
+      reply,
+    );
     if (!body) return;
     const userId = personFor(c);
     if (!userId) return reply.code(409).send({ error: "nobody to message" });
+    if (body.about) {
+      const may = hub.watches.mayRaise(c.actor.id, userId, body.about);
+      if (!may.ok) return reply.code(409).send({ error: `You already raised "${body.about}" on ${new Date(may.saidAt).toUTCString()} and they didn't answer, so it's dropped. Don't bring it up again unless they do.` });
+    }
     const channel = store.dmChannel(c.workspaceId, userId, c.actor.id);
     const files = body.fileIds.map((f) => store.file(f)).filter((f) => f?.workspaceId === c.workspaceId);
     // written because something came due: the person sees the agent checking back, with its quick replies;
@@ -248,6 +262,7 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     if (checkingBack || body.replies.length) parts.push({ type: "checkback", replies: body.replies });
     const msg = hub.postMessage({ channelId: channel.id, author: c.actor, body: body.text, parts, route: false, onBehalfOf: userId });
     if (run?.kind === "background") hub.loops.wrote(run.id, msg.id);
+    if (body.about) hub.watches.raised(c.actor.id, userId, body.about, msg.id);
     return { messageId: msg.id, channelId: channel.id };
   });
 

@@ -30,9 +30,9 @@ export const SLOW_DOWN_AT = 0.8;
 const MIN_MINUTES = 10;
 const MAX_MINUTES = 24 * 60;
 /**
- * Quiet checks stretch the usual wait up to this (a usual wait that's longer stays as it is). It's the
- * longest something urgent inside a connected app can go unseen because of quiet checks: the hub
- * can't see into apps, only a check can.
+ * Quiet checks stretch the usual wait up to this (a usual wait that's longer stays as it is). Apps
+ * with a watch (watches.ts) wake the agent themselves when something changes, so this only delays
+ * what the hub can't see: apps without one.
  */
 export const BACKOFF_CEILING_MINUTES = 4 * 60;
 /** An agent with nothing to watch is looked at again this often, or at its usual pace if that's sooner (no tokens: the hub only checks its sources). */
@@ -166,7 +166,7 @@ export class Background {
     return this.hub.store.backgroundRuns(agentId, userId, startOfDay(at, this.timezone(userId)).toISOString()).length;
   }
 
-  private capReached(agentId: string, userId: string, cap: number | null, at: Date) {
+  capReached(agentId: string, userId: string, cap: number | null, at: Date) {
     return cap !== null && this.checksToday(agentId, userId, at) >= cap;
   }
 
@@ -285,8 +285,8 @@ export class Background {
     return !!this.hub.store.db.prepare("SELECT 1 FROM runs WHERE agent_id = ? AND kind = 'background' AND requested_by = ? AND status IN ('queued','running')").get(agentId, userId);
   }
 
-  /** Start a background check for one person, now. Returns the run, or null if it can't start. */
-  wake(agentId: string, userId: string, followups: Followup[] = [], at = new Date()): string | null {
+  /** Start a background check for one person, now, carrying any follow-ups and app changes. Returns the run, or null if it can't start. */
+  wake(agentId: string, userId: string, followups: Followup[] = [], at = new Date(), eventIds: string[] = []): string | null {
     const { store } = this.hub;
     const agent = store.agent(agentId);
     if (!agent || !store.user(userId) || this.hub.whyNotAllowed(agent, userId) || !this.hub.answers(agent, userId)) return null;
@@ -295,6 +295,7 @@ export class Background {
     // queued until its device takes it: not a check yet, so it isn't counted, listed or shown as "last checked"
     const runId = store.createRun({ agentId, channelId: channel.id, threadId: null, triggerMessageId: "", hop: 0, requestedBy: userId, kind: "background" });
     this.pendingFollowups.set(runId, followups);
+    if (eventIds.length) this.hub.watches.claim(eventIds, runId);
     this.hub.broadcast(agent.workspaceId, { type: "background_changed", agentId });
     this.hub.dispatchRun(runId);
     return runId;
@@ -319,7 +320,10 @@ export class Background {
     for (const r of queued) {
       // a check that carries follow-ups the agent promised still goes ahead
       if (this.pendingFollowups.get(r.id)?.length) continue;
-      if (store.deleteQueuedRun(r.id)) this.pendingFollowups.delete(r.id);
+      if (store.deleteQueuedRun(r.id)) {
+        this.pendingFollowups.delete(r.id);
+        this.hub.watches.release(r.id);
+      }
     }
     const agent = store.agent(agentId);
     if (agent) this.hub.broadcast(agent.workspaceId, { type: "background_changed", agentId });
@@ -355,6 +359,7 @@ export class Background {
   finished(run: { id: string; agentId: string; requestedBy: string | null; channelId?: string }, note: string, at = new Date()) {
     const followups = this.pendingFollowups.get(run.id)?.length ?? 0;
     this.pendingFollowups.delete(run.id);
+    this.hub.watches.delivered(run.id);
     const { store } = this.hub;
     const agent = store.agent(run.agentId);
     if (!agent || !run.requestedBy) return;
@@ -428,7 +433,7 @@ export class Background {
     const { store, access } = this.hub;
     const agent = store.agent(agentId);
     if (!agent) return false;
-    if (agent.computerId || this.hub.connectors.forAgent(agentId).length) return true;
+    if (agent.computerId || this.hub.connectors.forAgent(agentId).length || this.hub.watches.hasActive(agentId)) return true;
     if (store.db.prepare("SELECT 1 FROM tasks WHERE to_agent_id = ? AND status IN ('open','in_progress') LIMIT 1").get(agentId)) return true;
     if (!since) return false;
     const after = new Date(since).getTime();
@@ -488,6 +493,8 @@ export class Background {
     const notes = notesPath ? await this.hub.vault(agent.workspaceId).read(notesPath).then((n) => n.content.trim(), () => "") : "";
     const sourceLine = (x: BackgroundSource) => `- ${x.kind === "app" ? `${x.name} (connected app: ${x.detail})` : x.kind === "computer" ? `${x.name}, ${x.detail}` : `${x.name} (memory folder)`}`;
     const approvals = store.db.prepare("SELECT summary, created_at AS createdAt FROM approvals WHERE agent_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 10").all(agent.id) as { summary: string; createdAt: string }[];
+    const watched = this.hub.watches.promptLines(run, name, fmt);
+    const woken = this.hub.watches.eventsForRun(run.id).length > 0;
 
     return [
       `\n## Working in the background`,
@@ -495,8 +502,11 @@ export class Background {
       `A request whose run the person stopped or cancelled is finished, even if it has no answer. Don't retry it, hand it to another agent, or do it yourself unless the person asks again.`,
       followups.length
         ? `${followups.length === 1 ? "Something is" : "Some things are"} due now:\n${followups.map((f) => this.hub.loops.describe(f, name)).join("\n")}`
-        : `This is a regular check.${b?.lastAt ? ` Your last one started ${fmt(b.lastAt)}.` : ""}`,
+        : woken
+          ? `Something changed in what you watch for ${name} (below).`
+          : `This is a regular check.${b?.lastAt ? ` Your last one started ${fmt(b.lastAt)}.` : ""}`,
       b?.lastNote ? `Your note to yourself from last time: ${b.lastNote}` : "",
+      ...watched,
       `\nWhat you can look at:`,
       ...sources.map(sourceLine),
       `- Wisp itself: your tasks and approvals (below), channels you're in (chat_read), files people shared (file_view), and what you know about ${name} (above).`,

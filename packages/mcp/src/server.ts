@@ -339,11 +339,67 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
         text: z.string(),
         file_ids: z.array(z.string()).optional(),
         replies: z.array(z.string()).optional().describe("2–4 quick answers they can tap, a few words each, under 40 characters (\"Sent it\", \"Tomorrow\"), when they'd answer in a word"),
+        about: z.string().optional().describe("a short key for what this is about (\"notion:<page id>\", \"essay-due-friday\"), so you only raise it once: if they don't answer, Wisp won't let you raise the same key again"),
       },
     },
-    safe(async ({ text: t, file_ids, replies }) => {
-      await client.messagePerson(t, file_ids ?? [], replies ?? []);
+    safe(async ({ text: t, file_ids, replies, about }) => {
+      await client.messagePerson(t, file_ids ?? [], replies ?? [], about);
       return text("Sent.");
+    }),
+  );
+
+  // --- watching the person's apps ---------------------------------------------------------
+
+  server.registerTool(
+    "watch_list",
+    {
+      description:
+        "See what you watch for the person you work for (apps where Wisp tells you when something changes, and sites you check in your browser), and what else can be watched and how to connect it.",
+      inputSchema: {},
+    },
+    safe(async () => {
+      const r = await client.watches();
+      return text(
+        [
+          r.watches.length ? "You watch:" : "You don't watch anything for them yet.",
+          ...r.watches.map((w) => `- ${w.id} ${w.label} (${w.service})${w.paused ? ", paused" : ""}${w.lastError ? `, last look failed: ${w.lastError}` : ""}. ${w.estimate.note}`),
+          "\nWhat can be watched:",
+          ...r.services.map((s) => `- ${s.service}: ${s.name}, ${s.watches}.${s.available ? "" : ` Not available: ${s.unavailableReason}`} How: ${s.howToConnect}`),
+        ].join("\n"),
+      );
+    }),
+  );
+
+  server.registerTool(
+    "watch_start",
+    {
+      description:
+        "Start watching one of the person's apps for them, once they've said yes (\"keep an eye on my Slack\"). Wisp looks for changes on its own, at no token cost, and wakes you with what changed. It uses the key from your connector for that app, or one you give in `key` (ask before making a key for them). For apps with no easy key (Google, Meta, school or bank sites), use service \"browser\" with config.url and config.lookFor: you'll be woken every few hours to look in your computer's browser. Tell them what you'll watch and that they can stop it any time.",
+      inputSchema: {
+        service: z.enum(["slack", "github", "notion", "linear", "jira", "stripe", "gdrive", "gmail", "gcal", "browser"]),
+        key: z.record(z.string(), z.string()).optional().describe("values for this watch alone, named like the connector's (GITHUB_TOKEN, SLACK_BOT_TOKEN…)"),
+        config: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional().describe("Slack: channels (names); Stripe: types; browser: url and lookFor"),
+        label: z.string().optional().describe("what the person sees, e.g. \"Canvas assignments\""),
+        every_minutes: z.number().optional().describe("how often to look; browser watches: 120 or more"),
+      },
+    },
+    safe(async ({ service, key, config, label, every_minutes }) => {
+      const w = await client.startWatch({ service, key, config, label, everyMinutes: every_minutes });
+      return text(
+        `Watching ${w.label} (${w.id}). ${w.estimate.note}${w.backgroundOn ? "" : " Background work is off for them, so changes will wait until it's on: ask them, then use settings_change with enabled true."}`,
+      );
+    }),
+  );
+
+  server.registerTool(
+    "watch_stop",
+    {
+      description: "Stop watching something for the person, when they ask or it no longer matters. Changes it saw are dropped.",
+      inputSchema: { watch_id: z.string() },
+    },
+    safe(async ({ watch_id }) => {
+      await client.stopWatch(watch_id);
+      return text("Stopped.");
     }),
   );
 

@@ -65,6 +65,7 @@ import { registerConnectorApi } from "./api-connectors.ts";
 import { connectionProblem, registerModelsApi } from "./api-models.ts";
 import { modelsForHarness } from "./model-connections.ts";
 import { registerBackgroundApi } from "./api-background.ts";
+import { registerWatchesApi } from "./api-watches.ts";
 import { registerLeadApi, workspaceLead } from "./lead.ts";
 import { registerJoinApi } from "./join.ts";
 import { registerPairingApi } from "./pairing.ts";
@@ -2441,6 +2442,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerModelsApi(app, hub, { need, parse });
   registerVoiceApi(app, hub, { need });
   registerBackgroundApi(app, hub, { need, parse, requesterOf });
+  registerWatchesApi(app, hub, { need, parse, requesterOf });
   registerLeadApi(app, hub, { need, parse });
   registerUpdateApi(app, hub, { need });
   registerJoinApi(app, hub, { need, parse });
