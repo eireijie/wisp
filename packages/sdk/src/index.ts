@@ -258,6 +258,9 @@ export class WispClient {
   chatStatus(s: { status: ChatLoop["status"]; summary?: string; did?: string; saved?: string; next?: string; checkBackInMinutes?: number }) {
     return this.request<ChatLoop>("POST", "/api/chat-status", s);
   }
+  setupStep(s: { step?: string; summary?: string; role?: string; accounts?: string[]; watch?: { service: string; label?: string; url?: string; lookFor?: string }[]; done?: boolean }) {
+    return this.request<{ done: boolean; left: string[]; watched: ({ label: string; watching: true; watchId: string } | { label: string; watching: false; why: string })[] }>("POST", "/api/setup-step", s);
+  }
   routines() {
     return this.request<Routine[]>("GET", "/api/routines");
   }

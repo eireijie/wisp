@@ -92,6 +92,7 @@ describe("wisp-mcp", () => {
       "routine_save",
       "settings_change",
       "settings_read",
+      "setup_step",
       "skill_save",
       "task_delegate",
       "task_list",

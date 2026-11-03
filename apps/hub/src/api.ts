@@ -81,6 +81,7 @@ import { agentPolicy } from "./policy.ts";
 import { FEATURE_PRESET, createOrganization, registerOrgApi } from "./api-orgs.ts";
 import { agentDefaults } from "./agent-defaults.ts";
 import { spawnRight } from "./spawn.ts";
+import { greetNewAgent, registerSetupApi } from "./greeting.ts";
 import { workspaceFeatures } from "./features.ts";
 import type { SetupCode } from "./setup-code.ts";
 import { VM_SIZES, computerDefaults } from "./policy.ts";
@@ -339,7 +340,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return ch;
   }
 
-  const agentView = (a: NonNullable<ReturnType<typeof store.agent>>) => ({ ...a, status: hub.agentStatus(a) });
+  // the setup answers are between the agent and the person it asked, so they stay on the hub
+  const agentView = (a: NonNullable<ReturnType<typeof store.agent>>) => {
+    const { setup: _setup, ...settings } = a.settings;
+    return { ...a, settings, status: hub.agentStatus(a) };
+  };
   const messageView = <T extends Parameters<typeof guestMessage>[0]>(c: Caller, m: T): T => c.viewer.role === "guest" ? guestMessage(m) : m;
 
   /** Can this person put agents and VMs on the device? Its owner can; others once the owner shares it. */
@@ -462,12 +467,16 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!c) return;
     const nodes = store.nodes(c.workspaceId);
     const agents = store.agents(c.workspaceId);
-    const firstReply = db
-      .prepare(
-        `SELECT m.id, m.channel_id AS channelId, m.author_id AS agentId FROM messages m JOIN channels ch ON ch.id = m.channel_id
-         WHERE ch.workspace_id = ? AND m.author_kind = 'agent' AND m.body != '' ORDER BY m.created_at LIMIT 1`,
-      )
-      .get(c.workspaceId) as { id: string; channelId: string; agentId: string } | undefined;
+    // the hello Wisp writes for a new agent isn't a reply
+    const greetings = new Set(agents.map((a) => a.settings.setup?.greetingId).filter(Boolean));
+    const firstReply = (
+      db
+        .prepare(
+          `SELECT m.id, m.channel_id AS channelId, m.author_id AS agentId FROM messages m JOIN channels ch ON ch.id = m.channel_id
+           WHERE ch.workspace_id = ? AND m.author_kind = 'agent' AND m.body != '' ORDER BY m.created_at LIMIT ?`,
+        )
+        .all(c.workspaceId, greetings.size + 1) as { id: string; channelId: string; agentId: string }[]
+    ).find((m) => !greetings.has(m.id));
     const canRead = readable(c);
     const agentNotes = vaultOf(c).list((p) => canRead(p) && agents.some((a) => p.startsWith(`agents/${a.id}/`))).filter((n) => !/\/(About|SOUL)\.md$/.test(n.path) && !/\/skills\/[^/]+\/SKILL\.md$/.test(n.path));
     const sharedNotes = vaultOf(c).list((p) => canRead(p) && p.startsWith("shared/")).filter((n) => n.path !== "shared/Welcome.md");
@@ -1176,8 +1185,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       hub.broadcast(c.workspaceId, { type: "channels_changed" });
     }
     if (run && ch) hub.postMessage({ channelId: ch.id, threadId: run.threadId, author: { kind: "user", id: "system" }, body: "", parts: [{ type: "notice", text: `@${maker.handle} made ${right.kind === "agent" ? "a new agent" : "a sub-agent"}: @${agent.handle}${body.role.trim() ? ` (${body.role.trim()})` : ""}` }], route: false });
+    // it says hello to the person it works for, with its role on the chart known by now
+    greetNewAgent(hub, agent, requester);
     hub.broadcast(c.workspaceId, { type: "agents_changed" });
-    return agentView(agent);
+    return agentView(store.agent(agent.id)!);
   });
 
   app.post("/api/agents", async (req, reply) => {
@@ -1242,9 +1253,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const general = store.channelByName(c.workspaceId, "general");
     if (general) store.addChannelMember(general.id, { kind: "agent", id: agent.id });
     await vaultOf(c).write(soulPath(agent.id), body.soul ?? soulTemplate(agent.name, agent.handle), commitAuthor(c), `Create soul for @${agent.handle}`);
-    hub.broadcast(c.workspaceId, { type: "agents_changed" });
     await hub.ensureBuiltinSkills([agent.id]);
-    return agentView(agent);
+    // it speaks first: hello, then a few questions to get to know whoever made it
+    greetNewAgent(hub, agent, c.actor.kind === "user" ? c.actor.id : null);
+    hub.broadcast(c.workspaceId, { type: "agents_changed" });
+    return agentView(store.agent(agent.id)!);
   });
 
   app.patch("/api/agents/:id", async (req, reply) => {
@@ -2467,6 +2480,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerModelsApi(app, hub, { need, parse });
   registerVoiceApi(app, hub, { need });
   registerBackgroundApi(app, hub, { need, parse, requesterOf });
+  registerSetupApi(app, hub, { need, parse });
   registerWatchesApi(app, hub, { need, parse, requesterOf });
   registerLeadApi(app, hub, { need, parse });
   registerUpdateApi(app, hub, { need });

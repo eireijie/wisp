@@ -7,6 +7,7 @@ import { OrgoClient, OrgoError } from "./orgo.ts";
 import { routineSlug } from "./routines.ts";
 import type { Hub } from "./hub.ts";
 import { VM_SIZES, computerDefaults } from "./policy.ts";
+import { greetNewAgent } from "./greeting.ts";
 
 export const HARNESS = z.union([z.enum(HARNESS_IDS as [string, ...string[]]), z.string().regex(DEVICE_HARNESS, 'a known harness, or "acp:<name>" declared on a device')]);
 
@@ -775,6 +776,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       await hub.vault(c.workspaceId).write(`agents/${agent.id}/imported/${name}.md`, m.content, author, `Import ${m.name} for @${agent.handle}`);
     }
     await hub.ensureBuiltinSkills([agent.id]);
+    greetNewAgent(hub, store.agent(agent.id)!, c.actor.id);
     return h.agentView(store.agent(agent.id)!);
   });
 }

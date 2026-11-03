@@ -92,6 +92,28 @@ export interface AgentSettings {
   parentAgentId?: string;
   /** how many agents up the chain it was made: 1 = by a lead, 2 = a sub-agent of that one, … */
   madeDepth?: number;
+  /** its first chat with the person it works for: the hello Wisp wrote for it, then a few questions (hub greeting.ts) */
+  setup?: AgentSetup;
+}
+
+/** A new agent's setup chat, in order: what they want, the role it offers, the accounts, what's signed in there, check-ins, what to ask about first, how to talk. */
+export const SETUP_STEPS = ["goal", "role", "accounts", "signins", "checkins", "boundaries", "style"] as const;
+export type SetupStep = (typeof SETUP_STEPS)[number];
+
+/** A new agent getting to know the person it works for, in their DM (hub greeting.ts). */
+export interface AgentSetup {
+  userId: string;
+  channelId: string;
+  startedAt: string;
+  /** the hello Wisp wrote for it */
+  greetingId?: string;
+  /** what the person wrote during setup, in order */
+  replies: string[];
+  /** each step the agent finished (setup_step), with a one-line summary */
+  steps: Partial<Record<SetupStep, string>>;
+  /** the accounts the person named */
+  accounts?: string[];
+  done: boolean;
 }
 
 /**

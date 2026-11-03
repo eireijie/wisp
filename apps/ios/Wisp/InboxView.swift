@@ -60,7 +60,8 @@ struct InboxView: View {
     .navigationDestination(isPresented: $harnessesOpen) { HarnessesView() }
     .navigationDestination(isPresented: $showTasks) { TasksView() }
     .navigationDestination(item: $computerId) { ComputerDetail(computerId: $0) }
-    .sheet(isPresented: $addingAgent) { AddAgent { chat = nil; agentPage = $0 } }
+    // a new agent has already said hello in its DM, so that's where you land
+    .sheet(isPresented: $addingAgent) { AddAgent { agent in Task { if let ch = try? await store.dm(with: agent) { chat = ChatTarget(channel: ch, draft: "") } else { chat = nil; agentPage = agent } } } }
     .sheet(isPresented: $creating) { NewTaskView() }
     .managementAlert(action)
   }

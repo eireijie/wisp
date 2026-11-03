@@ -28,6 +28,7 @@ import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
 import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
 import { spawnSection } from "./spawn.ts";
+import { askNextIfStalled, recordSetupReply, setupChat, setupSection } from "./greeting.ts";
 import { foldTeams } from "./fold-teams.ts";
 import { TeamFlows } from "./team-flows.ts";
 import type { RunKind, Store } from "./store.ts";
@@ -759,6 +760,7 @@ export class Hub {
         const fix = agent ? this.failureFix(agent, result.error) : undefined;
         this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "status", text: `Run failed: ${text}` }, ...(result.error === "cancelled" ? [] : [{ type: "run_failed" as const, runId: run.id, retry: !!run.triggerMessageId && !run.discussionId, ...(fix ? { fix } : {}) }])], hop: run.hop + 1, route: false, conversationId: this.chatOfRun(run) });
         failTaskOfRun(this, run, text);
+        if (result.error !== "cancelled" && agent && store.channel(run.channelId)?.kind === "dm") askNextIfStalled(this, agent.id, run.channelId, !!fix);
       }
     }
     if (agent) this.broadcast(workspaceId, { type: "agent_status", agentId: agent.id, status: this.agentStatus(agent) });
@@ -847,8 +849,12 @@ export class Hub {
   postMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; route?: boolean; replyInThread?: boolean; onBehalfOf?: string | null; conversationId?: string | null; contextId?: string | null }): Message {
     const channel = this.store.channel(m.channelId);
     if (!channel) throw new Error("channel not found");
-    const msg = this.store.insertMessage({ ...m, conversationId: m.conversationId ?? this.workingChat(m), contextId: m.contextId ?? this.repliedChat(m) });
-    if (channel.kind === "dm" && m.author.kind === "user" && m.author.id !== "system") this.loops.personWrote(channel.id);
+    const msg = this.store.insertMessage({ ...m, conversationId: m.conversationId ?? this.workingChat(m) ?? setupChat(this, m), contextId: m.contextId ?? this.repliedChat(m) });
+    if (channel.kind === "dm" && m.author.kind === "user" && m.author.id !== "system") {
+      this.loops.personWrote(channel.id);
+      // before it's routed, so the reply's prompt has it
+      recordSetupReply(this, msg);
+    }
     this.broadcast(channel.workspaceId, { type: "message", message: msg }, this.audience(channel.id));
     this.push.onMessage(msg, channel, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
     if (m.route !== false) this.route(msg, channel.workspaceId, m.replyInThread ?? false, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
@@ -1587,6 +1593,8 @@ export class Hub {
     const when = (iso: string) => new Date(iso).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: tz ?? "UTC" });
     const asks = agentPolicy(this, agent.workspaceId).askBefore.map((k) => ASK_BEFORE_TEXT[k]);
     const [soul, memory, routines] = await Promise.all([this.soul(agent.id), this.memory.sections(agent, { person, query: trigger.body }), this.routines.promptSection(agent.id, trigger)]);
+    // its first chat with this person: the setup questions while it's going, what they said after
+    const setup = user && agent.settings.setup?.userId === user.id ? setupSection(this, agent, { channelId, live: !background }, user.preferredName || user.name) : "";
     const leading = leadSection(store, agent);
     const making = background ? "" : spawnSection(this, agent);
     await this.ensureBuiltinSkills([agent.id]);
@@ -1619,6 +1627,7 @@ export class Hub {
         : `When something is hard to undo and nobody asked for it in so many words, ask first with approval_request and end your turn; you'll be woken with the answer.`,
       background ? "" : `To come back to something at a set time (a reminder they asked for, checking whether a reply came), use followup_set; you'll be woken then.`,
       !background && channel.kind === "dm" && user ? `\n${this.loops.promptSection(agent.id, channel.id, user.id, user.preferredName || user.name)}` : "",
+      setup ? `\n${setup}` : "",
       background ? "" : `When someone asks you to change how Wisp works for them (how often you check in, quiet hours, what to watch, turning a mod on or off), do it with settings_read and settings_change instead of sending them to Settings.`,
       localTime,
       this.computerSection(agent.id),

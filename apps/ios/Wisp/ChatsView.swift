@@ -102,7 +102,8 @@ struct ChatsView: View {
         case "team": NewChannel(onBrowse: { sheet = "browse" }) { path.append($0) }
         case "browse": BrowseChannels { path.append($0) }
         case "section": SectionEditor()
-        case "agent": AddAgent { path.append($0) }
+        // a new agent has already said hello in its DM, so that's where you land
+        case "agent": AddAgent { agent in Task { if let ch = try? await store.dm(with: agent) { path.append(ch) } else { path.append(agent) } } }
         case "chat": NewChatSheet(onNewAgent: store.canManage ? { sheet = "agent" } : nil) { path.append($0) }
         default: EmptyView()
         }

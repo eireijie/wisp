@@ -3,7 +3,7 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { WispClient } from "@wisp/sdk";
-import { SETTINGS_HARNESSES, type Screenshot } from "@wisp/core";
+import { SETTINGS_HARNESSES, SETUP_STEPS, WATCH_SERVICES, type Screenshot } from "@wisp/core";
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 const text = (t: string): { content: Content[] } => ({ content: [{ type: "text" as const, text: t }] });
@@ -518,6 +518,30 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     safe(async ({ status, summary, did, saved, next, check_back_in_minutes }) => {
       const l = await client.chatStatus({ status, summary, did, saved, next, checkBackInMinutes: check_back_in_minutes });
       return text(l.status === "waiting" ? `Noted: waiting on them (${l.summary}).` : `Noted: ${l.status}.`);
+    }),
+  );
+
+  server.registerTool(
+    "setup_step",
+    {
+      description:
+        "During your first chat with the person you work for (Wisp shows the steps under \"Getting to know\"), record each setup step once it's done or skipped, with a one-line summary. role: the job title they agreed you'd take; Wisp makes it your role. accounts: the accounts or sites they named. watch: only in your reply to their yes, the accounts they said you may keep an eye on; Wisp starts a watch for each. done: true when the setup is over.",
+      inputSchema: {
+        step: z.enum(SETUP_STEPS).optional(),
+        summary: z.string().optional().describe("what you learned or did, one line: \"Wants ads and social posts managed\""),
+        role: z.string().optional().describe("for step role, once they agree: \"Business manager\""),
+        accounts: z.array(z.string()).optional().describe("for step accounts: [\"Google Ads\", \"Instagram\"]"),
+        watch: z
+          .array(z.object({ service: z.enum(WATCH_SERVICES), label: z.string().optional(), url: z.string().optional().describe("browser: the site"), lookFor: z.string().optional().describe("browser: what to look for there") }))
+          .optional()
+          .describe("after they said yes: [{service: \"gmail\"}, {service: \"browser\", label: \"Google Ads\", url: \"https://ads.google.com\", lookFor: \"campaigns paused or over budget\"}]"),
+        done: z.boolean().optional(),
+      },
+    },
+    safe(async ({ step, summary, role, accounts, watch, done }) => {
+      const r = await client.setupStep({ step, summary, role, accounts, watch, done });
+      const watched = r.watched.map((w) => (w.watching ? `Watching ${w.label}.` : `Couldn't watch ${w.label}: ${w.why}`)).join(" ");
+      return text([watched, r.done ? "Setup finished. Wrap up with a concrete offer." : `Noted.${r.left.length ? ` Still to do: ${r.left.join(", ")}.` : " That's every step: call setup_step with done: true and wrap up."}`].filter(Boolean).join(" "));
     }),
   );
 
