@@ -69,10 +69,11 @@ describe("a Cloud server's first boot", () => {
 
 describe("the desktop app's Cloud setup", () => {
   const html = fs.readFileSync(path.join(root, "apps/desktop/src/setup.html"), "utf8");
-  it("doesn't make the laptop the device: the server is", () => {
-    expect(html).toMatch(/setup\.cloudCreate\([^)]*device: false/);
+  it("only makes the laptop a device when the person wants agents to use it: the server is the device", () => {
+    expect(html).toMatch(/setup\.cloudCreate\([^)]*device: answers\.use === "yes"/);
   });
-  it("recommends a size that fits an agent's computer", () => {
-    expect(html).toContain("p.memory >= 8");
+  it("recommends a size that fits Wisp and an agent's computer", () => {
+    const cloudJs = fs.readFileSync(path.join(root, "apps/desktop/src/cloud.cjs"), "utf8");
+    expect(cloudJs).toContain("const RECOMMENDED_GB = 4;");
   });
 });

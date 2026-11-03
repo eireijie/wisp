@@ -141,3 +141,53 @@ describe("choosing for the person", () => {
     expect(vultr.looksLikeToken("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")).toBe(true);
   });
 });
+
+describe("Sign in with DigitalOcean", () => {
+  const signIn = require("../src/cloud-providers/do-sign-in.cjs");
+
+  it("registers itself, opens the browser with PKCE, and trades the code that comes back", async () => {
+    const posts: { url: string; body: string }[] = [];
+    const real = fetch;
+    const fetchImpl = async (url: URL, init: RequestInit = {}) => {
+      if (url.host === "127.0.0.1") return real(url, init);
+      posts.push({ url: url.href, body: String(init.body) });
+      if (url.pathname.endsWith("/register")) return json({ client_id: "cid" }, 201);
+      if (url.pathname.endsWith("/token")) return json({ access_token: "doo_v1_x", expires_in: 3600 });
+      throw new Error(url.href);
+    };
+    let opened = "";
+    const h = signIn.signIn({ fetchImpl, openExternal: async (u: string) => { opened = u; } });
+    while (!opened) await new Promise((r) => setTimeout(r, 5));
+    const auth = new URL(opened);
+    expect(auth.host).toBe("cloud.digitalocean.com");
+    expect(auth.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(auth.searchParams.get("scope")).toContain("droplet:create");
+    const back = new URL(auth.searchParams.get("redirect_uri")!);
+    back.searchParams.set("code", "the-code");
+    back.searchParams.set("state", auth.searchParams.get("state")!);
+    const page = await real(back);
+    expect(await page.text()).toContain("Signed in");
+    expect(await h.done).toBe("doo_v1_x");
+    const register = JSON.parse(posts[0].body);
+    expect(register).toMatchObject({ token_endpoint_auth_method: "none", redirect_uris: [auth.searchParams.get("redirect_uri")] });
+    const token = new URLSearchParams(posts[1].body);
+    expect(token.get("code")).toBe("the-code");
+    expect(token.get("code_verifier")).toMatch(/^[\w-]{43}$/);
+  });
+
+  it("refuses a callback with the wrong state, and can be cancelled", async () => {
+    const real = fetch;
+    let opened = "";
+    const h = signIn.signIn({ fetchImpl: async (url: URL) => json({ client_id: "cid" }, 201), openExternal: async (u: string) => { opened = u; } });
+    while (!opened) await new Promise((r) => setTimeout(r, 5));
+    const back = new URL(new URL(opened).searchParams.get("redirect_uri")!);
+    back.searchParams.set("code", "c");
+    back.searchParams.set("state", "forged");
+    const refused = expect(h.done).rejects.toThrow(/didn't come back right/);
+    expect((await real(back)).status).toBe(400);
+    await refused;
+    const h2 = signIn.signIn({ fetchImpl: async () => json({ client_id: "cid" }, 201), openExternal: async () => {} });
+    h2.cancel();
+    await expect(h2.done).rejects.toMatchObject({ cancelled: true });
+  });
+});
