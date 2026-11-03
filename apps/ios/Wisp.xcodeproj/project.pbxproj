@@ -126,6 +126,7 @@
 		9130A34CE308490EA5D3B70B /* BackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56F8FF8A38701C1F31FD17C1 /* BackgroundView.swift */; };
 		932BDE585A44EFE2750353D1 /* Store+Loops.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58015B570137F76F995D4878 /* Store+Loops.swift */; };
 		939D38F30338506142343FFA /* DevicePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31FE034218B762F85462162E /* DevicePage.swift */; };
+		93A3E487EB487F91A391A48A /* StorageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4235F3FE692A7FDD3450FF69 /* StorageView.swift */; };
 		94132FA7FA65C393E86B9A1F /* AboutYouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEC2ED05951DBF2A63B3C6BD /* AboutYouView.swift */; };
 		94AF08753C30B59CA25D3470 /* NavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 932469D8CAB9F684943B59BC /* NavigationTests.swift */; };
 		94C64C1A8579301623464C1E /* DeviceShelf.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F87480CA3DA4BDAF852D823 /* DeviceShelf.swift */; };
@@ -292,6 +293,7 @@
 		3F088B0BCCD4390877FD3A3E /* Onboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding.swift; sourceTree = "<group>"; };
 		41BCAD4992B5F304108572B0 /* AgentParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentParityTests.swift; sourceTree = "<group>"; };
 		41DB4CDA5F2A634C11F3A294 /* TeamCreate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamCreate.swift; sourceTree = "<group>"; };
+		4235F3FE692A7FDD3450FF69 /* StorageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageView.swift; sourceTree = "<group>"; };
 		427014BD7056144AB66EB153 /* ComputerSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerSheets.swift; sourceTree = "<group>"; };
 		436D2142FE91CCAE42633EE1 /* MemoryAccessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryAccessView.swift; sourceTree = "<group>"; };
 		461B0D858BB1689720B5B994 /* OrgFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgFeatureTests.swift; sourceTree = "<group>"; };
@@ -674,6 +676,7 @@
 				C39FD109B77C3E386E6E6B33 /* SkillsView.swift */,
 				F2632BC4EC9A6BE9A47CF253 /* SlashMenu.swift */,
 				6B354F723E94EA8F0E7984F4 /* SpeechEngines.swift */,
+				4235F3FE692A7FDD3450FF69 /* StorageView.swift */,
 				0557B5E2122EDDB509B24D1E /* Store.swift */,
 				F18ADE71F1363EE82AE3B625 /* Store+AgentExtras.swift */,
 				39D09F091D36482B5219EC47 /* Store+Apps.swift */,
@@ -1029,6 +1032,7 @@
 				74D1534112179942F8146B6B /* SkillsView.swift in Sources */,
 				F92D40A9720BB8B679E17638 /* SlashMenu.swift in Sources */,
 				6605838CF5978A8F841C131C /* SpeechEngines.swift in Sources */,
+				93A3E487EB487F91A391A48A /* StorageView.swift in Sources */,
 				15739A622CC304E814590C47 /* Store+AgentExtras.swift in Sources */,
 				E904871712B489BE33EF1A36 /* Store+Apps.swift in Sources */,
 				4BA8ABB4B75FBFCD97127ECC /* Store+Automation.swift in Sources */,

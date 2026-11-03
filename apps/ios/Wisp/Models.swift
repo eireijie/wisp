@@ -411,6 +411,15 @@ struct Approval: Codable, Identifiable, Hashable {
   /** set when it's an ask-me step of a team's flow: deciding it moves that request on */
   var flow: Flow? = nil
   struct Flow: Codable, Hashable { var flowId: String; var stepId: String }
+  /** set when an agent asks to add, replace or delete a file on a storage (the Storage mod): owners decide */
+  var storage: Storage? = nil
+  struct Storage: Codable, Hashable {
+    var connectionName: String
+    var service: String
+    var action: String // upload | replace | delete | mkdir
+    var path: String
+    var size: Int?
+  }
 }
 
 struct Frame { var image: Data; var width: Int; var height: Int }
