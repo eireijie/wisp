@@ -72,7 +72,7 @@ const account = { name: "Ada", email: "ada@example.com", password: "correct hors
 describe("Hetzner sizes and prices", () => {
   it("lists shared-CPU sizes that can be ordered, priced with their IPv4 address, cheapest first", async () => {
     const { fetchImpl, calls } = mockCloud();
-    const r = await cloud.plans("good-token", { fetchImpl });
+    const r = await cloud.plans("good-token", { provider: "hetzner", fetchImpl });
     expect(r.currency).toBe("EUR");
     expect(r.plans.map((p: any) => `${p.type}@${p.location}=${p.monthly}`)).toEqual(["cax11@fsn1=4.99", "cx23@fsn1=5.49", "cx33@fsn1=8.99"]);
     expect(r.plans[1]).toMatchObject({ server: 4.99, ipv4: 0.5, cores: 2, memory: 4, disk: 40, arch: "x86" });
@@ -88,13 +88,13 @@ describe("Hetzner sizes and prices", () => {
       if (url.pathname.endsWith("/pricing")) return json(PRICING);
       return json(page("locations", LOCATIONS));
     };
-    const r = await cloud.plans("t", { fetchImpl });
+    const r = await cloud.plans("t", { provider: "hetzner", fetchImpl });
     expect(r.plans.map((p: any) => p.type)).toEqual(["cax11", "cx23"]);
   });
 
   it("says plainly when the token is wrong", async () => {
     const { fetchImpl } = mockCloud();
-    await expect(cloud.plans("typo", { fetchImpl })).rejects.toThrow(/didn't accept that token/);
+    await expect(cloud.plans("typo", { provider: "hetzner", fetchImpl })).rejects.toThrow(/didn't accept that token/);
   });
 });
 
@@ -102,7 +102,7 @@ describe("creating a Wisp in the person's Hetzner project", () => {
   it("creates the server with the cloud-init script, waits for HTTPS, then makes the account with the setup key", async () => {
     const mock = mockCloud({ hubAfter: 3 });
     const steps: string[] = [];
-    const r = await cloud.createWisp({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, onStep: (s: string) => steps.push(s) });
+    const r = await cloud.createWisp({ provider: "hetzner", token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, onStep: (s: string) => steps.push(s) });
 
     expect(steps).toEqual(["create", "boot", "https", "account"]);
     expect(r).toMatchObject({ url: "https://203-0-113-7.sslip.io", session: "session-token", server: { id: 42, ip: "203.0.113.7", location: "fsn1", type: "cx23" } });
@@ -128,34 +128,34 @@ describe("creating a Wisp in the person's Hetzner project", () => {
 
   it("uses the IP address itself when its certificate is there", async () => {
     const mock = mockCloud({ hubAfter: 1, ipCert: true });
-    const r = await cloud.createWisp({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep });
+    const r = await cloud.createWisp({ provider: "hetzner", token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep });
     expect(r.url).toBe("https://203.0.113.7");
   });
 
   it("says when the token can only read, before anything is created", async () => {
     const mock = mockCloud({ readOnly: true });
-    const err = await cloud.createWisp({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep }).catch((e: Error) => e);
+    const err = await cloud.createWisp({ provider: "hetzner", token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep }).catch((e: Error) => e);
     expect(err.message).toMatch(/Read & Write/);
     expect(err.server).toBeUndefined();
   });
 
   it("hands back the server when Wisp never answers, so it can be deleted", async () => {
     const mock = mockCloud({ hubAfter: Infinity });
-    const err = await cloud.createWisp({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, httpsMs: 30 }).catch((e: Error) => e);
+    const err = await cloud.createWisp({ provider: "hetzner", token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, httpsMs: 30 }).catch((e: Error) => e);
     expect(err.message).toMatch(/didn't answer over HTTPS/);
     expect(err.server).toMatchObject({ id: 42, ip: "203.0.113.7" });
-    await cloud.deleteServer("good-token", err.server.id, { fetchImpl: mock.fetchImpl });
+    await cloud.deleteServer("good-token", err.server.id, { provider: "hetzner", fetchImpl: mock.fetchImpl });
     expect(mock.calls.at(-1)).toMatchObject({ method: "DELETE", url: "https://api.hetzner.cloud/v1/servers/42" });
   });
 
   it("keeps the setup key of a server that didn't finish, so the same server can be picked up again", async () => {
     const mock = mockCloud({ hubAfter: Infinity });
-    const err = await cloud.createWisp({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, httpsMs: 30 }).catch((e: Error) => e);
+    const err = await cloud.createWisp({ provider: "hetzner", token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, httpsMs: 30 }).catch((e: Error) => e);
     expect(err.key).toBe(mock.key());
 
     mock.comeUp();
     const steps: string[] = [];
-    const r = await cloud.createWisp({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, onStep: (s: string) => steps.push(s), resume: { server: err.server, key: err.key } });
+    const r = await cloud.createWisp({ provider: "hetzner", token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, onStep: (s: string) => steps.push(s), resume: { server: err.server, key: err.key } });
     expect(steps).toEqual(["boot", "https", "account"]);
     expect(r).toMatchObject({ session: "session-token", server: { id: 42 } });
     expect(mock.calls.filter((c) => c.method === "POST" && c.url.endsWith("/v1/servers"))).toHaveLength(1);
@@ -175,7 +175,7 @@ describe("creating a Wisp in the person's Hetzner project", () => {
 describe("cloud request deadlines", () => {
   it("makes an account timeout retryable and preserves the pending server and key", async () => {
     const server = { id: 42, name: "existing", ip: "203.0.113.7", location: "fsn1", type: "cx23" };
-    const err = await cloud.createWisp({ token: "good-token", account }, {
+    const err = await cloud.createWisp({ provider: "hetzner", token: "good-token", account }, {
       resume: { server, key: "saved-key" }, sleep,
       fetchImpl: async (url: URL, init: RequestInit) => {
         expect(init.signal).toBeInstanceOf(AbortSignal);
