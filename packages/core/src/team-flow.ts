@@ -97,6 +97,33 @@ export const MAX_STEPS = 40;
 export const SCHEDULE_MARK = "Schedule";
 
 /** A team that runs on steps rather than a plain chart of who hands work to whom. */
+/** A team is a group: it needs at least this many agents. */
+export const MIN_TEAM_AGENTS = 2;
+
+/** Every agent on a team, from its chart, its roles and its steps, counted once. */
+export function teamSize(team: Pick<ChannelTeam, "nodes" | "roles" | "steps"> | null | undefined): number {
+  if (!team) return 0;
+  const ids = new Set<string>();
+  for (const n of team.nodes ?? []) ids.add(n.agentId);
+  for (const r of team.roles ?? []) if (r.agentId) ids.add(r.agentId);
+  for (const s of team.steps ?? []) if (s.agentId) ids.add(s.agentId);
+  return ids.size;
+}
+
+/** Why a new team can't be made yet, in plain words, or null when it has enough agents. */
+export function teamSizeProblem(team: Pick<ChannelTeam, "nodes" | "roles" | "steps"> | null | undefined): string | null {
+  return teamSize(team) >= MIN_TEAM_AGENTS ? null : `A team needs at least ${MIN_TEAM_AGENTS} agents. Pick ${MIN_TEAM_AGENTS} or more.`;
+}
+
+/**
+ * Why a change to an existing team is refused: it would leave fewer than the minimum, having had
+ * more. Teams that already had fewer keep working and can be edited freely, just not shrunk.
+ */
+export function teamShrinkProblem(before: Parameters<typeof teamSize>[0], after: Parameters<typeof teamSize>[0]): string | null {
+  const now = teamSize(after);
+  return now < MIN_TEAM_AGENTS && now < teamSize(before) ? `A team needs at least ${MIN_TEAM_AGENTS} agents, so this one can't go down to ${now}. Add another agent first.` : null;
+}
+
 export function hasSteps(team: Pick<ChannelTeam, "steps"> | null | undefined): boolean {
   return !!team?.steps?.length;
 }

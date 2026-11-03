@@ -363,6 +363,20 @@ extension ChannelTeam {
   /** What's wrong with the roles and steps, in plain words, or nil when they work (stepsProblem in packages/core). */
   var stepsProblem: String? { stepsProblems.first }
 
+  /** A team is a group: it needs at least this many agents (MIN_TEAM_AGENTS in packages/core). */
+  static let minAgents = 2
+
+  /** Every agent on the team, from its chart, roles and steps, counted once (teamSize in packages/core). */
+  var agentCount: Int {
+    var ids = Set(nodes.map(\.agentId))
+    for r in roles ?? [] { if let a = r.agentId, !a.isEmpty { ids.insert(a) } }
+    for st in steps ?? [] { if let a = st.agentId, !a.isEmpty { ids.insert(a) } }
+    return ids.count
+  }
+
+  /** What stops a new team being created: a problem with its steps, or too few agents. */
+  var createProblem: String? { stepsProblem ?? (agentCount < Self.minAgents ? "Pick at least \(Self.minAgents) agents" : nil) }
+
   /** The first thing wrong with one step on its own. */
   func problem(of s: Step) -> String? {
     problem(of: s, label: { let t = s.action.trimmingCharacters(in: .whitespaces); return t.isEmpty ? (role(s.roleId)?.name ?? "a step") : t }(),

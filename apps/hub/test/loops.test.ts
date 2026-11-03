@@ -7,6 +7,7 @@ import type { MessagePart } from "@wisp/core";
 import { WispClient } from "@wisp/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
+import { makeRoomFor } from "./room.ts";
 import type { Hub } from "../src/hub.ts";
 import { FIRST_CHECKBACK_MINUTES, LAST_CHECKBACK_MINUTES } from "../src/loops.ts";
 
@@ -54,6 +55,9 @@ const replyTo = async (text: string) => {
 };
 const partsOf = <T extends MessagePart["type"]>(m: { parts: MessagePart[] }, type: T) => m.parts.filter((p): p is Extract<MessagePart, { type: T }> => p.type === type);
 const pendingCheckbacks = () => hub.store.pendingFollowups(agentId).filter((f) => f.kind === "checkback");
+
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = async (body: Parameters<typeof makeRoomFor>[2]) => (await makeRoomFor(hub, owner, body)).data;
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-loops-"));
@@ -271,7 +275,7 @@ describe("open loops", () => {
   });
 
   it("is only for DMs", async () => {
-    const ch = await owner.request<{ id: string }>("POST", "/api/channels", { name: "general-loops" });
+    const ch = await room({ name: "general-loops" });
     await owner.request("POST", `/api/channels/${ch.id}/members`, { kind: "agent", id: agentId }).catch(() => {});
     let error = "";
     onReply = async (agent) => {

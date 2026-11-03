@@ -9,12 +9,16 @@ struct ReplyTarget: Hashable {
   var id: String
   var name: String
   var snippet: String
+  /** "Yesterday 9:52 AM" when it's from an earlier chat than the latest one */
+  var when: String? = nil
 }
 
 extension Store {
   /** Reply to a message: the composer of its conversation shows "Replying to …" and takes focus. */
   func startReply(_ m: Message, thread: String?) {
-    replying[ComposerDrafts.key(channel: m.channelId, thread: thread)] = ReplyTarget(id: m.id, name: name(of: m.author), snippet: ChatFormat.snippet(m))
+    let latest = messages[m.channelId]?.last { $0.author.id != "system" }?.conversationId
+    let earlier = thread == nil && m.conversationId != nil && latest != nil && latest != m.conversationId
+    replying[ComposerDrafts.key(channel: m.channelId, thread: thread)] = ReplyTarget(id: m.id, name: name(of: m.author), snippet: ChatFormat.snippet(m), when: earlier ? ChatFormat.stamp(m.date) : nil)
   }
 
   func replyTarget(channel: String, thread: String?) -> ReplyTarget? {
@@ -57,15 +61,24 @@ struct QuoteBlock: View {
   @Environment(\.scrollToMessage) private var scrollTo
   var quote: ReplyQuote
   var side: BubbleSide
+  /** the chat the reply itself is in: a quote from another chat shows when it was written */
+  var chat: String? = nil
 
   private var author: String { quote.author == Actor(kind: .user, id: store.me?.id ?? "") ? "You" : store.name(of: quote.author) }
+
+  /** " · Yesterday 9:52 AM" for a quote from an earlier chat */
+  private var when: String? {
+    guard let from = quote.conversationId, from != chat, let at = quote.createdAt.flatMap(Wire.date) else { return nil }
+    return ChatFormat.stamp(at)
+  }
 
   var body: some View {
     Button { scrollTo?(quote.id) } label: {
       HStack(spacing: 8) {
         Rectangle().fill(side == .mine ? Color.white.opacity(0.6) : Palette.faint).frame(width: 2)
         VStack(alignment: .leading, spacing: 1) {
-          Text(author).font(.system(size: 13, weight: .semibold))
+          (Text(author).font(.system(size: 13, weight: .semibold)) + Text(when.map { " · \($0)" } ?? "").font(.system(size: 13)).foregroundStyle(.secondary))
+            .lineLimit(1)
           Text(quote.deleted == true ? "This message was deleted." : quote.snippet).font(.system(size: 13)).lineLimit(2).multilineTextAlignment(.leading)
         }
         .opacity(0.85)
@@ -74,7 +87,7 @@ struct QuoteBlock: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .buttonStyle(.plain)
-    .accessibilityLabel("Reply to \(author): \(quote.snippet)")
+    .accessibilityLabel("Reply to \(author)\(when.map { ", \($0)" } ?? ""): \(quote.snippet)")
     .accessibilityHint("Goes to that message")
   }
 }
@@ -88,6 +101,64 @@ struct TimeDivider: View {
       .foregroundStyle(Palette.faint)
       .frame(maxWidth: .infinity)
       .padding(.vertical, 12)
+  }
+}
+
+/**
+ * Where a new chat starts (after a quiet break): a hairline, "Today 5:28 PM", a hairline. A tap
+ * offers "Continue this chat", which replies to the chat's last message.
+ */
+struct ChatDivider: View {
+  var date: Date
+  /** nil when there's nothing to continue (an archived team, no message to reply to) */
+  var onContinue: (() -> Void)?
+  @State private var open = false
+  @ReduceMotion private var reduceMotion
+
+  var body: some View {
+    let label = ChatFormat.stamp(date)
+    VStack(spacing: 0) {
+      Button {
+        withAnimation(Motion.pick(Motion.pop, reduceMotion)) { open.toggle() }
+      } label: {
+        HStack(spacing: 10) {
+          Rectangle().fill(Palette.hairline).frame(height: 1)
+          Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(open ? Palette.text : Palette.muted).fixedSize()
+          Rectangle().fill(Palette.hairline).frame(height: 1)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 14).padding(.bottom, 8)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .disabled(onContinue == nil)
+      .accessibilityLabel("Chat from \(label)")
+      .accessibilityHint(onContinue == nil ? "" : "Shows Continue this chat")
+      .accessibilityAddTraits(.isHeader)
+      .accessibilityIdentifier("chat-divider")
+      if open, let onContinue {
+        Button {
+          withAnimation(Motion.pick(Motion.soft, reduceMotion)) { open = false }
+          onContinue()
+        } label: {
+          Label("Continue this chat", systemImage: "arrowshape.turn.up.left")
+            .font(.system(size: 15))
+            .foregroundStyle(Palette.text)
+            .padding(.horizontal, 14)
+            .frame(height: 40)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.press)
+        .padding(4)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.hairline))
+        .shadow(color: .black.opacity(0.3), radius: 16, y: 8)
+        .padding(.bottom, 6)
+        .accessibilityIdentifier("continue-chat")
+        .transition(reduceMotion ? .opacity : .scale(scale: 0.85, anchor: .top).combined(with: .opacity))
+      }
+    }
   }
 }
 

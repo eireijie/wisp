@@ -18,6 +18,12 @@ async function api<T = any>(method: string, url: string, body?: unknown): Promis
   const text = await res.text();
   return { status: res.status, data: (text ? JSON.parse(text) : null) as T };
 }
+/** A team of two, the least the API will make. */
+const pair = async (a: string, b: string) => {
+  const ids = [a, b].map(async (handle) => (await api("POST", "/api/agents", { handle, name: handle, harness: "custom" })).data.id);
+  const [lead, other] = await Promise.all(ids);
+  return { team: { nodes: [{ agentId: lead, lead: true, x: 0, y: 0 }, { agentId: other, lead: false, x: 0, y: 0 }], edges: [{ from: lead, to: other }] } };
+};
 const channelNamed = async (name: string) => (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === name);
 
 async function start() {
@@ -61,13 +67,13 @@ describe("a new workspace", () => {
     await start();
     expect(await channelNamed("general")).toBeUndefined();
     // making a team still works
-    expect((await api("POST", "/api/channels", { name: "launch" })).status).toBe(200);
+    expect((await api("POST", "/api/channels", { name: "launch", settings: { team: { nodes: [{ agentId: atlas.id, lead: true, x: 0, y: 0 }, { agentId: pip.id, lead: false, x: 0, y: 0 }], edges: [{ from: atlas.id, to: pip.id }] } } })).status).toBe(200);
   });
 });
 
 describe("a #general the person makes themselves", () => {
   it("stays public, but can be archived and deleted like any other channel", async () => {
-    expect((await api("POST", "/api/channels", { name: "general" })).status).toBe(200);
+    expect((await api("POST", "/api/channels", { name: "general", settings: await pair("gus", "gia") })).status).toBe(200);
     const general = await channelNamed("general");
     expect((await api("PATCH", `/api/channels/${general.id}`, { private: true })).status).toBe(409);
     expect((await api("POST", `/api/channels/${general.id}/archive`, {})).status).toBe(200);

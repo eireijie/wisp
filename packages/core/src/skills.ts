@@ -578,9 +578,12 @@ export const MEMORY_SKILL: CatalogSkill = {
 
 Memory is a shared second brain: markdown notes that link to each other with \`[[wikilinks]]\`, so people and agents can find things later and see how they connect. A note nobody can find, or a second copy of a note that already exists, makes it worse. Follow these steps every time you save something.
 
+## When to save
+Save as you go, before you reply: when you finish a task, someone decides something, a person tells you how they like things, or you learn how a connected app or site works. If the same kind of task comes up again, or someone shows you how they want it done, save the steps with skill_save. If you don't save, Wisp asks you to in a short pass after the chat goes quiet, which costs more.
+
 ## 1. Search first
 - memory_search for the person, project or topic before writing. Open the closest matches with memory_read.
-- If a note on the same idea exists, **update it** (memory_read, then memory_write the whole note with your change) instead of making a near-duplicate.
+- If a note on the same idea exists, **update it** (memory_read, then memory_write the whole note with your change) instead of making a near-duplicate. Wisp refuses a new note that repeats one and names the note to update.
 - When a save comes back with "Similar notes", read them and merge if it's the same idea.
 
 ## 2. Facts about people: memory_remember
@@ -621,6 +624,7 @@ Wisp fills in \`type\`, \`created\` and \`updated\` if you leave them out, but n
 - Link to at least one existing note with \`[[note-name]]\` (the file name without .md).
 - Always link the hub note for the person, project or topic it's about. If that hub note doesn't exist yet, create it: a title, one or two lines on what it is, and links to its notes.
 - When a save comes back with "Mentions you could link", add the links that fit.
+- A note that links nothing gets a "Related:" line from Wisp. Swap in better links when you know them.
 
 ## 7. Never save secrets
 No passwords, API keys, tokens, card numbers or one-time codes, not even in your private folder. Write where the secret lives instead ("the API key is in the GitHub connected app").`,

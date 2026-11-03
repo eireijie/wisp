@@ -9,11 +9,14 @@ import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotoc
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { WispClient } from "@wisp/sdk";
 import { buildHub } from "../src/app.ts";
+import type { Hub } from "../src/hub.ts";
+import { makeRoomFor } from "./room.ts";
 import { validRedirectUri } from "../src/remote-mcp.ts";
 
 let dir: string;
 let url: string;
 let close: () => Promise<void>;
+let hub: Hub;
 let owner: WispClient;
 let ownerToken: string;
 let agentId: string;
@@ -21,9 +24,13 @@ let built: Awaited<ReturnType<typeof buildHub>>;
 
 const REDIRECT = "http://127.0.0.1:6274/oauth/callback";
 
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = async (body: Parameters<typeof makeRoomFor>[2]) => (await makeRoomFor(hub, owner, body)).data;
+
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-remote-mcp-"));
   built = await buildHub({ dataDir: dir, setupCode: false });
+  hub = built.hub;
   const { app } = built;
   await app.listen({ port: 0, host: "127.0.0.1" });
   url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
@@ -31,7 +38,7 @@ beforeAll(async () => {
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   ownerToken = setup.token;
   owner = new WispClient({ url, token: ownerToken });
-  await owner.request("POST", "/api/channels", { name: "general" });
+  await room({ name: "general" });
   agentId = (await owner.request("POST", "/api/agents", { handle: "grok", name: "Grok", harness: "grok" })).id;
 });
 

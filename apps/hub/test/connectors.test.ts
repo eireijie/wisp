@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
+import { makeRoomAs } from "./room.ts";
 
 let dir: string;
 let base: string;
@@ -24,6 +25,9 @@ async function api<T = any>(method: string, url: string, body?: unknown, token =
 let atlas: any;
 let general: any;
 
+/** A plain chat room: the API only makes teams of two or more agents. */
+const room = (body: Parameters<typeof makeRoomAs>[3], token = owner) => makeRoomAs(hub, base, token, body);
+
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-connectors-"));
   const built = await buildHub({ dataDir: dir, setupCode: false });
@@ -32,7 +36,7 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
   owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Me", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
-  await api("POST", "/api/channels", { name: "general" });
+  await room({ name: "general" });
   atlas = (await api("POST", "/api/agents", { handle: "atlas", name: "Atlas", harness: "custom" })).data;
   general = (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === "general");
 });

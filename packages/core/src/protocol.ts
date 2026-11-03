@@ -128,6 +128,8 @@ export const RunRequest = z.object({
   hop: z.number().int(),
   /** start a new harness session instead of continuing this conversation's (background checks) */
   fresh: z.boolean().optional(),
+  /** the chat this run answers in (a new one after a quiet break): its harness session is that chat's own */
+  conversation: z.string().max(64).optional(),
   /** run on this model instead of the agent's own (background checks) */
   model: z.string().max(MAX_MODEL_ID_LENGTH).optional(),
   /** and with this reasoning effort */

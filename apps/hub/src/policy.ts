@@ -44,6 +44,8 @@ export function agentPolicy(hub: Hub, workspaceId: string) {
     maxAgentMade: num("agents.maxAgentMade", 10, 1, 50),
     /** agents save how they did things as skills (skill_save); on unless an owner turns it off */
     learnSkills: get("agents.learnSkills") !== "false",
+    /** after meaningful work an agent that saved nothing gets a short memory pass (AutoMemory); on unless an owner turns it off */
+    autoMemory: get("agents.autoMemory") !== "false",
   };
 }
 

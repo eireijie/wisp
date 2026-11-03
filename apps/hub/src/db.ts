@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import Database from "better-sqlite3";
+import { splitConversations, type ChatPoint } from "@wisp/core";
 
 const SCHEMA = `
 PRAGMA journal_mode = WAL;
@@ -248,6 +249,12 @@ CREATE TABLE IF NOT EXISTS changes (
   created_at TEXT NOT NULL, undone_at TEXT
 );
 CREATE INDEX IF NOT EXISTS changes_by_user ON changes(workspace_id, user_id, created_at);
+-- what each chat run was asked and which tools it used, so the hub sees an agent doing the same kind of task again
+CREATE TABLE IF NOT EXISTS task_shapes (
+  run_id TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  words TEXT NOT NULL, tools TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_shapes_by_agent ON task_shapes(agent_id, created_at);
 CREATE TABLE IF NOT EXISTS model_connections (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -295,6 +302,9 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   // the message a reply quotes (an inline quote, not a thread)
   ["messages", "reply_to_id", "TEXT"],
+  // the chat a top-level message is part of (chats split after a quiet break), and an earlier one it brings back
+  ["messages", "conversation_id", "TEXT"],
+  ["messages", "context_id", "TEXT"],
   ["push_subscriptions", "prefs_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["agents", "settings_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["nodes", "catalog_json", "TEXT NOT NULL DEFAULT '[]'"],
@@ -377,6 +387,9 @@ export function openDb(file: string): Database.Database {
       added.add(`${table}.${column}`);
     }
   }
+  db.exec("CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, created_at)");
+  // run again until every top-level message has its chat (an upgrade cut short picks up where it stopped)
+  if (db.prepare("SELECT 1 FROM messages WHERE thread_id IS NULL AND conversation_id IS NULL LIMIT 1").get()) migrateConversations(db);
   migrateGrants(db);
   migrateGroups(db);
   migrateNodeOwners(db);
@@ -387,6 +400,21 @@ export function openDb(file: string): Database.Database {
   dropOrphanChannelMembers(db);
   expireOldAgentTokens(db);
   return db;
+}
+
+/** Messages from before chats split after a quiet break: each top-level run of them is split the same way. */
+function migrateConversations(db: Database.Database) {
+  const channels = db.prepare("SELECT DISTINCT channel_id AS id FROM messages WHERE thread_id IS NULL AND conversation_id IS NULL").all() as { id: string }[];
+  const rows = db.prepare("SELECT id, created_at, author_id, conversation_id FROM messages WHERE channel_id = ? AND thread_id IS NULL ORDER BY created_at, rowid");
+  const set = db.prepare("UPDATE messages SET conversation_id = ? WHERE id = ? AND conversation_id IS NULL");
+  // one channel at a time, so a long history never sits in memory at once
+  for (const { id } of channels) {
+    const run: ChatPoint[] = [];
+    for (const r of rows.iterate(id) as Iterable<{ id: string; created_at: string; author_id: string; conversation_id: string | null }>) run.push({ id: r.id, createdAt: r.created_at, authorId: r.author_id });
+    db.transaction(() => {
+      for (const [message, conversation] of splitConversations(run)) set.run(conversation, message);
+    })();
+  }
 }
 
 /** Connection tokens for agents used to last forever; ones from then get the same limit as new ones. */

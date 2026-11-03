@@ -92,6 +92,7 @@ export async function buildHub(opts: HubOptions) {
   hub.schedules.start();
   hub.background.start();
   hub.watches.start();
+  hub.autoMemory.start();
   // edits made in Obsidian on this machine show up in Wisp
   const stopWatching = vault.watch({
     onChange: () => {

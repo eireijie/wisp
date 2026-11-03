@@ -112,10 +112,22 @@ function FollowupPill({ p, animate }: { p: Pill; animate: boolean }) {
 }
 
 /** "Checking back", over a message the agent wrote because something came due. */
-export function CheckbackLabel() {
+/** "Checking back" over an agent's check-back; after a quiet break it names the chat it came from, which opens it. */
+export function CheckbackLabel({ from, onFrom }: { from?: string; onFrom?: () => void }) {
   return (
-    <div className="px-1 pb-0.5 pt-1 text-[12px] text-faint inline-flex items-center gap-1">
-      <CornerUpLeft size={12} aria-hidden /> Checking back
+    <div className="px-1 pb-0.5 pt-1 text-[12px] text-faint flex items-start gap-1">
+      <CornerUpLeft size={12} aria-hidden className="mt-0.5 shrink-0" />
+      <span>
+        Checking back
+        {from && (
+          <>
+            {" on "}
+            <button type="button" onClick={onFrom} className="underline decoration-line underline-offset-2 hover:text-ink">
+              {from}
+            </button>
+          </>
+        )}
+      </span>
     </div>
   );
 }
