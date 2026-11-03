@@ -139,9 +139,9 @@ describe("a new agent speaks first", () => {
 
   it("asks the first question for its role", async () => {
     const id = await make("di", { settings: { role: "Researcher" } });
-    expect(said(id)[0].body).toContain("What's the first thing you'd like me to take on as your researcher?");
+    expect(said(id)[0].body).toContain("What's the first thing you'd like me to take on?");
     const prompt = await answer(id, "Competitors in the POS market");
-    expect(prompt).toContain("as their Researcher");
+    expect(prompt).toContain("fitting your role (Researcher)");
   });
 
   it("keeps the chat going when the model fails", async () => {
@@ -177,7 +177,7 @@ describe("a new agent speaks first", () => {
     const made = await new WispClient({ url, token }).request<{ id: string }>("POST", "/api/agents/spawn", { name: "Scout", role: "Researcher" });
     const [hello] = said(made.id);
     expect(hello.body).toMatch(/^Hey, I'm Scout!/);
-    expect(hello.body).toContain("as your researcher?");
+    expect(hello.body).toContain("What's the first thing you'd like me to take on?");
   });
 
   it("leaves agents another app runs to speak for themselves", async () => {

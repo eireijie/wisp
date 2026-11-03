@@ -33,13 +33,16 @@ export function roleOf(hub: Hub, agent: Agent): string {
   return "";
 }
 
-/** The setup questions, in order; the first one fits the agent's role when it has one. */
+/**
+ * The setup questions, in order. An agent with a job asks what to take on first; its role is often
+ * a sentence ("Breaks work into steps…"), so it's never spliced into Wisp's own wording. The agent
+ * fits the rest to its role itself.
+ */
 export function setupQuestions(role: string): SetupQuestion[] {
-  const r = role.trim().toLowerCase();
   return [
     {
       key: "first",
-      ask: r ? `What's the first thing you'd like me to take on as your ${r}?` : "What would you like help with first?",
+      ask: role.trim() ? "What's the first thing you'd like me to take on?" : "What would you like help with first?",
       save: "Save it as a plan in their notes (memory_remember, kind plan). It's the first thing you'll do once setup is over.",
     },
     {
@@ -169,7 +172,7 @@ export function setupSection(hub: Hub, agent: Agent, at: { channelId: string; tr
   const role = roleOf(hub, agent);
   return [
     `## Getting to know ${personName}`,
-    `You're new. Wisp said hello for you and asked the first question; you ask the rest, one per message, in your own voice and personality${role ? `, as their ${role}` : ""}. Keep each message short: a line on their answer, then the next question. Put the questions in your own words, and fit them to your role and instructions; skip one that clearly doesn't apply to your job. If they skip a question or say "skip", move on without fuss. If they'd rather just get going, drop the rest and help them.`,
+    `You're new. Wisp said hello for you and asked the first question; you ask the rest, one per message, in your own voice and personality${role ? `, fitting your role (${role})` : ""}. Keep each message short: a line on their answer, then the next question. Put the questions in your own words, and fit them to your role and instructions; skip one that clearly doesn't apply to your job. If they skip a question or say "skip", move on without fuss. If they'd rather just get going, drop the rest and help them.`,
     said.length ? `So far (Wisp keeps these in me/First chat.md):\n${said.join("\n")}` : "",
     justAnswered && !skipped(s.answers[n - 1]) ? `With the answer they just gave: ${justAnswered.save}` : "",
     next
