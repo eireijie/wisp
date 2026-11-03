@@ -48,8 +48,11 @@ const dmOf = (agentId: string) => hub.store.dmChannel(hub.store.agent(agentId)!.
 const said = (agentId: string) => hub.store.messages(dmOf(agentId).id).filter((m) => m.body);
 const setupOf = (agentId: string) => hub.store.agent(agentId)!.settings.setup!;
 const make = async (handle: string, extra: Record<string, unknown> = {}) => (await owner.request<{ id: string }>("POST", "/api/agents", { handle, name: handle[0].toUpperCase() + handle.slice(1), harness: "claude-code", nodeId, ...extra })).id;
+/** Send a reply and wait for the agent's run on it, never mistaking the last run for this one. */
 const answer = async (agentId: string, text: string) => {
+  const before = calls.length;
   await owner.send(dmOf(agentId).id, text);
+  await waitFor(() => calls.length > before || undefined);
   await idle();
   return calls.at(-1)!.prompt;
 };
