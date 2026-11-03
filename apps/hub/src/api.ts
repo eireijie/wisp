@@ -64,6 +64,7 @@ import { registerVoiceApi } from "./api-voice.ts";
 import { registerMemoryStorageApi } from "./api-memory.ts";
 import type { MoveResult, VaultLocation } from "./vault-location.ts";
 import { registerConnectorApi } from "./api-connectors.ts";
+import { holdsSecret } from "./connectors.ts";
 import { connectionProblem, registerModelsApi } from "./api-models.ts";
 import { modelsForHarness } from "./model-connections.ts";
 import { registerBackgroundApi } from "./api-background.ts";
@@ -81,6 +82,9 @@ import { spawnRight } from "./spawn.ts";
 import { workspaceFeatures } from "./features.ts";
 import type { SetupCode } from "./setup-code.ts";
 import { VM_SIZES, computerDefaults } from "./policy.ts";
+
+/** Why an agent's save was refused for holding a secret (Wisp never keeps passwords; logins go through the person's password manager). */
+const NO_SECRETS = "Memory can't hold passwords, keys, tokens or card numbers. Write where the secret lives instead (\"the API key is in the GitHub connected app\").";
 
 export interface Caller {
   principal: Principal;
@@ -987,7 +991,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
         ...r,
         channelName: hidden ? null : r.channelName,
         // a background check has no message behind it, so it's named for what it is
-        trigger: r.kind === "background" ? `Background check · ${agent.name}` : hidden ? null : (r.trigger?.slice(0, 280) ?? null),
+        trigger: r.kind === "background" ? `Background check · ${agent.name}` : r.kind === "memory" ? `Saving to memory · ${agent.name}` : hidden ? null : (r.trigger?.slice(0, 280) ?? null),
         // a failure in plain words when it's a known one (the harness needs signing in on its device)
         hint: r.status === "failed" && r.error ? (hub.explainFailure(agent, r.error) !== r.error ? hub.explainFailure(agent, r.error) : null) : null,
       };
@@ -2093,8 +2097,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const body = parse(z.object({ path: z.string().min(1), content: z.string().max(2_000_000), message: z.string().max(200).optional() }), req.body, reply);
     const p = body && noteFor(c, body.path, "edit", reply);
     if (!body || !p) return;
-    // agents get front matter filled in and hints back (similar notes, names to link); people's edits are saved as typed
-    if (c.actor.kind === "agent") return vaultOf(c).save(p, body.content, commitAuthor(c), { message: body.message, fill: !ownFormat(p), allow: readable(c) });
+    // agents get front matter filled in, a link when the note links nothing, and hints back (similar notes, names to link);
+    // a new note repeating one, or one holding a secret, is refused. People's edits are saved as typed
+    if (c.actor.kind === "agent") return agentSave(c, req, reply, p, body.content, { message: body.message });
     return vaultOf(c).write(p, body.content, commitAuthor(c), body.message);
   });
 
@@ -2104,9 +2109,18 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const body = parse(z.object({ path: z.string().min(1), text: z.string().max(200_000) }), req.body, reply);
     const p = body && noteFor(c, body.path, "edit", reply);
     if (!body || !p) return;
-    if (c.actor.kind === "agent") return vaultOf(c).save(p, body.text, commitAuthor(c), { append: true, fill: !ownFormat(p), allow: readable(c) });
+    if (c.actor.kind === "agent") return agentSave(c, req, reply, p, body.text, { append: true });
     return vaultOf(c).append(p, body.text, commitAuthor(c));
   });
+
+  /** An agent's memory_write or memory_append: no secrets, guarded against duplicates and islands, noted for its run. */
+  async function agentSave(c: Caller, req: FastifyRequest, reply: FastifyReply, p: string, text: string, opts: { append?: boolean; message?: string }) {
+    if (holdsSecret(text)) return reply.code(400).send({ error: NO_SECRETS });
+    const run = hub.runFor(c.actor.id, req.headers["x-wisp-run"]);
+    const saved = await vaultOf(c).save(p, text, commitAuthor(c), { ...opts, message: hub.autoMemory.commitMessage(run, p, opts.message), fill: !ownFormat(p), allow: readable(c), guard: true });
+    hub.autoMemory.saved(run?.id, saved.path);
+    return saved;
+  }
 
   app.post("/api/vault/move", async (req, reply) => {
     const c = need(req, reply);
@@ -2239,9 +2253,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       reply,
     );
     if (!body) return;
+    if (c.actor.kind === "agent" && holdsSecret(body.text ?? "")) return reply.code(400).send({ error: NO_SECRETS });
     const person = personRef(c, body.about);
     if (!person) return reply.code(404).send({ error: `no person "${body.about ?? ""}"` });
-    const run = c.actor.kind === "agent" ? hub.currentRun(c.actor.id) : undefined;
+    const run = c.actor.kind === "agent" ? (hub.runFor(c.actor.id, req.headers["x-wisp-run"]) ?? hub.currentRun(c.actor.id)) : undefined;
     const channel = run ? store.channel(run.channelId) : undefined;
     const origin = {
       by: c.actor.kind === "agent" ? `@${store.agent(c.actor.id)!.handle}` : store.user(c.actor.id)!.name,
@@ -2252,6 +2267,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const check = memory(c);
     const result = await hub.memory.profiles(c.workspaceId).remember(person.id, body, origin, commitAuthor(c), (p) => atLeast(check(p).level, "edit"));
     if (!result.saved && result.error) return reply.code(result.error.startsWith("no edit access") ? 403 : 400).send({ error: result.error });
+    if (result.saved && run) hub.autoMemory.saved(run.id, result.path ?? "");
     return { ...result, person: { id: person.id, name: person.name } };
   });
 
