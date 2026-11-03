@@ -25,7 +25,7 @@ import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
 import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
 import { spawnSection } from "./spawn.ts";
-import { askNextIfStalled, recordSetupAnswer, setupSection } from "./greeting.ts";
+import { askNextIfStalled, recordSetupReply, setupSection } from "./greeting.ts";
 import { foldTeams } from "./fold-teams.ts";
 import { TeamFlows } from "./team-flows.ts";
 import type { Store } from "./store.ts";
@@ -832,8 +832,8 @@ export class Hub {
     const msg = this.store.insertMessage(m);
     if (channel.kind === "dm" && m.author.kind === "user" && m.author.id !== "system") {
       this.loops.personWrote(channel.id);
-      // before it's routed, so the reply's prompt knows which setup question this answered
-      recordSetupAnswer(this, msg);
+      // before it's routed, so the reply's prompt has it
+      recordSetupReply(this, msg);
     }
     this.broadcast(channel.workspaceId, { type: "message", message: msg }, this.audience(channel.id));
     this.push.onMessage(msg, channel, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
@@ -1524,7 +1524,7 @@ export class Hub {
     const asks = agentPolicy(this, agent.workspaceId).askBefore.map((k) => ASK_BEFORE_TEXT[k]);
     const [soul, memory, routines] = await Promise.all([this.soul(agent.id), this.memory.sections(agent, { person, query: trigger.body }), this.routines.promptSection(agent.id, trigger)]);
     // its first chat with this person: the setup questions while it's going, what they said after
-    const setup = user && agent.settings.setup?.userId === user.id ? setupSection(this, agent, { channelId, triggerId, live: !background }, user.preferredName || user.name) : "";
+    const setup = user && agent.settings.setup?.userId === user.id ? setupSection(this, agent, { channelId, live: !background }, user.preferredName || user.name) : "";
     const leading = leadSection(store, agent);
     const making = background ? "" : spawnSection(this, agent);
     await this.ensureBuiltinSkills([agent.id]);

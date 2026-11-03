@@ -76,7 +76,7 @@ import { agentPolicy } from "./policy.ts";
 import { FEATURE_PRESET, createOrganization, registerOrgApi } from "./api-orgs.ts";
 import { agentDefaults } from "./agent-defaults.ts";
 import { spawnRight } from "./spawn.ts";
-import { greetNewAgent } from "./greeting.ts";
+import { greetNewAgent, registerSetupApi } from "./greeting.ts";
 import { workspaceFeatures } from "./features.ts";
 import type { SetupCode } from "./setup-code.ts";
 import { VM_SIZES, computerDefaults } from "./policy.ts";
@@ -2454,6 +2454,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerModelsApi(app, hub, { need, parse });
   registerVoiceApi(app, hub, { need });
   registerBackgroundApi(app, hub, { need, parse, requesterOf });
+  registerSetupApi(app, hub, { need, parse });
   registerLeadApi(app, hub, { need, parse });
   registerUpdateApi(app, hub, { need });
   registerJoinApi(app, hub, { need, parse });
