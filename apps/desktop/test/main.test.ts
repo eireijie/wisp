@@ -290,8 +290,8 @@ describe("pending cloud server dismissal", () => {
     await f.ready();
     await f.handlers.get("setup:cloud-keep")!(f.setupEvent());
     f.main.showPendingCloud();
-    expect(await f.handlers.get("setup:cloud-delete")!(f.setupEvent(), "token", 42)).toEqual({ ok: true });
-    expect(f.cloud.deleteServer).toHaveBeenCalledWith("token", 42);
+    expect(await f.handlers.get("setup:cloud-delete")!(f.setupEvent(), "hetzner", "token", 42)).toEqual({ ok: true });
+    expect(f.cloud.deleteServer).toHaveBeenCalledWith("token", 42, { provider: "hetzner" });
     expect(f.main.config.cloudPending).toBeUndefined();
     expect(f.main.trayMenu().some((i: any) => i.label === "Unfinished Cloud Server…")).toBe(false);
   });
