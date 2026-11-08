@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { Bell, CircleDot, Clock, Ghost, HardDrive, ListChecks, MonitorSmartphone, Phone, UserPlus } from "lucide-react";
-import { FEATURE_INFO, FEATURE_KEYS, type FeatureKey, type Features } from "@wisp/core";
+import { Bell, CircleDot, Clock, Ghost, HardDrive, ListChecks, MonitorSmartphone, Phone, SquareTerminal, UserPlus } from "lucide-react";
+import { FEATURE_INFO, FEATURE_KEYS, UNLISTED_FEATURES, type FeatureKey, type Features } from "@wisp/core";
 import { useStore } from "../../store.ts";
 import { setFeatures, useFeatures } from "../../features.ts";
 import { AskAgent } from "../../components/AskAgent.tsx";
@@ -16,6 +16,7 @@ const ICONS: Record<FeatureKey, ReactNode> = {
   invite: <UserPlus size={18} />,
   remoteDesktop: <MonitorSmartphone size={18} />,
   storage: <HardDrive size={18} />,
+  code: <SquareTerminal size={18} />,
 };
 
 /**
@@ -36,8 +37,9 @@ export function ModsPage() {
     }
   };
 
-  const on = FEATURE_KEYS.filter((k) => features[k]);
-  const off = FEATURE_KEYS.filter((k) => !features[k]);
+  const listed = FEATURE_KEYS.filter((k) => !UNLISTED_FEATURES.includes(k));
+  const on = listed.filter((k) => features[k]);
+  const off = listed.filter((k) => !features[k]);
   const card = (k: FeatureKey, control: ReactNode) => (
     <div key={k} className="rounded-2xl border border-line p-4 flex flex-col gap-2.5">
       <div className="flex items-center gap-2.5">

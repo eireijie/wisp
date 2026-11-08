@@ -7,6 +7,7 @@ import { relayVnc } from "./vnc-relay.ts";
 import type { Hub } from "./hub.ts";
 
 import { computerDefaults } from "./policy.ts";
+import { featureOn } from "./features.ts";
 /** Viewer links are single-use and short-lived, since they travel in a URL. */
 const TICKET_MS = 60_000;
 /** How long one code entry opens a screen for a viewer (the device caps every opening at a day). */
@@ -154,10 +155,44 @@ export class Computers {
     return c.kind === "device" && c.nodeId ? (this.hub.store.node(c.nodeId)?.ownerId ?? null) : null;
   }
 
-  /** Can this person see and use it? Members, except for someone else's own screen. */
+  /** Can this person see it in the list and its screenshots? Members, except for someone else's own screen. */
   canSee(c: Computer, userId: string): boolean {
     const role = this.hub.store.role(c.workspaceId, userId);
     return (role === "owner" || role === "member") && (c.kind !== "device" || this.ownerOf(c) === userId);
+  }
+
+  /**
+   * Can this person work it: take control, watch it live, type, run commands and move files? A
+   * device's own screen: its owner. A VM: whoever connected the device it runs on, or anyone once
+   * they've shared that device (Devices). VMs carry their device owner's sign-ins, so a member
+   * can't get into a VM on someone else's device unless that person chose to share it.
+   */
+  canUse(c: Computer, userId: string): boolean {
+    if (!this.canSee(c, userId)) return false;
+    if (c.kind !== "vm") return true;
+    const node = c.nodeId ? this.hub.store.node(c.nodeId) : undefined;
+    if (node?.ownerId) return node.ownerId === userId || node.shared;
+    return this.hub.store.role(c.workspaceId, userId) === "owner";
+  }
+
+  /**
+   * Can this person open a terminal on it (the Code mod)? Stricter than `canUse`: only the person
+   * whose machine it is, even on a shared device, and only while Code is on. A cloud computer is
+   * the workspace's, so its owners.
+   */
+  canUseShell(c: Computer, userId: string): boolean {
+    if (!featureOn(this.hub.store, c.workspaceId, "code") || !this.canUse(c, userId)) return false;
+    if (c.kind === "orgo") return this.hub.store.role(c.workspaceId, userId) === "owner";
+    const node = c.nodeId ? this.hub.store.node(c.nodeId) : undefined;
+    if (node?.ownerId) return node.ownerId === userId;
+    return this.hub.store.role(c.workspaceId, userId) === "owner";
+  }
+
+  /** Why this person can't work it, in words for them. */
+  notYours(c: Computer): string {
+    const node = c.nodeId ? this.hub.store.node(c.nodeId) : undefined;
+    const name = node?.ownerId ? (this.hub.store.user(node.ownerId)?.name ?? "its owner") : "a workspace owner";
+    return `${c.name} runs on ${node?.name ?? "a device"}, which is ${name}'s. Only ${name} can use it, unless they share that device (Devices).`;
   }
 
   view(c: Computer): ComputerView {
@@ -254,6 +289,7 @@ export class Computers {
     // moving files and clipboard text doesn't need control: it doesn't touch the screen
     const input = !transfer && !["screenshot", "status", "start", "stop", "destroy", "harness_status", "signin", "inspect"].includes(action.action);
     if (c.kind === "device") this.checkScreenUse(c, by, opts.requester !== undefined ? opts.requester : by.kind === "agent" ? (this.hub.currentRun(by.id)?.requestedBy ?? null) : null, action);
+    if (by.kind === "user" && by.id !== "system" && (input || transfer) && !this.canUse(c, by.id)) throw new ComputerError(this.notYours(c), 403);
     if (this.hub.isNodePaused(c.nodeId)) throw new ComputerError(`${c.name} is paused at its device. Someone there has to run \`wisp node resume\` first.`, 423);
     if (by.kind === "agent" && ctl && input) {
       // a person who's stopped using it doesn't keep the agent waiting: it takes the computer back
@@ -361,6 +397,7 @@ export class Computers {
 
   take(c: Computer, userId: string) {
     if (!this.canSee(c, userId)) throw new ComputerError("only its owner can use this screen", 403);
+    if (!this.canUse(c, userId)) throw new ComputerError(this.notYours(c), 403);
     const cur = this.control.get(c.id);
     if (cur && cur.id !== userId && Date.now() - cur.touched < this.idleMs(c.workspaceId)) {
       throw new ComputerError(`${this.hub.store.user(cur.id)?.name ?? "Someone"} is using it right now`, 409);
@@ -463,6 +500,8 @@ export class Computers {
    */
   async ticket(c: Computer, userId: string, code?: string): Promise<string> {
     if (!this.canSee(c, userId)) throw new ComputerError("only its owner can watch this screen", 403);
+    // a live VNC view carries keys and clicks whatever the page shows, so it's for people who can use it
+    if (this.transport(c) === "vnc" && !this.canUse(c, userId)) throw new ComputerError(this.notYours(c), 403);
     const t = crypto.randomBytes(24).toString("base64url");
     const locked = !!this.codeKind(c);
     if (locked) await this.unlockScreen(c, `view:${t}`, code, Date.now() + VIEW_UNLOCK_MS);
@@ -477,6 +516,7 @@ export class Computers {
     this.tickets.delete(ticket!);
     const c = this.hub.store.computer(computerId);
     if (t.expires < Date.now() || t.computerId !== computerId || !c || !this.canSee(c, t.userId)) return null;
+    if (t.kind === "vnc" && !this.canUse(c, t.userId)) return null;
     return t;
   }
 
