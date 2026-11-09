@@ -100,6 +100,11 @@ export function CodeView() {
     };
   }, []);
 
+  // whose keyboard is taken (then kept current by the hub's events)
+  useEffect(() => {
+    api<Record<string, string>>("GET", "/api/keyboard").then((keyboard) => useStore.setState({ keyboard }), () => {});
+  }, []);
+
   useEffect(() => save("wisp.code.task", selected), [selected]);
   useEffect(() => {
     const { [SHELLS]: plain, ...rest } = shells;
@@ -204,6 +209,9 @@ export function CodeView() {
       if (mod && e.shiftKey && task) {
         const n = ["Digit1", "Digit2", "Digit3"].indexOf(e.code);
         if (n >= 0) return take(() => (setReview(true), setReviewTab((["changes", "files", "checks"] as const)[n])));
+        // take the focused agent's keyboard, or hand it back
+        const kb = e.key.toLowerCase() === "k" ? "take" : e.key.toLowerCase() === "h" ? "back" : null;
+        if (kb) return take(() => window.dispatchEvent(new CustomEvent("wisp-code-keyboard", { detail: kb })));
         const act = e.key.toLowerCase() === "b" ? "back" : e.key.toLowerCase() === "m" ? "merge" : null;
         if (act)
           return take(() => {
@@ -339,7 +347,7 @@ export function CodeView() {
               if (!place) return null;
               const agent = taskAgents.find((a) => a.id === id);
               if (agent && task)
-                return <AgentPane key={`${task.root.id}:${id}`} task={task} agent={agent} focused={focused === id} onFocus={() => setFocused(id)} talking={talking} setTalking={setTalking} style={place} />;
+                return <AgentPane key={`${task.root.id}:${id}`} task={task} agent={agent} focused={focused === id} onFocus={() => setFocused(id)} talking={talking} setTalking={setTalking} style={place} shell={targets?.find((t) => t.kind === "device" && !!t.nodeId && t.nodeId === agent.nodeId)} />;
               const s = myShells.find((x) => x.key === id)!;
               return (
                 <div key={id} style={place} className="grid min-h-0 min-w-0">

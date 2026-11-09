@@ -22,6 +22,14 @@ interface Ticket {
   session: string;
   code?: string;
   expires: number;
+  takeover?: Takeover;
+}
+
+/** The owner took an agent's keyboard: its harness session for this thread. */
+export interface Takeover {
+  agentId: string;
+  channelId: string;
+  threadId: string | null;
 }
 
 interface Open {
@@ -35,6 +43,7 @@ interface Open {
   queued: number;
   /** the person closed the pane, so the shell stops too */
   end: boolean;
+  takeover?: Takeover;
 }
 
 /** A pane's name, as the device will name its shell: lowercase letters, digits and dashes. */
@@ -65,7 +74,7 @@ export class Terminals {
   }
 
   /** A one-time link to open the terminal named `session` on a computer, good for a minute. */
-  ticket(c: Computer, userId: string, session: string, code?: string): string {
+  ticket(c: Computer, userId: string, session: string, code?: string, takeover?: Takeover): string {
     const no = this.refusal(c, userId);
     if (no) throw new ComputerError(no.error, no.status);
     const kind = this.hub.computers.codeKind(c);
@@ -73,7 +82,7 @@ export class Terminals {
     if (!this.hub.computers.online(c)) throw new ComputerError(`${c.name} is offline: its device isn't connected`, 503);
     this.sweep();
     const t = crypto.randomBytes(24).toString("base64url");
-    this.tickets.set(t, { computerId: c.id, workspaceId: c.workspaceId, userId, session: sessionName(session), code: c.kind === "device" ? code : undefined, expires: Date.now() + TICKET_MS });
+    this.tickets.set(t, { computerId: c.id, workspaceId: c.workspaceId, userId, session: sessionName(session), code: c.kind === "device" ? code : undefined, expires: Date.now() + TICKET_MS, takeover });
     return t;
   }
 
@@ -87,7 +96,13 @@ export class Terminals {
     if (no) return socket.close(4403, no.error.slice(0, 120));
     if (!c.nodeId) return socket.close(4400, "no device");
     const termId = TERM_PREFIX + crypto.randomBytes(12).toString("base64url");
-    const o: Open = { socket, nodeId: c.nodeId, computerId: c.id, workspaceId: c.workspaceId, userId: t.userId, ready: false, queue: [], queued: 0, end: false };
+    const o: Open = { socket, nodeId: c.nodeId, computerId: c.id, workspaceId: c.workspaceId, userId: t.userId, ready: false, queue: [], queued: 0, end: false, takeover: t.takeover };
+    // a new pane on a taken keyboard: whatever was counting down to hand it back stops
+    const held = t.takeover && this.hub.keyboard.get(t.takeover.agentId);
+    if (held && held.timer) {
+      clearTimeout(held.timer);
+      held.timer = undefined;
+    }
     this.open.set(termId, o);
     socket.on("message", (raw: Buffer, isBinary: boolean) => {
       if (!isBinary) return this.control(termId, o, raw.toString());
@@ -99,14 +114,15 @@ export class Terminals {
     });
     socket.on("close", () => {
       if (this.open.delete(termId)) this.hub.sendToNode(o.nodeId, { type: "term_close", termId, end: o.end });
+      if (o.takeover) o.end ? this.hub.handBackKeyboard(o.takeover.agentId) : this.hub.keyboardLeft(o.takeover.agentId);
     });
     const cols = Math.max(2, Math.min(1000, Math.floor(size.cols) || 80));
     const rows = Math.max(1, Math.min(500, Math.floor(size.rows) || 24));
-    if (!this.hub.sendToNode(c.nodeId, { type: "term_open", termId, computer: this.hub.computers.spec(c), session: t.session, cols, rows, code: t.code })) {
+    if (!this.hub.sendToNode(c.nodeId, { type: "term_open", termId, computer: this.hub.computers.spec(c), session: t.session, cols, rows, code: t.code, ...(t.takeover ? { takeover: t.takeover } : {}) })) {
       this.open.delete(termId);
       return socket.close(4503, "device offline");
     }
-    this.hub.computers.log(c, { kind: "user", id: t.userId }, `Opened a terminal (${t.session})`);
+    this.hub.computers.log(c, { kind: "user", id: t.userId }, t.takeover ? `Took the keyboard from @${this.hub.store.agent(t.takeover.agentId)?.handle ?? "an agent"}` : `Opened a terminal (${t.session})`);
   }
 
   /** Text frames from the browser: a new size, or closing the pane for good. */

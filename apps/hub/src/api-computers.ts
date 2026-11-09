@@ -289,7 +289,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     return store
       .computers(c.workspaceId)
       .filter((x) => !hub.terminals.refusal(x, c.actor.id))
-      .map((x) => ({ id: x.id, name: x.name, kind: x.kind, online: computers.online(x), code: x.kind === "device" ? computers.codeKind(x) : null }));
+      .map((x) => ({ id: x.id, name: x.name, kind: x.kind, nodeId: x.nodeId ?? null, online: computers.online(x), code: x.kind === "device" ? computers.codeKind(x) : null }));
   });
 
   /**

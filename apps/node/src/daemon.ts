@@ -15,7 +15,7 @@ import { RemoteDesktopServer, type RemoteDesktopConfig } from "./computers/remot
 import type { RustdeskConfig } from "./rustdesk.ts";
 import { detectRemoteApps } from "./remote-apps.ts";
 import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
-import { Terminals, deviceShell, sessionName, vmShell } from "./terminals.ts";
+import { TAKEOVER_HARNESSES, Terminals, deviceShell, sessionName, takeoverShell, vmShell } from "./terminals.ts";
 import { HarnessLogins } from "./harness-login.ts";
 import { ModelLogins } from "./model-login.ts";
 import { type DockerVm } from "./computers/docker.ts";
@@ -132,6 +132,8 @@ export class NodeDaemon {
   private runCommands = new Map<string, CommandOption[]>();
   /** which harness made each remembered session (a session id means nothing to another harness) */
   private sessionHarness: Record<string, string>;
+  /** per agent and thread (newest run): what resuming its harness session in a terminal needs. Only in memory: it holds sign-ins */
+  private takeovers = new Map<string, { sessionKey: string; harness: string; cwd: string; env: Record<string, string> }>();
   /** run results that couldn't be sent (the hub was away); sent as soon as it's back */
   private outbox: NodeToHub[] = [];
   /** when the hub replaced this connection with another one using the same token */
@@ -223,8 +225,9 @@ export class NodeDaemon {
       if (!r.ok) return closed(r.error);
     }
     const session = sessionName(msg.session);
-    const key = `${computer.kind === "vm" ? "vm" : "dev"}:${computer.id}:${session}`;
+    const key = msg.takeover ? `take:${msg.takeover.agentId}` : `${computer.kind === "vm" ? "vm" : "dev"}:${computer.id}:${session}`;
     const command = async () => {
+      if (msg.takeover) return this.takeoverCommand(msg.takeover);
       if (computer.kind === "device") return deviceShell(session);
       const vm = await this.computers.vm(computer);
       if (!vm) throw new Error("this VM isn't on this device");
@@ -253,6 +256,15 @@ export class NodeDaemon {
     } finally {
       this.openingTerms.delete(termId);
     }
+  }
+
+  /** The agent's harness session for a thread, to resume in the owner's terminal. */
+  private takeoverCommand(t: { agentId: string; channelId: string; threadId: string | null }) {
+    const found = this.takeovers.get(`${t.agentId}:${t.channelId}:${t.threadId ?? "main"}`);
+    const sessionId = found && this.sessions[found.sessionKey];
+    if (!found || !sessionId) throw new Error("Nothing to pick up yet: let the agent run once on this device, then take the keyboard.");
+    if ((this.runningHere.get(t.agentId) ?? 0) > 0) throw new Error("the agent is still working; stop its run first");
+    return takeoverShell({ harness: found.harness, sessionId, cwd: found.cwd, env: found.env });
   }
 
   /** A code was entered for this screen: tell its owner when it was wrong. */
@@ -725,6 +737,10 @@ export class NodeDaemon {
 
     // did the harness get going (text, a tool call)? A resumed session that failed after that isn't rerun from scratch
     let progressed = false;
+    // the agent's own account of its harness here (its folder), unless it runs inside its VM; then its connection, which wins
+    const runEnv: Record<string, string> = Object.assign(inside ? {} : this.accounts.env(agent.harness, this.accounts.accountOf(agent.id, agent.harness)), ...connectors.filter((c) => c.kind === "secret").map((c) => c.env ?? {}), credential?.env ?? {});
+    // what the owner needs to take the keyboard in this thread: the same session, folder and sign-in
+    if (!inside && !run.fresh && TAKEOVER_HARNESSES.has(agent.harness)) this.takeovers.set(`${agent.id}:${run.channelId}:${run.threadId ?? "main"}`, { sessionKey, harness: agent.harness, cwd, env: runEnv });
     const attempt = async (sessionId: string | null) =>
       adapter.run(
         {
@@ -741,8 +757,7 @@ export class NodeDaemon {
           browser,
           // MCP connectors go to the harness's own config; secrets go in its environment
           connectors: connectors.filter((c: ConnectorSpec) => c.kind !== "secret"),
-          // the agent's own account of its harness here (its folder), unless it runs inside its VM; then its connection, which wins
-          env: Object.assign(inside ? {} : this.accounts.env(agent.harness, this.accounts.accountOf(agent.id, agent.harness)), ...connectors.filter((c) => c.kind === "secret").map((c) => c.env ?? {}), credential?.env ?? {}),
+          env: runEnv,
           launch: inside ? vm!.launcher(run.runId) : undefined,
           place: inside ? vmPlace(vm!) : undefined,
           connection: credential && run.credential ? { provider: run.credential.provider, kind: run.credential.kind } : undefined,
