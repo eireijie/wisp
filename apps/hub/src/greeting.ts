@@ -80,19 +80,11 @@ export function roleOf(hub: Hub, agent: Agent): string {
   return "";
 }
 
-/** Whether the agent's harness is signed in where it runs: false only when Wisp knows it isn't. */
-function signedIn(hub: Hub, agent: Agent): boolean | null {
-  if (agent.settings.connectionId) return true;
-  if (!agent.nodeId || hub.runsInComputer(agent)) return null;
-  const here = hub.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness);
-  return here?.accounts?.[here.agentAccounts?.[agent.id] ?? "default"] ?? null;
-}
-
 /** The hello, written by Wisp in the agent's name. */
 export function greetingText(agent: Pick<Agent, "name" | "harness">, signIn: { device: string } | null): string {
   const hello = `Hey, I'm ${agent.name}! What would you like me to do?`;
   if (signIn) {
-    return `${hello}\n\nBefore I can get started, ${harnessLabel(agent.harness)} needs to be signed in on ${signIn.device}. You can do that in Settings → Harnesses. Tell me what you need in the meantime and I'll pick it up once that's done.`;
+    return `${hello}\n\nBefore I can get started, ${harnessLabel(agent.harness)} needs to be signed in on ${signIn.device}. Press Sign in in this chat to do that. Tell me what you need in the meantime and I'll pick it up once that's done.`;
   }
   return `${hello}\n\nTell me in a few words. Then I'll ask a couple of quick things so I can get set up; skip any you like.`;
 }
@@ -123,12 +115,12 @@ export function greetNewAgent(hub: Hub, agent: Agent, userId: string | null | un
   const dm = store.dmChannel(fresh.workspaceId, userId, fresh.id);
   // someone may already have written there (an agent made from one found on a device)
   if (store.messages(dm.id, { limit: 1 }).length) return null;
-  const notSignedIn = signedIn(hub, fresh) === false;
-  const device = fresh.nodeId ? store.node(fresh.nodeId)?.name ?? "its device" : "its device";
+  // where it runs: its device, or its own computer when its harness runs in there
+  const signIn = hub.signInNeeded(fresh);
   // an agent made for a job already has its role; it doesn't offer one
   const steps: AgentSetup["steps"] = roleOf(hub, fresh) ? { role: roleOf(hub, fresh) } : {};
   store.updateAgent(fresh.id, { settings: { setup: { userId, channelId: dm.id, startedAt: new Date().toISOString(), replies: [], steps, done: false } } });
-  const msg = hub.postMessage({ channelId: dm.id, author: { kind: "agent", id: fresh.id }, body: greetingText(fresh, notSignedIn ? { device } : null), route: false });
+  const msg = hub.postMessage({ channelId: dm.id, author: { kind: "agent", id: fresh.id }, body: greetingText(fresh, signIn ? { device: signIn.where } : null), route: false });
   store.updateAgent(fresh.id, { settings: { setup: { ...store.agent(fresh.id)!.settings.setup!, greetingId: msg.id } } });
   hub.broadcast(fresh.workspaceId, { type: "channels_changed" });
   return msg;
@@ -279,23 +271,6 @@ export function setupSection(hub: Hub, agent: Agent, at: { channelId: string; li
   ]
     .filter(Boolean)
     .join("\n");
-}
-
-/**
- * The model failed mid-setup for a reason other than sign-in: Wisp takes what they last wrote as
- * the answer to the step it was on and asks the next question itself, so the chat doesn't stall.
- */
-export function askNextIfStalled(hub: Hub, agentId: string, channelId: string, signInTrouble: boolean): void {
-  if (signInTrouble) return;
-  const agent = hub.store.agent(agentId);
-  const s = agent && activeSetup(agent, channelId);
-  if (!agent || !s || !s.replies.length) return;
-  const asked = remaining(s).find((k) => GUIDE[k].ask);
-  if (!asked) return;
-  const steps = { ...s.steps, [asked]: `"${s.replies.at(-1)}" (their words)` };
-  hub.store.updateAgent(agent.id, { settings: { setup: { ...s, steps } } });
-  const next = SETUP_STEPS.filter((k) => steps[k] === undefined).find((k) => GUIDE[k].ask);
-  if (next) hub.postMessage({ channelId, author: { kind: "agent", id: agent.id }, body: GUIDE[next].ask!, route: false });
 }
 
 interface Helpers {

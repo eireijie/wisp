@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { BellOff, Check, ChevronDown, FolderPlus, Ghost, MessageSquarePlus, Pin, Plus, Search, Users, X } from "lucide-react";
-import { teamIconAgentIds, type Agent, type Section } from "@wisp/core";
+import { harnessLabel, teamIconAgentIds, type Agent, type Section } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, usePrefs, type ChannelInfo } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
@@ -9,7 +9,7 @@ import { openDm } from "../openDm.ts";
 import { AgentAvatar, Menu, cx, clockTime } from "./ui.tsx";
 import { useSheetBackdrop } from "../motion.ts";
 import { ChannelSettings, SectionDialog, leaveChannel, setChannelPrefs } from "./Channels.tsx";
-import { activityPhrase } from "./agentActivity.ts";
+import { workingLine } from "./agentActivity.ts";
 import { cleanPreview } from "./CommandPalette.tsx";
 import { loopLine } from "./Loops.tsx";
 import { UserAvatarButton } from "./Rail.tsx";
@@ -134,11 +134,12 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
     const run = c.channel ? Object.values(live).find((r) => r.channelId === c.channel!.id && (c.kind === "team" || r.agentId === c.agent?.id)) : undefined;
     if (run) {
       const who = c.kind === "team" ? `${agents.find((a) => a.id === run.agentId)?.name ?? "An agent"} · ` : "";
-      return { text: `${who}Working · ${activityPhrase(run.last?.name, !!run.text)}`, working: true };
+      return { text: `${who}${workingLine(run.last?.name, !!run.text)}`, working: true };
     }
     if (!c.agent?.status || c.kind === "team") {
       /* fall through to the message */
     } else if (c.agent.status === "busy") return { text: "Working", working: true };
+    else if (c.agent.status === "online" && c.agent.signIn) return { text: `Needs sign-in · ${harnessLabel(c.agent.harness)} on ${c.agent.signIn.where}`, working: false, needs: true };
     const ask = c.channel ? Object.values(approvals).find((a) => a.status === "pending" && a.channelId === c.channel!.id) : undefined;
     if (ask) return { text: `Needs approval · ${cleanPreview(ask.summary, 70)}`, working: false, needs: true };
     // waiting on you, or when its agent will be back with something

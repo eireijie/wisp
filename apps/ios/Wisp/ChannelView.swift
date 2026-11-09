@@ -103,6 +103,8 @@ struct ChannelView: View {
       } else {
         VStack(spacing: 6) {
           ActivityPill(channel: current)
+          // it can't answer until its harness is signed in where it runs: say so before anyone writes
+          if let agent = store.dmAgent(current), agent.signIn != nil { AgentSignInBar(agent: agent) }
           VStack(alignment: .leading, spacing: 0) {
             if let agent = store.dmAgent(current), run.context != nil {
               RunSummaryLine(agent: agent, info: run) { showRun = true }

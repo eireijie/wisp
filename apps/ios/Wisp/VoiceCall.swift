@@ -48,8 +48,7 @@ struct CallRunEvent {
 enum CallActivity {
   /** "Reading main.ts", "Searching the web": a short line for the tool the agent just started. */
   static func line(tool name: String, file: String?) -> String {
-    var t = name.lowercased()
-    for prefix in ["mcp__wisp__", "mcp__warren__"] where t.hasPrefix(prefix) { t.removeFirst(prefix.count) }
+    let t = ToolLine.key(name)
     let base = file.flatMap { $0.split(whereSeparator: { $0 == "/" }).last.map(String.init) }
     if t.hasPrefix("computer_") || t == "computer" { return "Using its computer" }
     if t.hasPrefix("memory_") || t.hasPrefix("vault_") { return t.contains("remember") || t.contains("write") || t.contains("append") ? "Updating memory" : "Searching memory" }
@@ -57,9 +56,14 @@ enum CallActivity {
     if ["read", "view", "cat", "read_file", "open_file"].contains(t) { return base.map { "Reading \($0)" } ?? "Reading files" }
     if ["glob", "grep", "ls", "find", "list_dir"].contains(t) { return "Looking through files" }
     if ["bash", "shell", "exec", "exec_command", "run_command", "terminal"].contains(t) { return "Running a command" }
+    if t.hasPrefix("storage_") { return "Looking through storage" }
     if t.contains("search") { return "Searching the web" }
     if t.contains("fetch") || t.contains("browse") || t.contains("navigate") { return "Browsing" }
     if t.hasPrefix("task_") { return "Updating tasks" }
+    if t == "file_upload" { return "Sending a file" }
+    if t.hasPrefix("file_") { return "Looking at a file" }
+    if t.hasPrefix("chat_") { return "Checking the chat" }
+    if t == "approval_request" { return "Asking for your OK" }
     return "Working"
   }
 }

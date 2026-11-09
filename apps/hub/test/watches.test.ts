@@ -205,7 +205,7 @@ describe("watches", () => {
     hub.store.db.prepare("UPDATE agents SET computer_id = 'comp_test' WHERE id = ?").run(agentId);
     const w = await agent.startWatch({ service: "browser", config: { url: "https://canvas.example.edu", lookFor: "new assignments and grades" }, everyMinutes: 30 });
     expect(w).toMatchObject({ label: "canvas.example.edu (browser)", everyMinutes: 120 });
-    expect(w.estimate.note).toMatch(/12 browser checks a day, 720k tokens \(72% of the daily allowance\)/);
+    expect(w.estimate.note).toMatch(/looks every 2 hours in its browser \(the site needs a sign-in\), slower while nothing changes: up to 12 checks a day, 720k tokens \(72% of the daily allowance\)/);
     let prompt = "";
     onCheck = async (_a, input) => {
       prompt = input.prompt;

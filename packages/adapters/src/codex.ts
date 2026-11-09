@@ -65,14 +65,41 @@ export function codexMcpConfig(input: RunInput): { overrides: string[]; env: Rec
   return { overrides, env };
 }
 
-/** CLI arguments for one run. Exported for tests. */
-export function codexArgs(input: RunInput): string[] {
+/** Features of Codex that bring in the person's own plugins, connected apps and screen/browser control. */
+const CODEX_PERSONAL_FEATURES = ["plugins", "remote_plugin", "apps", "computer_use", "browser_use", "browser_use_external", "in_app_browser"];
+
+/** Names of the MCP servers a config.toml sets up (`[mcp_servers.NAME]` and its sub-tables). Exported for tests. */
+export function codexConfiguredServers(toml: string): string[] {
+  const names = new Set<string>();
+  for (const m of toml.matchAll(/^\s*\[\s*mcp_servers\s*\.\s*("(?:[^"\\]|\\.)*"|[A-Za-z0-9_-]+)/gm)) {
+    names.add(m[1].startsWith('"') ? JSON.parse(m[1]) : m[1]);
+  }
+  return [...names];
+}
+
+/**
+ * What keeps the person's own Codex plugins, connected apps, MCP servers, Computer Use helper and
+ * turn-end notifier out of a run: overrides that turn them off. Wisp's own servers and the run's
+ * connectors are set after these, so they still load. `personal` is the server names in the
+ * config the run reads. Exported for tests.
+ */
+export function codexIsolation(personal: string[]): string[] {
+  const out: string[] = [];
+  for (const f of CODEX_PERSONAL_FEATURES) out.push("-c", `features.${f}=false`);
+  out.push("-c", "notify=[]");
+  for (const name of personal) out.push("-c", `mcp_servers.${tomlKey(name)}.enabled=false`);
+  return out;
+}
+
+/** CLI arguments for one run. `personalServers` are the MCP servers in the person's own config (see codexIsolation). Exported for tests. */
+export function codexArgs(input: RunInput, personalServers: string[] = []): string[] {
   // `exec resume` has no -s flag, so the sandbox is set through config for both forms
   const common = ["--json", "--skip-git-repo-check", "-c", `sandbox_mode=${tomlString(SANDBOX[input.access ?? "edit"])}`];
   if (input.model) common.push("-m", input.model);
   if (input.effort) common.push("-c", `model_reasoning_effort=${tomlString(input.effort)}`);
   // Codex's fast mode is the "priority" service tier (models advertise it in their catalog)
   if (input.fast) common.push("-c", `service_tier="priority"`);
+  if (input.ownPlugins !== true) common.push(...codexIsolation(personalServers));
   common.push(...codexConnectionArgs(input.connection));
   common.push(...codexMcpConfig(input).overrides);
   return input.sessionId ? ["exec", "resume", input.sessionId, ...common, "-"] : ["exec", ...common, "-"];
@@ -252,7 +279,14 @@ export const codex: HarnessAdapter = {
   },
 
   async run(input: RunInput, onEvent: (e: AdapterEvent) => void): Promise<RunResult> {
-    const args = codexArgs(input);
+    // the servers in the config this run reads (the VM's own, or this device's), so they can be switched off by name
+    let personal: string[] = [];
+    if (input.ownPlugins !== true) {
+      const file = input.place ? `${runCodexHome(input)}/config.toml` : path.join(runCodexHome(input), "config.toml");
+      const text = input.place ? await input.place.readFile(file).catch(() => null) : await fs.readFile(file, "utf8").catch(() => null);
+      personal = text ? codexConfiguredServers(text) : [];
+    }
+    const args = codexArgs(input, personal);
 
     let finalText = "";
     let sessionId: string | null = input.sessionId ?? null;
@@ -266,9 +300,13 @@ export const codex: HarnessAdapter = {
       if (t) tokens = { inputTokens: (tokens?.inputTokens ?? 0) + t.inputTokens, outputTokens: (tokens?.outputTokens ?? 0) + t.outputTokens, cachedInputTokens: (tokens?.cachedInputTokens ?? 0) + t.cachedInputTokens };
       for (const e of parseCodexLine(m)) {
         if (e.type === "session") sessionId = e.id;
-        if (e.type === "text") finalText = e.text; // the last agent message is the reply
         if (e.type === "error") error = e.message;
-        onEvent(e);
+        if (e.type === "text") {
+          // each agent message is whole: keep the ones before the reply apart from it while streaming
+          const spaced = finalText ? { ...e, text: `\n\n${e.text}` } : e;
+          finalText = e.text; // the last agent message is the reply
+          onEvent(spaced);
+        } else onEvent(e);
       }
     });
 

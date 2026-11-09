@@ -79,17 +79,33 @@ final class ChatParityTests: XCTestCase {
     XCTAssertEqual(done.caret, 9)
   }
 
-  func testLiveRunAppendsTextAndLines() {
+  func testLiveRunKeepsOnlyTheAgentsWords() {
     var run = LiveRun(id: "r1", agentId: "a1", channelId: "c1", threadId: nil)
     run.apply(type: "text", text: "Hel")
     run.apply(type: "text", text: "lo")
     XCTAssertEqual(run.text, "Hello")
     run.apply(type: "status", text: "started")
-    XCTAssertEqual(run.text, "Hello")
+    run.apply(type: "status", text: "Planning")
     run.apply(type: "error", text: "boom")
-    XCTAssertEqual(run.text, "Hello\nError: boom\n")
-    run.apply(type: "tool_call", text: nil)
-    XCTAssertEqual(run.text, "Hello\nError: boom\n")
+    run.apply(type: "notice", text: "Ran /compact.")
+    run.apply(type: "tool_call", text: nil, tool: "wisp.memory_search")
+    run.apply(type: "tool_result", text: #"{"content":[{"type":"text","text":"agents/x"}]}"#)
+    XCTAssertEqual(run.text, "Hello")
+    XCTAssertEqual(run.tool, "wisp.memory_search")
+  }
+
+  func testStoreShowsToolsAsPlainActivity() {
+    let store = Store(loadSession: false, persistToken: { _ in })
+    store.agents = [agent("a1", "atlas")]
+    store.messages["c1"] = []
+    for (name, file) in [("wisp.memory_search", "null"), ("browser.browser_navigate", "null"), ("shell", "null"), ("wisp.file_upload", "null")] {
+      store.handle(Data(#"{"type":"run_event","runId":"r1","agentId":"a1","channelId":"c1","threadId":null,"threadPath":[],"event":{"type":"tool_call","name":"\#(name)","file":\#(file)}}"#.utf8))
+    }
+    XCTAssertEqual(store.activitySteps["a1"], ["Searching memory", "Browsing", "Running a command", "Sending a file"])
+    XCTAssertEqual(store.activity["a1"], "Sending a file")
+    XCTAssertEqual(ActivityText.line(store.activity["a1"]), "Sending a file")
+    XCTAssertEqual(ActivityText.phrase("Using its computer"), "is using its computer")
+    XCTAssertEqual(store.liveRuns["r1"]?.text ?? "", "")
   }
 
   func testStoreStreamsRunEventsAndClearsWhenReplyArrives() {

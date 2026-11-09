@@ -4,6 +4,7 @@ import path from "node:path";
 import { envVar } from "@wisp/core";
 import { issueToken } from "./auth.ts";
 import type { Hub } from "./hub.ts";
+import { HOME_KEY } from "./shared-computer.ts";
 
 /**
  * The hub's own computer as a device, without tokens: `wisp service install node --local` (the
@@ -41,6 +42,8 @@ export function grantLocalDevice(hub: Hub, dataDir: string, port = Number(proces
     if (typeof asked.name === "string" && asked.name.trim()) name = asked.name.trim().slice(0, 80);
   } catch {}
   const node = hub.store.createNode(ws.id, name, owner.id);
+  // the device Wisp lives on: agents' AI tools and the shared computer go here (shared-computer.ts)
+  hub.store.setSetting(ws.id, HOME_KEY, node.id);
   const body: LocalDeviceGrant = { hub: `http://127.0.0.1:${port}`, token: issueToken(hub.store.db, "node", node.id, ws.id, name), name };
   fs.writeFileSync(grant, JSON.stringify(body, null, 2), { mode: 0o600 });
   // the device may run as another user (a Cloud server's container): it owns the folder they share

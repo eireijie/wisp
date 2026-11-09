@@ -360,7 +360,7 @@ export class TeamFlows {
       // a team that finished before this was linked has already sent its news: take the answer now
       const now = this.flow(child.id);
       if (now?.status === "done") return this.complete(f, lane, now.result || `#${target.name} finished.`);
-      if (now?.status === "failed") return this.waitLane(f, lane, `The team this step handed work to stopped before it finished. Try again to hand it over again, or approve to go on without an answer.`, "retry");
+      if (now?.status === "failed") return this.failLane(f, lane, `The team this step handed work to stopped before it finished. Try again to hand it over again, or skip this step to go on without an answer.`);
       this.save(f);
       return;
     }
@@ -375,6 +375,13 @@ export class TeamFlows {
     f.stepId = lane.stepId;
     this.save(f);
     if (post) this.hub.postMessage({ channelId: f.channelId, threadId: f.threadId, author: SYSTEM, body: why, route: false, onBehalfOf: f.requestedBy });
+  }
+
+  /** A step (or the hand-over to another team) ran and failed: a person can try again or skip it. */
+  private failLane(f: TeamFlow, lane: FlowLane, why: string) {
+    this.waitLane(f, lane, why, "retry");
+    lane.waitingFor!.failed = true;
+    this.save(f);
   }
 
   private finish(f: TeamFlow, status: "done" | "failed", note: string) {
@@ -397,7 +404,7 @@ export class TeamFlows {
       const lane = Object.values(f.lanes ?? {}).find((l) => live(l) && l.handoff?.flowId === child.id);
       if (!lane) continue;
       if (child.status === "done") this.complete(f, lane, child.result || `#${this.hub.store.channel(child.channelId)?.name} finished.`);
-      else this.waitLane(f, lane, `The team this step handed work to stopped before it finished. Try again to hand it over again, or approve to go on without an answer.`, "retry");
+      else this.failLane(f, lane, `The team this step handed work to stopped before it finished. Try again to hand it over again, or skip this step to go on without an answer.`);
     }
   }
 
@@ -556,7 +563,7 @@ export class TeamFlows {
           const h = [...f.history].reverse().find((x) => x.taskId === task.id);
           if (task.status === "failed") {
             if (h) h.verdict = "failed";
-            this.waitLane(f, lane, `${stepLabel(step, team.roles ?? [], this.agentFor(team, step)?.name)} didn't finish: ${(task.result ?? "no reason given").slice(0, 300)}`, "retry");
+            this.failLane(f, lane, `${stepLabel(step, team.roles ?? [], this.agentFor(team, step)?.name)} didn't finish: ${(task.result ?? "no reason given").slice(0, 300)}`);
             return false;
           }
           if (step.kind === "review") {
@@ -593,7 +600,7 @@ export class TeamFlows {
           if (piece.status === "approved" || piece.lastTaskId === task.id) return false;
           piece.lastTaskId = task.id;
           if (task.status === "failed") {
-            this.pieceNeedsPerson(piece, `**${piece.title}** didn't finish: ${(task.result ?? "no reason given").slice(0, 300)}. Try again to hand it back to its builder, or approve it anyway.`, "retry", "build");
+            this.pieceNeedsPerson(piece, `**${piece.title}** didn't finish: ${(task.result ?? "no reason given").slice(0, 300)}. Try again to hand it back to its builder, or skip it.`, "retry", "build", true);
             this.afterPiece(f, lane, step);
             return false;
           }
@@ -606,7 +613,7 @@ export class TeamFlows {
           piece.lastReviewId = task.id;
           const reviewerRole = (step.reviewBy && team.roles?.find((r) => r.id === step.reviewBy)?.name) || "The reviewer";
           if (task.status === "failed") {
-            this.pieceNeedsPerson(piece, `The review of **${piece.title}** didn't finish: ${(task.result ?? "no reason given").slice(0, 300)}. Try again to ask for it again, or approve it anyway.`, "retry", "review");
+            this.pieceNeedsPerson(piece, `The review of **${piece.title}** didn't finish: ${(task.result ?? "no reason given").slice(0, 300)}. Try again to ask for it again, or skip it.`, "retry", "review", true);
           } else if (verdict === "approved") {
             piece.status = "approved";
           } else if (!verdict) {
@@ -695,9 +702,9 @@ export class TeamFlows {
     return true;
   }
 
-  private pieceNeedsPerson(piece: TeamFlowPiece, why: string, options: "retry" | "rounds", redo: "build" | "review") {
+  private pieceNeedsPerson(piece: TeamFlowPiece, why: string, options: "retry" | "rounds", redo: "build" | "review", failed = false) {
     piece.status = "failed";
-    piece.problem = { why, options, redo };
+    piece.problem = { why, options, redo, ...(failed ? { failed } : {}) };
   }
 
   /** Is this task part of a running flow (a step, a piece, or a piece's review)? Flows do their own reviewing. */
@@ -725,7 +732,12 @@ export class TeamFlows {
     const stuck = Object.values(lane.pieces).find((p) => p.status === "failed");
     if (stuck) {
       if (lane.status === "waiting" && lane.waitingFor?.piece === stuck.taskId) return this.save(f);
-      return this.waitLane(f, lane, stuck.problem?.why ?? `**${stuck.title}** needs a person.`, stuck.problem?.options ?? "retry", stuck.taskId);
+      this.waitLane(f, lane, stuck.problem?.why ?? `**${stuck.title}** needs a person.`, stuck.problem?.options ?? "retry", stuck.taskId);
+      if (stuck.problem?.failed) {
+        lane.waitingFor!.failed = true;
+        this.save(f);
+      }
+      return;
     }
     const handOut = lane.taskId ? this.hub.store.task(lane.taskId) : undefined;
     if (handOut?.status === "done" && this.piecesApproved(lane, step)) return this.complete(f, lane, handOut.result ?? "");

@@ -63,6 +63,13 @@ export async function uploadFile(file: File, channelId?: string) {
 const INLINE_TYPE = /^(image\/(png|jpeg|gif|webp|avif|bmp)|text\/(plain|csv|markdown)|video\/(mp4|webm|ogg|quicktime)|audio\/(mpeg|mp4|ogg|wav|webm|aac|flac|x-m4a)|application\/pdf)$/;
 
 /** Files are fetched with the auth header, then shown via object URLs. */
+/** A chat file's bytes, as the hub sent them. */
+export async function fileBlob(id: string): Promise<Blob> {
+  const res = await fetch(`/api/files/${id}`, { headers: { authorization: `Bearer ${getToken()}` } });
+  if (!res.ok) throw new ApiError("file unavailable", res.status);
+  return res.blob();
+}
+
 export async function fileUrl(id: string): Promise<string> {
   const res = await fetch(`/api/files/${id}`, { headers: { authorization: `Bearer ${getToken()}` } });
   if (!res.ok) throw new ApiError("file unavailable", res.status);

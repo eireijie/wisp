@@ -7,7 +7,7 @@ import { useFeatures } from "../features.ts";
 import { AgentDetail, type NodeInfo } from "./AgentSettings.tsx";
 import { agentReadiness, useDevices } from "../devices.ts";
 import { SetupIncomplete, setupNextStep } from "../components/AgentPanel.tsx";
-import { activityPhrase } from "../components/agentActivity.ts";
+import { workingLine } from "../components/agentActivity.ts";
 import { effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { UserAvatarButton } from "../components/Rail.tsx";
 import { AgentAvatar, harnessLabel, cx } from "../components/ui.tsx";
@@ -47,8 +47,9 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
   /** "Working · Reading main.ts", "Idle", "Offline" */
   const state = (a: (typeof agents)[number]): { text: string; working: boolean } => {
     const run = Object.values(live).find((r) => r.agentId === a.id);
-    if (run) return { text: `Working · ${activityPhrase(run.last?.name, !!run.text)}`, working: true };
+    if (run) return { text: workingLine(run.last?.name, !!run.text), working: true };
     if (a.status === "busy") return { text: "Working", working: true };
+    if (a.status !== "offline" && a.signIn) return { text: `Needs sign-in · ${harnessLabel(a.harness)} on ${a.signIn.where}`, working: false };
     return { text: a.status === "offline" ? "Offline" : "Idle", working: false };
   };
   const line = (a: (typeof agents)[number]) => [harnessLabel(a.harness), a.model ? prettyModel(a.model) : "Automatic", a.settings.effort ? effortName(a.settings.effort) : null].filter(Boolean).join(" · ");
@@ -96,7 +97,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
                       <span className="block text-body font-medium truncate">{a.name}</span>
                       <span className="block text-sm text-muted truncate">{line(a)}</span>
                       <span className={cx("flex items-center gap-1.5 text-sm", st.working ? "text-st-working" : "text-faint")}>
-                        <span aria-hidden className={cx("size-1.5 shrink-0 rounded-full", st.working && "animate-pulse")} style={{ background: st.working ? "var(--st-working)" : a.status === "offline" ? "var(--status-idle)" : "var(--st-online)" }} />
+                        <span aria-hidden className={cx("size-1.5 shrink-0 rounded-full", st.working && "animate-pulse")} style={{ background: st.working ? "var(--st-working)" : a.status === "offline" ? "var(--status-idle)" : a.signIn ? "var(--warn)" : "var(--st-online)" }} />
                         <span className="truncate">{st.text}</span>
                       </span>
                       {!readiness.ready && (
@@ -119,11 +120,6 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
               );
             })}
             {agents.length > 0 && shown.length === 0 && <p className="py-6 text-sm text-muted text-center">No agents match.</p>}
-            {canEdit && (
-              <button onClick={() => setCreating(true)} className="w-full rounded-3xl border border-dashed border-input p-4 min-h-[88px] flex items-center justify-center gap-2.5 text-muted hover:text-ink hover:bg-hover text-base">
-                <Plus size={20} strokeWidth={1.8} /> New agent
-              </button>
-            )}
             {canEdit && (
               <button onClick={() => setBringing(true)} className="md:hidden w-full rounded-3xl bg-card p-4 min-h-14 text-left">
                 <span className="block text-body font-medium">Bring an agent in</span>

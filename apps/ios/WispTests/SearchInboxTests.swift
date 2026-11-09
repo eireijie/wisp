@@ -26,6 +26,37 @@ final class SearchInboxTests: XCTestCase {
     XCTAssertEqual(Readiness.checks(agents: [a], devices: [d]).last?.status, .unknown)
   }
 
+  func testHubSignInMarksAgentNotReady() throws {
+    // an agent in its own computer: the device can't tell, the hub knows
+    let json = #"{"id":"a1","handle":"bea","name":"Bea","harness":"codex","nodeId":"n1","computerId":"c1","status":"online","signIn":{"harness":"codex","where":"Bea's computer","nodeId":"n1","computerId":"c1","account":"default"}}"#
+    let a = try decode(Agent.self, json)
+    XCTAssertTrue(a.needsSignIn)
+    XCTAssertEqual(a.signIn?.where_, "Bea's computer")
+    XCTAssertEqual(Readiness.ready(a, devices: [device()]).problem, "Codex isn't signed in")
+    let fine = try decode(Agent.self, #"{"id":"a2","handle":"cy","name":"Cy","harness":"codex","nodeId":"n1","status":"online","signIn":null}"#)
+    XCTAssertFalse(fine.needsSignIn)
+  }
+
+  func testSignInAnswerAfterAPastedCode() {
+    let before = "Opening browser to sign in…\nPaste code here if prompted > "
+    XCTAssertEqual(HarnessLogin.replyAfter(before, before), "")
+    XCTAssertEqual(HarnessLogin.replyAfter(before, before + "Invalid code. Please make sure the full code was copied.\nPaste code here if prompted > "), "Invalid code. Please make sure the full code was copied.")
+  }
+
+  func testPreselectsASignedInHarness() {
+    let node = { (states: [(String, Bool?)]) in
+      AgentNode(id: "n1", name: "Test Mac", online: true, harnesses: states.map { AgentNode.Harness(id: $0.0, version: nil, accounts: ["default": $0.1]) })
+    }
+    let onlyCodex = node([("claude-code", false), ("codex", true)])
+    XCTAssertEqual(onlyCodex.harnessSignedIn("claude-code"), false)
+    XCTAssertEqual(HarnessPick.preferSignedIn(["claude-code", "codex"]) { onlyCodex.harnessSignedIn($0) }, "codex")
+    let unknown = node([("claude-code", false), ("hermes", nil)])
+    XCTAssertEqual(HarnessPick.preferSignedIn(["claude-code", "hermes"]) { unknown.harnessSignedIn($0) }, "hermes")
+    let none = node([("claude-code", false), ("codex", false)])
+    XCTAssertEqual(HarnessPick.preferSignedIn(["claude-code", "codex"]) { none.harnessSignedIn($0) }, "claude-code")
+    XCTAssertNil(HarnessPick.preferSignedIn([]) { _ in true })
+  }
+
   func testSearchResultsDecode() throws {
     let json = ##"""
     {"channels":[{"id":"c1","name":"general","kind":"channel","topic":"Hello","createdAt":"2026-10-18T12:00:00Z"}],

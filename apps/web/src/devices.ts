@@ -55,6 +55,20 @@ export function osName(platform: string | undefined) {
   return (platform && OS[platform]) ?? "computer";
 }
 
+/** Is this the organization's shared computer (Simple)? */
+export const isSharedComputer = (c: { config?: unknown } | null | undefined) => !!(c?.config as { shared?: boolean } | undefined)?.shared;
+
+/**
+ * Where an agent works, in a line. Simple says it plainly ("Shared computer", "Its own computer");
+ * Advanced adds which device hosts it ("Shared computer · VM on box").
+ */
+export function computerSummary(c: Pick<ComputerInfo, "kind" | "nodeId" | "name"> & { config?: unknown }, devices: DeviceInfo[] | null, advanced: boolean): string {
+  if (advanced) return `${c.name} · ${computerKindLabel(c, devices)}`;
+  if (isSharedComputer(c)) return "Shared computer";
+  if (c.kind === "vm") return "Its own computer";
+  return computerKindLabel(c, devices);
+}
+
 /** "VM on box", "Your screen on my-laptop", "Orgo cloud computer". */
 export function computerKindLabel(c: Pick<ComputerInfo, "kind" | "nodeId">, devices: DeviceInfo[] | null): string {
   const device = devices?.find((d) => d.id === c.nodeId)?.name ?? "a device";
@@ -96,7 +110,7 @@ export function agentSignedIn(agent: Pick<Agent, "id" | "harness" | "settings" |
  * back up: while devices are loading, or the device or its harness list is unknown, it's ready.
  * Agents that join from outside (mcp) and harnesses placed in a computer need no device install.
  */
-export function agentReadiness(agent: Pick<Agent, "id" | "nodeId" | "harness" | "settings" | "computerId">, devices: DeviceInfo[] | null): { ready: boolean; problem: string | null } {
+export function agentReadiness(agent: Pick<Agent, "id" | "nodeId" | "harness" | "settings" | "computerId"> & Partial<Pick<Agent, "signIn">>, devices: DeviceInfo[] | null): { ready: boolean; problem: string | null } {
   const ok = { ready: true, problem: null };
   const no = (problem: string) => ({ ready: false, problem });
   if (harnessInfo(agent.harness)?.protocol === "mcp") return ok;
@@ -107,7 +121,8 @@ export function agentReadiness(agent: Pick<Agent, "id" | "nodeId" | "harness" | 
   if (device.paused) return no(`${device.name} is paused`);
   const reported = device.harnesses ?? [];
   if (reported.length && !(runsInVm(agent.harness) && agent.settings?.runIn === "computer" && agent.computerId) && !reported.some((h) => h.id === agent.harness)) return no(`${harnessLabel(agent.harness)} isn't installed on ${device.name}`);
-  if (agentSignedIn(agent, device) === false) return no(`${harnessLabel(agent.harness)} isn't signed in`);
+  // the hub's word (its device or its own computer), else what the device list says
+  if (agent.signIn || agentSignedIn(agent, device) === false) return no(`${harnessLabel(agent.harness)} isn't signed in`);
   return ok;
 }
 
