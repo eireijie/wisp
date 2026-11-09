@@ -1,6 +1,7 @@
 import { CONNECTOR_CATALOG, zonedParts, type Allowance, type BackgroundSource, type BackgroundUsage, type BackgroundWork, type Followup } from "@wisp/core";
 import { featureOn } from "./features.ts";
 import type { Hub } from "./hub.ts";
+import { watcherFor } from "./watchers/index.ts";
 
 export type UsageRange = "today" | "7d" | "30d";
 export interface UsageReport {
@@ -39,6 +40,8 @@ export const BACKOFF_CEILING_MINUTES = 4 * 60;
 const IDLE_RECHECK_MINUTES = 60;
 /** Quiet checks in a row that keep doubling the wait (2^6 × 10 minutes is already past the ceiling). */
 const MAX_QUIET_STREAK = 6;
+/** The person hears that usage is climbing once at least this share is used and the last hour's pace would use the rest before the day ends. */
+export const WARN_FROM_SHARE = 0.25;
 
 const minutes = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -151,10 +154,12 @@ export class Background {
         store.setBackground(b.agentId, b.userId, { nextAt: startOfDay(at, tz, 1).toISOString(), nextReason: "daily limit reached" });
         continue;
       }
-      // no apps, no computer, no shared notes, no tasks: a check would only spend tokens finding that out
-      if (!this.hasSomethingToWatch(b.agentId, b.lastAt)) {
-        if (b.nextReason !== NOTHING_TO_WATCH) this.hub.broadcast(ws, { type: "background_changed", agentId: b.agentId });
-        store.setBackground(b.agentId, b.userId, { nextAt: new Date(at.getTime() + Math.min(IDLE_RECHECK_MINUTES, b.everyMinutes) * 60_000).toISOString(), nextReason: NOTHING_TO_WATCH });
+      // nothing only a model can look at, and nothing the hub can see changed: a check would only spend
+      // tokens finding that out. Apps and sites with a watch wake the agent themselves when they change.
+      if (!this.hasSomethingToWatch(b.agentId, b.lastAt, b.userId)) {
+        const reason = this.hub.watches.active(b.agentId, b.userId).length ? QUIET_LATELY : NOTHING_TO_WATCH;
+        if (b.nextReason !== reason) this.hub.broadcast(ws, { type: "background_changed", agentId: b.agentId });
+        store.setBackground(b.agentId, b.userId, { nextAt: new Date(at.getTime() + Math.min(IDLE_RECHECK_MINUTES, b.everyMinutes) * 60_000).toISOString(), nextReason: reason });
         continue;
       }
       this.wake(b.agentId, b.userId, [], at);
@@ -369,8 +374,9 @@ export class Background {
     const agent = store.agent(run.agentId);
     if (!agent || !run.requestedBy) return;
     const b = store.background(run.agentId, run.requestedBy);
+    const quiet = !followups && this.wasQuiet(run.id, run.agentId, run.requestedBy);
+    this.hub.watches.checked(run.id, quiet);
     if (b) {
-      const quiet = !followups && this.wasQuiet(run.id, run.agentId, run.requestedBy);
       const streak = quiet ? Math.min(MAX_QUIET_STREAK, b.quietStreak + 1) : 0;
       const patch: Parameters<typeof store.setBackground>[2] = { lastNote: note.trim().slice(0, 2000), quietStreak: streak };
       // one quiet check is normal; from the second in a row the wait doubles each time
@@ -382,6 +388,41 @@ export class Background {
       store.setBackground(run.agentId, run.requestedBy, patch);
     }
     this.hub.broadcast(agent.workspaceId, { type: "background_changed", agentId: agent.id });
+    this.warnIfClimbing(agent.workspaceId, run.requestedBy, at);
+  }
+
+  /**
+   * Tell the person once a day, in plain words, when background work is on pace to use up their allowance
+   * well before the day ends: a status line in the chat with the agent that used the most. Not during
+   * their quiet hours; it says again the next day if it's still true.
+   */
+  warnIfClimbing(workspaceId: string, userId: string, at = new Date()) {
+    const { store } = this.hub;
+    const a = this.allowance(workspaceId, userId, at);
+    if (!a.dailyTokens || a.todayTokens < a.dailyTokens * WARN_FROM_SHARE || !a.agents.length) return;
+    const tz = this.timezone(userId);
+    const day = dayOf(at, tz);
+    const key = `usage-warned:${userId}`;
+    if (store.setting(workspaceId, key) === day) return;
+    // tokens in the last hour, and what that pace adds up to by midnight
+    const hour = store.backgroundRunsFor(workspaceId, userId, new Date(at.getTime() - 3_600_000).toISOString()).reduce((n, r) => n + (r.tokens ?? ESTIMATED_CHECK_TOKENS), 0);
+    const left = a.dailyTokens - a.todayTokens;
+    const end = startOfDay(at, tz, 1).getTime();
+    if (left > 0 && hour * ((end - at.getTime()) / 3_600_000) < left) return;
+    const top = store.agent(a.agents[0].agentId);
+    if (!top) return;
+    const b = store.background(top.id, userId);
+    if (b && inQuietHours(at, tz, b.quietStart, b.quietEnd)) return;
+    store.setSetting(workspaceId, key, day);
+    const share = Math.min(100, Math.round((a.todayTokens / a.dailyTokens) * 100));
+    const runsOut = left > 0 && hour > 0 ? new Date(at.getTime() + (left / hour) * 3_600_000).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz }) : null;
+    const most = a.agents.length > 1 ? `, most of it by ${top.name}` : "";
+    const text = left <= 0
+      ? `Background work used all of today's allowance${most}. Checks wait until tomorrow; you can raise it in Settings → Usage.`
+      : `Background work used ${share}% of today's allowance already${most}. At this pace it runs out around ${runsOut}, and then checks wait until tomorrow. You can change it in Settings → Usage, or ask ${top.name} to check less often.`;
+    const channel = store.dmChannel(workspaceId, userId, top.id);
+    const msg = store.insertMessage({ channelId: channel.id, threadId: null, author: { kind: "user", id: "system" }, body: "", parts: [{ type: "status", text }], hop: 0 });
+    this.hub.broadcast(workspaceId, { type: "message", message: msg }, this.hub.audience(channel.id));
   }
 
   /** Is the next check still the one `started` set? If it's anything else, the agent or the person chose it. */
@@ -396,7 +437,7 @@ export class Background {
     const { store } = this.hub;
     if (store.db.prepare("SELECT 1 FROM tasks WHERE to_agent_id = ? AND status IN ('open','in_progress') LIMIT 1").get(b.agentId)) return true;
     if (b.lastAt && store.db.prepare("SELECT 1 FROM approvals WHERE agent_id = ? AND status != 'pending' AND decided_at > ? LIMIT 1").get(b.agentId, b.lastAt)) return true;
-    return b.nextReason === NOTHING_TO_WATCH && (!!store.agent(b.agentId)?.computerId || this.hub.connectors.forAgent(b.agentId).length > 0);
+    return b.nextReason === NOTHING_TO_WATCH && this.blindSources(b.agentId, b.userId).length > 0;
   }
 
   /** The check posted nothing anywhere, a task isn't waiting on the agent, and the person hasn't written to the agent since the check before it. */
@@ -431,14 +472,30 @@ export class Background {
   }
 
   /**
-   * Anything a check could find: apps, a computer, tasks waiting on it, or notes it can read (beyond its
-   * own) that changed since its last check. Notes alone don't count otherwise: they only change inside Wisp.
+   * What only a model can look at for this person: connected apps with no watch on them (Wisp can't see
+   * when those change), and the agent's computer unless a website watch already covers what it looks at
+   * there. Apps and sites with a watch don't count: the watch wakes the agent when they change.
    */
-  hasSomethingToWatch(agentId: string, since: string | null = null) {
+  blindSources(agentId: string, userId: string | null): string[] {
+    const agent = this.hub.store.agent(agentId);
+    if (!agent) return [];
+    const watched = userId ? this.hub.watches.active(agentId, userId) : [];
+    const covered = (c: { id: string; catalogId?: string | null }) => watched.some((w) => w.connectorId === c.id || (!!c.catalogId && watcherFor(w.service)?.catalogIds.includes(c.catalogId)));
+    const out = this.hub.connectors.forAgent(agentId).filter((c) => !covered(c)).map((c) => c.name);
+    if (agent.computerId && !watched.some((w) => w.service === "browser")) out.push("its computer");
+    return out;
+  }
+
+  /**
+   * Anything a check could find: apps or a computer only a model can look at, tasks waiting on it, or
+   * notes it can read (beyond its own) that changed since its last check. Notes alone don't count
+   * otherwise: they only change inside Wisp.
+   */
+  hasSomethingToWatch(agentId: string, since: string | null = null, userId: string | null = null) {
     const { store, access } = this.hub;
     const agent = store.agent(agentId);
     if (!agent) return false;
-    if (agent.computerId || this.hub.connectors.forAgent(agentId).length || this.hub.watches.hasActive(agentId)) return true;
+    if (this.blindSources(agentId, userId).length) return true;
     if (store.db.prepare("SELECT 1 FROM tasks WHERE to_agent_id = ? AND status IN ('open','in_progress') LIMIT 1").get(agentId)) return true;
     if (!since) return false;
     const after = new Date(since).getTime();

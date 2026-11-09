@@ -377,13 +377,13 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     "watch_start",
     {
       description:
-        "Start watching one of the person's apps for them, once they've said yes (\"keep an eye on my Slack\"). Wisp looks for changes on its own, at no token cost, and wakes you with what changed. It uses the key from your connector for that app, or one you give in `key` (ask before making a key for them). For apps with no easy key (Google, Meta, school or bank sites), use service \"browser\" with config.url and config.lookFor: you'll be woken every few hours to look in your computer's browser. Tell them what you'll watch and that they can stop it any time.",
+        "Start watching one of the person's apps for them, once they've said yes (\"keep an eye on my Slack\"). Wisp looks for changes on its own, at no token cost, and wakes you with what changed. It uses the key from your connector for that app, or one you give in `key` (ask before making a key for them). For apps with no easy key (Google, Meta, school or bank sites), use service \"browser\" with config.url and config.lookFor: Wisp reads the page itself when it can and wakes you only when it changed; a site behind a sign-in is looked at in your computer's browser. Unless you pass every_minutes, a site is looked at as often as your background checks for them, so you can tell them one number. Tell them what you'll watch, how often (the result says), and that they can stop it any time.",
       inputSchema: {
         service: z.enum(["slack", "github", "notion", "linear", "jira", "stripe", "gdrive", "gmail", "gcal", "browser"]),
         key: z.record(z.string(), z.string()).optional().describe("values for this watch alone, named like the connector's (GITHUB_TOKEN, SLACK_BOT_TOKEN…)"),
         config: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional().describe("Slack: channels (names); Stripe: types; browser: url and lookFor"),
         label: z.string().optional().describe("what the person sees, e.g. \"Canvas assignments\""),
-        every_minutes: z.number().optional().describe("how often to look; browser watches: 120 or more"),
+        every_minutes: z.number().optional().describe("how often to look; browser watches: 120 or more, and leave it out to match your background checks"),
       },
     },
     safe(async ({ service, key, config, label, every_minutes }) => {
