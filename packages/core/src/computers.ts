@@ -17,6 +17,11 @@ export interface VmConfig {
   resolution?: string;
   cpus?: number;
   memoryGb?: number;
+  /**
+   * the workspace's shared computer: its agents share its browser sign-ins, files and apps, each
+   * working in its own folder under files/ and its own browser tabs
+   */
+  shared?: boolean;
 }
 
 export interface OrgoConfig {
@@ -64,6 +69,8 @@ export interface Computer {
 export const DeviceCapabilities = z.object({
   platform: z.string(),
   arch: z.string(),
+  /** the device's memory in GB, so the shared computer is sized to fit a small machine */
+  memoryGb: z.number().positive().max(100_000).optional(),
   /** can agents see and use this device's own screen? `off`: it could, but it's turned off at the device (the default) */
   screen: z.object({
     ok: z.boolean(),

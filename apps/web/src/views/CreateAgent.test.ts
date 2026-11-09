@@ -61,6 +61,8 @@ vi.mock("../store.ts", async (original) => {
     usePrefs: () => ({ sendWith: "enter", experience: "advanced" }),
   };
 });
+// these tests pick where agents run (Advanced)
+vi.mock("../computerMode.ts", () => ({ useComputerMode: () => ({ advanced: true, sharedComputerId: null, loaded: true }) }));
 vi.mock("../api.ts", () => ({ api: vi.fn(), uploadFile: vi.fn(), getToken: () => "token", fileUrl: (id: string) => id, ApiError: class extends Error {} }));
 vi.mock("../theme.ts", () => ({ motionReduced: () => false, useMotionReduced: () => false }));
 vi.mock("../markdown.ts", () => ({ renderMarkdown: (s: string) => s }));
