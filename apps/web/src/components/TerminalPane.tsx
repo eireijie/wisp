@@ -90,6 +90,10 @@ export function TerminalPane({
       const ws = sock.current;
       if (ws?.readyState === WebSocket.OPEN) ws.send(enc.encode(data));
     };
+    // tmux asks the terminal what it is (device attributes) when it attaches; an answer that comes
+    // late, or to a question replayed from the past, lands at the prompt as "1;2c0;276;0c". Nothing
+    // here needs the answer, so the questions go unanswered.
+    const quiet = [{ final: "c" }, { prefix: ">", final: "c" }, { prefix: "=", final: "c" }].map((id) => t.parser.registerCsiHandler(id, () => true));
     const typed = t.onData(send);
     const bin = t.onBinary((data) => {
       const ws = sock.current;
@@ -121,6 +125,7 @@ export function TerminalPane({
     return () => {
       ro.disconnect();
       area?.removeEventListener("beforeinput", lineBreaks, true);
+      for (const q of quiet) q.dispose();
       typed.dispose();
       bin.dispose();
       sized.dispose();
