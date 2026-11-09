@@ -361,7 +361,7 @@ function Shells({ lead, embedded = false, store }: { lead?: ReactNode; embedded?
                           target={target}
                           session={leaf.session}
                           launch={leaf.launch}
-                          title={leaf.launch ? `${harnessLabel(leaf.launch)} · ${leaf.session}` : undefined}
+                          label={leaf.launch ? `${harnessLabel(leaf.launch)} · ${leaf.session}` : undefined}
                           focused={shown && focused}
                           onFocus={() => (t.focus === leaf.key ? undefined : changeTab(t.id, (x) => ({ ...x, focus: leaf.key })))}
                           onClose={() => closePane(leaf.key)}
