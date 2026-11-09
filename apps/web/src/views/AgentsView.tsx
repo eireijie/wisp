@@ -7,7 +7,7 @@ import { useFeatures } from "../features.ts";
 import { AgentDetail, type NodeInfo } from "./AgentSettings.tsx";
 import { agentReadiness, useDevices } from "../devices.ts";
 import { SetupIncomplete, setupNextStep } from "../components/AgentPanel.tsx";
-import { activityPhrase } from "../components/agentActivity.ts";
+import { workingLine } from "../components/agentActivity.ts";
 import { effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { UserAvatarButton } from "../components/Rail.tsx";
 import { AgentAvatar, harnessLabel, cx } from "../components/ui.tsx";
@@ -47,7 +47,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
   /** "Working · Reading main.ts", "Idle", "Offline" */
   const state = (a: (typeof agents)[number]): { text: string; working: boolean } => {
     const run = Object.values(live).find((r) => r.agentId === a.id);
-    if (run) return { text: `Working · ${activityPhrase(run.last?.name, !!run.text)}`, working: true };
+    if (run) return { text: workingLine(run.last?.name, !!run.text), working: true };
     if (a.status === "busy") return { text: "Working", working: true };
     return { text: a.status === "offline" ? "Offline" : "Idle", working: false };
   };

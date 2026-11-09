@@ -135,7 +135,11 @@ ${open.map((f) => `- ${f.id}: ${f.label ?? f.note}${f.label ? ` (${f.note})` : "
     const pills = store.unplacedFollowups(run.id).filter((f) => f.label && f.kind === "followup" && f.status === "pending");
     if (!target || (!parts.length && !pills.length)) return;
     for (const f of pills) store.placeFollowup(f.id, target);
-    this.updateParts(target, (old) => [...old, ...pills.map((f) => pill(f)), ...parts]);
+    // a wrap-up keeps only what the reply doesn't already say, and goes when that's nothing
+    const body = store.message(target)?.body ?? "";
+    const kept = parts.flatMap((p) => (p.type === "wrapup" ? trimWrapUp(p, body) : [p]));
+    if (!kept.length && !pills.length) return;
+    this.updateParts(target, (old) => [...old, ...pills.map((f) => pill(f)), ...kept]);
   }
 
   /** Show a follow-up's latest time and status under the reply that set it. */
@@ -207,3 +211,28 @@ ${open.map((f) => `- ${f.id}: ${f.label ?? f.note}${f.label ? ` (${f.note})` : "
 }
 
 const pill = (f: Followup): MessagePart => ({ type: "followup", followupId: f.id, label: f.label ?? f.note, dueAt: f.dueAt, waitingOn: f.waitingOn, status: f.status });
+
+const STOP = new Set("the and for with that this then them they you your yours our are was were has have had its it's not but can will would just into from about what when where which who all any out off over also than there here been being did done got get".split(" "));
+/** A line's meaningful words, roughly stemmed: "Created and attached notes.md" → creat, attac, notes.md */
+const words = (s: string) =>
+  s
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}.@/-]+/u)
+    .map((w) => w.replace(/^[.\-/]+|[.\-/]+$/g, ""))
+    .filter((w) => w.length >= 3 && !STOP.has(w))
+    .map((w) => (/[./@]/.test(w) ? w : w.slice(0, 5)));
+
+/** True when most of a wrap-up line is already in the reply. Exported for tests. */
+export function repeats(line: string, reply: string): boolean {
+  const mine = words(line);
+  if (!mine.length) return true;
+  const said = new Set(words(reply));
+  return mine.filter((w) => said.has(w)).length / mine.length >= 0.5;
+}
+
+/** A wrap-up without the lines the reply already says; nothing when none are left. */
+export function trimWrapUp(p: Extract<MessagePart, { type: "wrapup" }>, reply: string): MessagePart[] {
+  const keep = (v: string | undefined) => (v && !repeats(v, reply) ? v : "");
+  const out = { ...p, did: keep(p.did), saved: keep(p.saved), next: keep(p.next) };
+  return out.did || out.saved || out.next ? [out] : [];
+}

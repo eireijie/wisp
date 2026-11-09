@@ -96,6 +96,12 @@ struct ActivityPill: View {
 }
 
 enum ActivityText {
+  /** A list row's short busy line: "Running a command", "Writing…", or just "Working". */
+  static func line(_ activity: String?) -> String {
+    guard let text = activity?.trimmed, !text.isEmpty, text != "started" else { return "Working" }
+    return text.prefix(1).uppercased() + text.dropFirst()
+  }
+
   /** "Editing files" → "is editing files"; anything else reads as a status after the name. */
   static func phrase(_ activity: String?) -> String {
     guard var text = activity?.trimmed, !text.isEmpty, text != "started" else { return "is working" }

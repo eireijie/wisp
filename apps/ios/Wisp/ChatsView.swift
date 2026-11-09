@@ -432,7 +432,7 @@ struct ChatRow: View {
       let doing = store.activity[a.id].flatMap { $0 == "started" ? nil : $0 }
       HStack(spacing: 6) {
         WorkingDots(color: Palette.statusWorking)
-        Text(["Working", doing].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 13)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
+        Text(ActivityText.line(doing)).font(.system(size: 13)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
       }
     } else if let agent = workingHere {
       HStack(spacing: 6) {

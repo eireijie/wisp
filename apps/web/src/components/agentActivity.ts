@@ -67,6 +67,12 @@ export function activityPhrase(name: string | null | undefined, writing = false)
   return WORDS[workKind(name)].now;
 }
 
+/** A list row's short busy line: "Running a command", "Searching memory", or just "Working". */
+export function workingLine(name: string | null | undefined, writing = false): string {
+  const t = activityPhrase(name, writing);
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 export interface WorkStep {
   kind: WorkKind;
   text: string;
