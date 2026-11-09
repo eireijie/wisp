@@ -506,7 +506,7 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     "chat_status",
     {
       description:
-        "Say where your DM with the person you work for stands, when it changes. \"waiting\": the next step is theirs (an answer, something they said they'd do); Wisp checks back for you if they go quiet. \"done\": what they asked for is finished; add did/saved/next when real work got done and they'll see a short wrap-up. \"open\": anything else. \"closed\": you're dropping it after they didn't answer.",
+        "Say where your DM with the person you work for stands, when it changes. \"waiting\": the next step is theirs (an answer, something they said they'd do); Wisp checks back for you if they go quiet. \"done\": what they asked for is finished; add did/saved/next only for what your reply doesn't already say (a wrap-up card shows them; lines your reply repeats are dropped). \"open\": anything else. \"closed\": you're dropping it after they didn't answer.",
       inputSchema: {
         status: z.enum(["open", "waiting", "done", "closed"]),
         summary: z.string().optional().describe("what's open, in their words: \"send Sam the deck\""),

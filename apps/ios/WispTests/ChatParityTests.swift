@@ -103,7 +103,7 @@ final class ChatParityTests: XCTestCase {
     }
     XCTAssertEqual(store.activitySteps["a1"], ["Searching memory", "Browsing", "Running a command", "Sending a file"])
     XCTAssertEqual(store.activity["a1"], "Sending a file")
-    XCTAssertEqual(WorkLabel.of(tool: "shell", file: nil, activity: "Running a command"), "Running a command…")
+    XCTAssertEqual(ActivityText.line(store.activity["a1"]), "Sending a file")
     XCTAssertEqual(ActivityText.phrase("Using its computer"), "is using its computer")
     XCTAssertEqual(store.liveRuns["r1"]?.text ?? "", "")
   }

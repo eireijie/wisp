@@ -180,40 +180,10 @@ struct PulseDots: View {
   }
 }
 
-enum WorkLabel {
-  /** "Reading main.ts", "Writing notes/release.md", or what the agent's last status said. */
-  static func of(tool: String?, file: String?, activity: String?) -> String {
-    if let tool, let file, !file.isEmpty {
-      let name = (file as NSString).lastPathComponent
-      switch ToolLine.key(tool) {
-      case "read", "file_view", "view", "cat", "read_file", "open_file": return "Reading \(name)"
-      case "edit", "multiedit", "write", "apply_patch", "str_replace", "str_replace_editor", "write_file", "edit_file", "create_file": return "Writing \(name)"
-      default: break
-      }
-    }
-    guard let a = activity?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty, a != "started" else { return "Thinking…" }
-    return a.hasSuffix("…") ? a : a + "…"
-  }
-}
-
-/** The grey bubble an agent shows while it works: three pulsing dots and what it's doing. */
-struct WorkingBubble: View {
-  var label: String
-
-  var body: some View {
-    HStack(spacing: 10) {
-      PulseDots()
-      Text(label).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
-    }
-    .padding(.horizontal, 16)
-    .padding(.vertical, 13)
-    .background(BubbleShape(mine: false).fill(Palette.bubble))
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(label)
-  }
-}
-
-/** An agent's reply as it's being written: its words so far, then the working bubble. */
+/**
+ * An agent's reply as it's being written: its words so far. What it's doing shows once, in the
+ * activity pill above the message bar (with Stop), not again here.
+ */
 struct StreamingRow: View {
   @Environment(Store.self) private var store
   var run: LiveRun
@@ -223,18 +193,19 @@ struct StreamingRow: View {
   }
 
   var body: some View {
-    HStack(alignment: .bottom, spacing: 8) {
-      if !home { AgentAvatar(agent: store.agent(run.agentId), size: 24, showStatus: false).frame(width: 24) }
-      VStack(alignment: .leading, spacing: 3) {
-        if !home { Text(store.agent(run.agentId)?.name ?? "Agent").font(.system(size: 12)).foregroundStyle(Palette.faint).padding(.leading, 14) }
-        if !run.text.isEmpty { Bubble(side: .theirs) { MarkdownText(run.text) } }
-        WorkingBubble(label: WorkLabel.of(tool: run.tool, file: run.file, activity: store.activity[run.agentId]))
+    if !run.text.isEmpty {
+      HStack(alignment: .bottom, spacing: 8) {
+        if !home { AgentAvatar(agent: store.agent(run.agentId), size: 24, showStatus: false).frame(width: 24) }
+        VStack(alignment: .leading, spacing: 3) {
+          if !home { Text(store.agent(run.agentId)?.name ?? "Agent").font(.system(size: 12)).foregroundStyle(Palette.faint).padding(.leading, 14) }
+          Bubble(side: .theirs) { MarkdownText(run.text) }
+        }
+        Spacer(minLength: 40)
       }
-      Spacer(minLength: 40)
+      .padding(.horizontal, 16)
+      .padding(.top, 8)
+      .padding(.bottom, 4)
     }
-    .padding(.horizontal, 16)
-    .padding(.top, 8)
-    .padding(.bottom, 4)
   }
 }
 
