@@ -217,7 +217,26 @@ export interface Agent {
   computerId: string | null;
   settings: AgentSettings;
   status: "online" | "busy" | "offline";
+  /**
+   * Set (by the hub, on agents it sends) when its harness is known not to be signed in where it
+   * runs, so it can't answer until someone signs in there: missing or null when it is, or when
+   * nobody can tell yet.
+   */
+  signIn?: AgentSignIn | null;
   createdAt: string;
+}
+
+/** Where an agent's harness needs signing in before it can answer. */
+export interface AgentSignIn {
+  harness: string;
+  /** the device, or the agent's own computer (a VM), its harness runs on: its name */
+  where: string;
+  /** the device it runs on, or the device the VM is on */
+  nodeId: string;
+  /** set when it runs inside its own computer (a VM): sign-in happens on that computer's screen */
+  computerId: string | null;
+  /** the harness account it uses on the device ("default" unless picked) */
+  account: string;
 }
 
 export interface Channel {

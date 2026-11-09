@@ -110,7 +110,7 @@ export function agentSignedIn(agent: Pick<Agent, "id" | "harness" | "settings" |
  * back up: while devices are loading, or the device or its harness list is unknown, it's ready.
  * Agents that join from outside (mcp) and harnesses placed in a computer need no device install.
  */
-export function agentReadiness(agent: Pick<Agent, "id" | "nodeId" | "harness" | "settings" | "computerId">, devices: DeviceInfo[] | null): { ready: boolean; problem: string | null } {
+export function agentReadiness(agent: Pick<Agent, "id" | "nodeId" | "harness" | "settings" | "computerId"> & Partial<Pick<Agent, "signIn">>, devices: DeviceInfo[] | null): { ready: boolean; problem: string | null } {
   const ok = { ready: true, problem: null };
   const no = (problem: string) => ({ ready: false, problem });
   if (harnessInfo(agent.harness)?.protocol === "mcp") return ok;
@@ -121,7 +121,8 @@ export function agentReadiness(agent: Pick<Agent, "id" | "nodeId" | "harness" | 
   if (device.paused) return no(`${device.name} is paused`);
   const reported = device.harnesses ?? [];
   if (reported.length && !(runsInVm(agent.harness) && agent.settings?.runIn === "computer" && agent.computerId) && !reported.some((h) => h.id === agent.harness)) return no(`${harnessLabel(agent.harness)} isn't installed on ${device.name}`);
-  if (agentSignedIn(agent, device) === false) return no(`${harnessLabel(agent.harness)} isn't signed in`);
+  // the hub's word (its device or its own computer), else what the device list says
+  if (agent.signIn || agentSignedIn(agent, device) === false) return no(`${harnessLabel(agent.harness)} isn't signed in`);
   return ok;
 }
 

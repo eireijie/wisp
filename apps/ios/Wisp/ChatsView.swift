@@ -439,6 +439,8 @@ struct ChatRow: View {
         WorkingDots(color: Palette.statusWorking)
         Text("\(agent.name) is working").font(.system(size: 13)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
       }
+    } else if case .agent(let a) = entry.kind, let live = store.agent(a.id) ?? Optional(a), live.needsSignIn, let signIn = live.signIn {
+      Text("Needs sign-in · \(HarnessChoice.label(signIn.harness)) on \(signIn.where_)").font(.system(size: 13)).foregroundStyle(Palette.statusNeedsText).lineLimit(1)
     } else if let waiting = needsApproval {
       Text("Needs approval" + (waiting.isEmpty ? "" : " · \(waiting)")).font(.system(size: 13)).foregroundStyle(Palette.statusNeedsText).lineLimit(1)
     } else if let line = channel.flatMap({ Loops.listLine($0) }) {

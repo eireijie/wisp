@@ -106,7 +106,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
       <span className="size-[7px] rounded-full bg-ok" /> Working
     </span>
   ) : (
-    <StatusChip status={agent.status} />
+    <StatusChip status={agent.status} needsSignIn={!!agent.signIn} />
   );
 
   const link = (id: AgentTab, label: string, icon: ReactNode) => {

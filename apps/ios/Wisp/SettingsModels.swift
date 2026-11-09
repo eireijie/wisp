@@ -180,6 +180,20 @@ struct HarnessLogin: Decodable {
   var code: String?
   var error: String?
   var manual: String?
+  /** what the sign-in printed (secrets taken out) */
+  var output: String?
+
+  /**
+   * What it printed after a code was sent (its answer, like "Invalid code. Please make sure the full
+   * code was copied."): its last line, without the prompt it asks again with. Mirrors replyAfter on web.
+   */
+  static func replyAfter(_ before: String, _ now: String) -> String {
+    let added = now.hasPrefix(before) ? String(now.dropFirst(before.count)) : now.components(separatedBy: "\n").suffix(2).joined(separator: "\n")
+    let lines = added.components(separatedBy: "\n")
+      .map { $0.replacingOccurrences(of: #"Paste code here if prompted\s*>?"#, with: "", options: [.regularExpression, .caseInsensitive]).trimmingCharacters(in: .whitespaces) }
+      .filter { !$0.isEmpty }
+    return String((lines.last ?? "").prefix(300))
+  }
 }
 
 struct HarnessSkillFile: Decodable { var name: String; var description: String; var content: String }

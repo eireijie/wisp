@@ -283,8 +283,27 @@ describe("a new agent speaks first", () => {
     const [hello] = said(id);
     expect(hello.body).toMatch(/^Hey, I'm Hal!/);
     expect(hello.body).toContain("needs to be signed in on box");
-    expect(hello.body).toContain("Settings → Harnesses");
+    expect(hello.body).toContain("Press Sign in in this chat");
     expect(hello.parts).toEqual([]);
+    // the agent itself says so too, before anyone writes, so apps don't show it as ready
+    const agents = await owner.request<{ id: string; signIn: unknown }[]>("GET", "/api/agents");
+    expect(agents.find((a) => a.id === id)?.signIn).toEqual({ harness: "claude-code", where: "box", nodeId, computerId: null, account: "default" });
+  });
+
+  it("knows an agent in its own computer can't answer when its harness isn't signed in in there, whatever the device says", async () => {
+    const id = await make("vic", { harness: "codex" });
+    const ws = hub.store.agent(id)!.workspaceId;
+    const comp = hub.store.createComputer({ workspaceId: ws, name: "Vic's computer", kind: "vm", nodeId, config: { cpus: 2, memoryGb: 4 }, status: "ready" });
+    hub.store.updateAgent(id, { computerId: comp.id, settings: { runIn: "computer" } });
+    // not listed yet: nobody can tell, so nothing is claimed
+    expect(hub.signInNeeded(hub.store.agent(id)!)).toBeNull();
+    hub.store.setComputerCatalog(nodeId, comp.id, [{ harness: "codex", version: "1", models: [], accounts: { default: false } } as never]);
+    expect(hub.signInNeeded(hub.store.agent(id)!)).toEqual({ harness: "codex", where: "Vic's computer", nodeId, computerId: comp.id, account: "default" });
+    // a model connection brings its own sign-in
+    expect(hub.signInNeeded({ ...hub.store.agent(id)!, settings: { ...hub.store.agent(id)!.settings, connectionId: "mc_1" } })).toBeNull();
+    hub.store.setComputerCatalog(nodeId, comp.id, [{ harness: "codex", version: "1", models: [], accounts: { default: true } } as never]);
+    expect(hub.signInNeeded(hub.store.agent(id)!)).toBeNull();
+    hub.store.updateAgent(id, { computerId: null });
   });
 
   it("greets whoever its maker works for when an agent makes one", async () => {

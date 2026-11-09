@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential } from "@wisp/core";
+import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential, type AgentSignIn } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Logins } from "./logins.ts";
@@ -386,6 +386,24 @@ export class Hub {
     return vm ?? this.store.nodeCatalog(agent.nodeId);
   }
 
+  /**
+   * Where the agent's harness has to be signed in before it can answer, when Wisp knows it isn't:
+   * on its device, or inside its own computer (a VM) when it runs there. null when it's signed in,
+   * runs on a model connection (which brings its own sign-in), or nobody can tell yet.
+   */
+  signInNeeded(agent: Pick<Agent, "id" | "nodeId" | "computerId" | "harness" | "settings">): AgentSignIn | null {
+    if (!agent.nodeId || agent.settings.connectionId || harnessInfo(agent.harness)?.protocol === "mcp") return null;
+    if (this.runsInComputer(agent)) {
+      const comp = this.store.computer(agent.computerId!)!;
+      const here = this.store.computerCatalog(agent.nodeId, comp.id)?.find((h) => h.harness === agent.harness);
+      return here?.accounts?.default === false ? { harness: agent.harness, where: comp.name, nodeId: agent.nodeId, computerId: comp.id, account: "default" } : null;
+    }
+    const here = this.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness);
+    const account = here?.agentAccounts?.[agent.id] ?? "default";
+    if (here?.accounts?.[account] !== false) return null;
+    return { harness: agent.harness, where: this.store.node(agent.nodeId)?.name ?? "its device", nodeId: agent.nodeId, computerId: null, account };
+  }
+
   /** The catalog an agent's models, efforts and "/" commands come from: its harness where it runs. */
   catalogFor(agent: Pick<Agent, "nodeId" | "computerId" | "harness" | "settings">): HarnessCatalog | undefined {
     return this.harnessesWhere(agent).find((h) => h.harness === agent.harness);
@@ -613,13 +631,15 @@ export class Hub {
         return;
       }
       case "catalog": {
+        // what it says about sign-ins changes whether its agents can answer: apps show that before anyone writes
+        const agents = store.agentsOnNode(conn.nodeId);
+        const before = JSON.stringify(agents.map((a) => this.signInNeeded(a)));
         // a VM's harnesses only for a VM of this device
         if (msg.computerId) {
           const c = store.computer(msg.computerId);
           if (c?.kind === "vm" && c.nodeId === conn.nodeId) store.setComputerCatalog(conn.nodeId, c.id, msg.catalog);
-          return;
-        }
-        store.setNodeCatalog(conn.nodeId, msg.catalog);
+        } else store.setNodeCatalog(conn.nodeId, msg.catalog);
+        if (JSON.stringify(agents.map((a) => this.signInNeeded(a))) !== before) this.broadcast(conn.workspaceId, { type: "agents_changed" });
         return;
       }
       case "credential_refreshed": {
