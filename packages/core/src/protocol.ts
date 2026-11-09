@@ -261,6 +261,8 @@ export const HubToNode = z.discriminatedUnion("type", [
     launch: z.string().max(40).optional(),
     /** the model sign-in that CLI uses */
     credential: RunCredential.optional(),
+    /** a VM's agents run that harness on this device, signed in there: its name */
+    harnessOn: z.string().max(120).optional(),
     /** the owner took the keyboard: the shell is this agent's own harness session for that thread, resumed */
     takeover: z.object({ agentId: z.string(), channelId: z.string(), threadId: z.string().nullable() }).optional(),
   }),

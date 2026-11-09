@@ -125,7 +125,7 @@ export class Terminals {
     });
     const cols = Math.max(2, Math.min(1000, Math.floor(size.cols) || 80));
     const rows = Math.max(1, Math.min(500, Math.floor(size.rows) || 24));
-    if (!this.hub.sendToNode(c.nodeId, { type: "term_open", termId, computer: this.hub.computers.spec(c), session: t.session, cols, rows, code: t.code, ...(t.takeover ? { takeover: t.takeover } : {}), ...(t.launch ? { launch: t.launch } : {}), ...(t.credential ? { credential: t.credential } : {}) })) {
+    if (!this.hub.sendToNode(c.nodeId, { type: "term_open", termId, computer: this.hub.computers.spec(c), session: t.session, cols, rows, code: t.code, ...(t.takeover ? { takeover: t.takeover } : {}), ...(t.launch ? { launch: t.launch } : {}), ...(t.credential ? { credential: t.credential } : {}), ...(t.launch && !t.credential ? harnessOn(this.hub, c, t.launch) : {}) })) {
       this.open.delete(termId);
       return socket.close(4503, "device offline");
     }
@@ -204,4 +204,15 @@ export class Terminals {
   private sweep() {
     for (const [t, ticket] of this.tickets) if (ticket.expires < Date.now()) this.tickets.delete(t);
   }
+}
+
+/**
+ * A VM's agents can run their harness on a device and only use the VM as their screen: then their
+ * sign-in lives on that device, not in the VM. Its name, for the pane to say where to go instead.
+ */
+export function harnessOn(hub: Hub, c: Computer, harness: string): { harnessOn?: string } {
+  if (c.kind !== "vm") return {};
+  const agent = hub.store.agents(c.workspaceId).find((a) => a.harness === harness && a.computerId === c.id && a.nodeId && !hub.runsInComputer(a));
+  const name = agent?.nodeId ? hub.store.node(agent.nodeId)?.name : undefined;
+  return name ? { harnessOn: name } : {};
 }
