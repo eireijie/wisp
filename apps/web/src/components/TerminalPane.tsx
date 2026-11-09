@@ -81,6 +81,17 @@ export function TerminalPane({ target, session, onClose, focused, onFocus }: { t
       const ws = sock.current;
       if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "resize", cols, rows }));
     });
+    // text that arrives without key presses (dictation, phone keyboards, automation) carries its line
+    // breaks as "insertLineBreak", which xterm drops: send them as Enter, like a pressed Return
+    const area = holder.current!.querySelector("textarea");
+    const lineBreaks = (e: InputEvent) => {
+      const text = e.inputType === "insertLineBreak" || e.inputType === "insertParagraph" ? "\n" : e.inputType === "insertText" ? e.data ?? "" : "";
+      if (!/[\r\n]/.test(text)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      t.input(text.replace(/\r?\n/g, "\r"));
+    };
+    area?.addEventListener("beforeinput", lineBreaks, true);
     const refit = () => {
       try {
         fit.fit();
@@ -91,6 +102,7 @@ export function TerminalPane({ target, session, onClose, focused, onFocus }: { t
     ro.observe(holder.current!);
     return () => {
       ro.disconnect();
+      area?.removeEventListener("beforeinput", lineBreaks, true);
       typed.dispose();
       bin.dispose();
       sized.dispose();

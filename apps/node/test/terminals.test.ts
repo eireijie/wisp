@@ -120,7 +120,7 @@ describe("which shell opens", () => {
 
   it("uses tmux on the device when it's there, otherwise the person's shell", () => {
     const env = { SHELL: "/bin/sh" };
-    expect(deviceShell("main", { platform: "linux", env, has: () => true })).toMatchObject({ file: "tmux", args: ["new-session", "-A", "-s", "wisp-main"] });
+    expect(deviceShell("main", { platform: "linux", env, has: () => true })).toMatchObject({ file: "tmux", args: ["new-session", "-A", "-s", "wisp-main", ";", "set-option", "-t", "wisp-main", "status", "off"] });
     expect(deviceShell("main", { platform: "linux", env, has: () => false })).toMatchObject({ file: "/bin/sh", args: ["-l"] });
     expect(deviceShell("main", { platform: "win32", env, has: () => false }).file).toBe("powershell.exe");
   });

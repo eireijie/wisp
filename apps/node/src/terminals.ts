@@ -64,7 +64,8 @@ export function deviceShell(session: string, opts: { platform?: NodeJS.Platform;
   if (has("tmux"))
     return {
       file: "tmux",
-      args: ["new-session", "-A", "-s", `wisp-${session}`],
+      // Wisp's pane header already names the computer, so tmux's status bar goes (for Wisp's sessions only)
+      args: ["new-session", "-A", "-s", `wisp-${session}`, ";", "set-option", "-t", `wisp-${session}`, "status", "off"],
       cwd,
       env: { SHELL: shell },
       stop: () => void execFile("tmux", ["kill-session", "-t", `wisp-${session}`], () => {}),
@@ -74,7 +75,7 @@ export function deviceShell(session: string, opts: { platform?: NodeJS.Platform;
 
 /** Inside a VM: tmux when the image has it, otherwise a login bash. */
 export function vmShell(vm: { bin: string; name: string; user: string; home: string }, session: string): ShellCommand {
-  const script = 'command -v tmux >/dev/null 2>&1 && exec tmux new-session -A -s "wisp-$1"; exec bash -l';
+  const script = 'command -v tmux >/dev/null 2>&1 && exec tmux new-session -A -s "wisp-$1" \\; set-option -t "wisp-$1" status off; exec bash -l';
   return {
     file: vm.bin,
     args: ["exec", "-i", "-t", "-u", vm.user, "-w", vm.home, "-e", `HOME=${vm.home}`, "-e", "TERM=xterm-256color", "-e", "DISPLAY=:1", vm.name, "sh", "-c", script, "sh", session],
