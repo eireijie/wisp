@@ -11,20 +11,13 @@ struct LiveRun: Identifiable, Equatable {
   var tool: String?
   var file: String?
 
-  /** Add what a run event says, the way the web does: text appends, status lines and errors get their own line. */
+  /**
+   * Add what a run event says. Only the agent's own words go into the reply text; a tool call
+   * moves the working line, and tool output, statuses and errors never land in the bubble.
+   */
   mutating func apply(type: String, text new: String?, tool newTool: String? = nil, file newFile: String? = nil) {
     if type == "tool_call", let newTool { tool = newTool; file = newFile }
-    guard let new, !new.isEmpty else { return }
-    switch type {
-    case "text":
-      text += new
-    case "status", "notice", "error":
-      if type == "status" && new == "started" { return }
-      let line = type == "error" ? "Error: \(new)" : new
-      text += (text.isEmpty || text.hasSuffix("\n") ? "" : "\n") + line + "\n"
-    default:
-      break
-    }
+    if type == "text", let new { text += new }
   }
 }
 

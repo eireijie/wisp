@@ -192,7 +192,6 @@ enum WorkLabel {
       }
     }
     guard let a = activity?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty, a != "started" else { return "Thinking…" }
-    if a.hasPrefix("Using ") { return "\(String(a.dropFirst(6)))…" }
     return a.hasSuffix("…") ? a : a + "…"
   }
 }

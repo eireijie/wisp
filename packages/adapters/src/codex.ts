@@ -266,9 +266,13 @@ export const codex: HarnessAdapter = {
       if (t) tokens = { inputTokens: (tokens?.inputTokens ?? 0) + t.inputTokens, outputTokens: (tokens?.outputTokens ?? 0) + t.outputTokens, cachedInputTokens: (tokens?.cachedInputTokens ?? 0) + t.cachedInputTokens };
       for (const e of parseCodexLine(m)) {
         if (e.type === "session") sessionId = e.id;
-        if (e.type === "text") finalText = e.text; // the last agent message is the reply
         if (e.type === "error") error = e.message;
-        onEvent(e);
+        if (e.type === "text") {
+          // each agent message is whole: keep the ones before the reply apart from it while streaming
+          const spaced = finalText ? { ...e, text: `\n\n${e.text}` } : e;
+          finalText = e.text; // the last agent message is the reply
+          onEvent(spaced);
+        } else onEvent(e);
       }
     });
 

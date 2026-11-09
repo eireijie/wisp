@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -671,19 +672,42 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     }),
   );
 
+  /**
+   * A file the agent made: read where it runs, else (a path only its computer has, like
+   * ~/files/notes.md in its VM, or any path on the remote endpoint) from its computer.
+   */
+  const readMine = async (p: string): Promise<{ name: string; data: Uint8Array }> => {
+    if (opts.localFiles !== false) {
+      const local = p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p;
+      try {
+        return { name: path.basename(local), data: await fs.readFile(local) };
+      } catch (err) {
+        if (!["ENOENT", "ENOTDIR", "EACCES"].includes((err as NodeJS.ErrnoException).code ?? "")) throw err;
+      }
+    }
+    const comp = await client.myComputer().catch(() => null);
+    if (!comp) throw new Error(`There's no file at ${p}.`);
+    const f = await client.computer<{ name: string; data: string }>({ action: "file_read", path: p });
+    return { name: f.name, data: Buffer.from(f.data, "base64") };
+  };
+
+  server.registerTool(
+    "file_upload",
+    {
+      description:
+        "Send a file you made (a report, an image, a spreadsheet; up to 100 MB) to the person you're answering: it's attached to your reply in this chat. Give its path where you work or on your computer. Returns a file id, which you can also put in chat_send's file_ids or a task. Only say a file is attached after this succeeds.",
+      inputSchema: { local_path: z.string().describe('the file\'s path, e.g. "~/files/report.pdf"'), channel: z.string().optional().describe("only for a file meant for another chat; post it there with chat_send's file_ids") },
+    },
+    safe(async ({ local_path, channel }) => {
+      const f = await readMine(local_path);
+      const ch = channel ? await resolveChannel(channel) : undefined;
+      const up = await client.uploadFile(f.name, f.data, guessMime(f.name), ch?.id);
+      return text(`Sent ${up.name} (${up.size} bytes, file id ${up.id}).${ch ? ` To post it in ${ch.name}, use chat_send with file_ids ["${up.id}"].` : " It's attached to your reply."}`);
+    }),
+  );
+
   // the remote endpoint runs on the hub, whose files aren't the caller's
   if (opts.localFiles !== false) {
-    server.registerTool(
-      "file_upload",
-      { description: "Upload a local file to Wisp so other agents and people can get it. Returns a file id to attach to messages or tasks.", inputSchema: { local_path: z.string(), channel: z.string().optional() } },
-      safe(async ({ local_path, channel }) => {
-        const data = await fs.readFile(local_path);
-        const ch = channel ? await resolveChannel(channel) : undefined;
-        const f = await client.uploadFile(path.basename(local_path), data, guessMime(local_path), ch?.id);
-        return text(`Uploaded ${f.name} as ${f.id} (${f.size} bytes).`);
-      }),
-    );
-
     server.registerTool(
       "file_download",
       { description: "Download a Wisp file by id into a local directory.", inputSchema: { file_id: z.string(), dest_dir: z.string().optional() } },
