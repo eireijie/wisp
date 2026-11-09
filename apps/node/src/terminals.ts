@@ -26,6 +26,8 @@ export interface ShellCommand {
   env?: Record<string, string>;
   /** ends what outlives the pty (its tmux session), when the shell is closed for good */
   stop?: () => void;
+  /** it's tmux, which redraws the whole screen for a viewer that comes back, so nothing is replayed */
+  redraws?: boolean;
 }
 
 export interface Pty {
@@ -42,6 +44,9 @@ interface Shell {
   key: string;
   pty: Pty;
   stop?: () => void;
+  redraws?: boolean;
+  /** the size its viewer asked for last */
+  size?: { cols: number; rows: number };
   replay: Buffer[];
   replayBytes: number;
   viewer: { id: string; send: (b: Buffer) => void; closed: (err?: string, exited?: boolean) => void } | null;
@@ -53,32 +58,54 @@ export function sessionName(raw: string): string {
   return (raw.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "main").slice(0, 40);
 }
 
-/** The shell to open on this device itself: tmux when it's here, otherwise the person's own shell. */
-export function deviceShell(session: string, opts: { platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv; has?: (bin: string) => boolean } = {}): ShellCommand {
+/** A word that's safe inside single quotes in sh. */
+const sq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/**
+ * The shell to open on this device itself: tmux when it's here, otherwise the person's own shell.
+ * With `launch` (a harness's command, from Wisp's own list) the pane starts in that CLI, and
+ * drops to a shell when it quits.
+ */
+export function deviceShell(session: string, opts: { platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv; has?: (bin: string) => boolean; launch?: string } = {}): ShellCommand {
   const platform = opts.platform ?? process.platform;
   const env = opts.env ?? process.env;
   const has = opts.has ?? onPath;
   const cwd = os.homedir();
-  if (platform === "win32") return { file: has("pwsh.exe") ? "pwsh.exe" : "powershell.exe", args: ["-NoLogo"], cwd };
+  const launch = opts.launch;
+  if (platform === "win32") {
+    const ps = has("pwsh.exe") ? "pwsh.exe" : "powershell.exe";
+    return { file: ps, args: launch ? ["-NoLogo", "-NoExit", "-Command", launch] : ["-NoLogo"], cwd };
+  }
   const shell = env.SHELL && fs.existsSync(env.SHELL) ? env.SHELL : platform === "darwin" ? "/bin/zsh" : "/bin/bash";
+  // a login shell, so the CLI is found where the person's own PATH has it
+  const run = launch ? `${sq(shell)} -lc ${sq(`${launch}; exec ${sq(shell)} -l`)}` : null;
   if (has("tmux"))
     return {
       file: "tmux",
       // Wisp's pane header already names the computer, so tmux's status bar goes (for Wisp's sessions only)
-      args: ["new-session", "-A", "-s", `wisp-${session}`, ";", "set-option", "-t", `wisp-${session}`, "status", "off"],
+      args: ["new-session", "-A", "-s", `wisp-${session}`, ...(run ? [run] : []), ";", "set-option", "-t", `wisp-${session}`, "status", "off"],
       cwd,
       env: { SHELL: shell },
       stop: () => void execFile("tmux", ["kill-session", "-t", `wisp-${session}`], () => {}),
+      redraws: true,
     };
-  return { file: shell, args: ["-l"], cwd };
+  return launch ? { file: shell, args: ["-lc", `${launch}; exec ${sq(shell)} -l`], cwd } : { file: shell, args: ["-l"], cwd };
 }
 
-/** Inside a VM: tmux when the image has it, otherwise a login bash. */
-export function vmShell(vm: { bin: string; name: string; user: string; home: string }, session: string): ShellCommand {
-  const script = 'command -v tmux >/dev/null 2>&1 && exec tmux new-session -A -s "wisp-$1" \\; set-option -t "wisp-$1" status off; exec bash -l';
+/** Inside a VM: tmux when the image has it, otherwise a login bash; `launch` as for the device. */
+export function vmShell(vm: { bin: string; name: string; user: string; home: string }, session: string, launch?: string): ShellCommand {
+  const script = [
+    'L="$2"',
+    'if command -v tmux >/dev/null 2>&1; then',
+    '  if [ -n "$L" ]; then exec tmux new-session -A -s "wisp-$1" "$L; exec bash -l" \\; set-option -t "wisp-$1" status off; fi',
+    '  exec tmux new-session -A -s "wisp-$1" \\; set-option -t "wisp-$1" status off',
+    "fi",
+    '[ -n "$L" ] && $L',
+    "exec bash -l",
+  ].join("\n");
   return {
     file: vm.bin,
-    args: ["exec", "-i", "-t", "-u", vm.user, "-w", vm.home, "-e", `HOME=${vm.home}`, "-e", "TERM=xterm-256color", "-e", "DISPLAY=:1", vm.name, "sh", "-c", script, "sh", session],
+    args: ["exec", "-i", "-t", "-u", vm.user, "-w", vm.home, "-e", `HOME=${vm.home}`, "-e", "TERM=xterm-256color", "-e", "DISPLAY=:1", vm.name, "sh", "-c", script, "sh", session, launch ?? ""],
     stop: () => void execFile(vm.bin, ["exec", "-u", vm.user, vm.name, "sh", "-c", 'command -v tmux >/dev/null 2>&1 && tmux kill-session -t "wisp-$1"', "sh", session], () => {}),
   };
 }
@@ -153,7 +180,7 @@ export class Terminals {
         pty.kill();
         shell = raced;
       } else {
-        const s: Shell = { key, pty, stop: cmd.stop, replay: [], replayBytes: 0, viewer: null, timer: null };
+        const s: Shell = { key, pty, stop: cmd.stop, redraws: cmd.redraws, replay: [], replayBytes: 0, viewer: null, timer: null };
         shell = s;
         this.shells.set(key, s);
         pty.onData((text) => {
@@ -188,8 +215,19 @@ export class Terminals {
     const s = shell;
     const replay = () => {
       if (!resumed || s.viewer?.id !== viewerId) return;
+      const cols = clamp(size.cols, 2, 1000);
+      const rows = clamp(size.rows, 1, 500);
+      s.size = { cols, rows };
+      if (s.redraws) {
+        // tmux draws the screen afresh at the new size, cleaner than output recorded at an old one;
+        // a size change is what makes it, even when the size is the same as before. Back to the
+        // size asked for last, which the page may have changed meanwhile.
+        s.pty.resize(cols, Math.max(1, rows - 1));
+        setTimeout(() => s.viewer?.id === viewerId && s.size && s.pty.resize(s.size.cols, s.size.rows), 250).unref?.();
+        return;
+      }
       for (const b of s.replay) send(b);
-      s.pty.resize(clamp(size.cols, 2, 1000), clamp(size.rows, 1, 500));
+      s.pty.resize(cols, rows);
     };
     return { resumed, replay };
   }
@@ -200,7 +238,10 @@ export class Terminals {
   }
 
   resize(viewerId: string, cols: number, rows: number) {
-    this.byViewer(viewerId)?.pty.resize(clamp(cols, 2, 1000), clamp(rows, 1, 500));
+    const s = this.byViewer(viewerId);
+    if (!s) return;
+    s.size = { cols: clamp(cols, 2, 1000), rows: clamp(rows, 1, 500) };
+    s.pty.resize(s.size.cols, s.size.rows);
   }
 
   /** The viewer went away. `end`: they closed the pane, so the shell stops too; otherwise it waits for them. */

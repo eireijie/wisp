@@ -4,6 +4,7 @@ import { api } from "../api.ts";
 import { href } from "../router.ts";
 import { Menu, agentColor, cx, timeAgo } from "../components/ui.tsx";
 import { TerminalPane, type ShellTarget } from "../components/TerminalPane.tsx";
+import { ShellWorkspace } from "../code/ShellWorkspace.tsx";
 import { useFeatures } from "../features.ts";
 import { useStore } from "../store.ts";
 import { AgentPane, GhostIcon, STATE_COLOR } from "../code/AgentPane.tsx";
@@ -64,8 +65,11 @@ export function CodeView() {
   const { tasks, error } = useCodeTasks();
   const [targets, setTargets] = useState<ShellTarget[] | null>(null);
   const [selected, setSelected] = useState<string>(() => load("wisp.code.task", SHELLS));
-  // Phase 1 kept Shells' panes under "wisp.code.panes"; they carry on here
-  const [shells, setShells] = useState<Record<string, Shell[]>>(() => ({ ...load<Record<string, Shell[]>>("wisp.code.shells", {}), [SHELLS]: load<Shell[]>("wisp.code.panes", []) }));
+  // shells opened beside a task's agents; Shells itself is the tmux-style workspace (ShellWorkspace), stored on its own
+  const [shells, setShells] = useState<Record<string, Shell[]>>(() => {
+    const { [SHELLS]: _plain, ...rest } = load<Record<string, Shell[]>>("wisp.code.shells", {});
+    return rest;
+  });
   const [focus, setFocus] = useState<Record<string, string>>(() => load("wisp.code.focus", {}));
   const [layout, setLayout] = useState<Layout>(() => load("wisp.code.layout", "main"));
   // on a phone the list opens over the panes, so it starts closed
@@ -107,9 +111,7 @@ export function CodeView() {
 
   useEffect(() => save("wisp.code.task", selected), [selected]);
   useEffect(() => {
-    const { [SHELLS]: plain, ...rest } = shells;
-    save("wisp.code.panes", plain ?? []);
-    save("wisp.code.shells", rest);
+    save("wisp.code.shells", shells);
   }, [shells]);
   useEffect(() => save("wisp.code.focus", focus), [focus]);
   useEffect(() => save("wisp.code.layout", layout), [layout]);
@@ -183,6 +185,9 @@ export function CodeView() {
         e.stopPropagation();
         f();
       };
+      // Shells is the tmux-style workspace, which has its own split, pane and zoom keys
+      const own = !task && (e.key.toLowerCase() === "d" || e.key === "Enter" || /^[1-9]$/.test(e.key));
+      if (mod && own) return;
       if (mod && !e.shiftKey && !e.altKey) {
         const n = Number(e.key);
         if (n >= 1 && n <= 9 && paneIds[n - 1]) return take(() => setFocused(paneIds[n - 1]));
@@ -250,7 +255,7 @@ export function CodeView() {
       if (t) items.push({ id: `shell:${a.id}`, label: `Open a shell on ${a.name}'s computer`, sub: t.name, icon: <SquareTerminal size={13} />, run: () => addShell(t, task?.root.title) });
     });
     items.push({ id: "new", label: "New task", keys: `${MOD}N`, icon: <Plus size={13} />, run: () => setSheet(true) });
-    (targets ?? []).forEach((t) => items.push({ id: `sh:${t.id}`, label: `New shell on ${t.name}`, icon: <SquareTerminal size={13} />, run: () => addShell(t) }));
+    if (task) (targets ?? []).forEach((t) => items.push({ id: `sh:${t.id}`, label: `New shell on ${t.name}`, icon: <SquareTerminal size={13} />, run: () => addShell(t) }));
     items.push({ id: "shells", label: "Shells", sub: "plain terminals on your computers", icon: <SquareTerminal size={13} />, run: () => setSelected(SHELLS) });
     (tasks ?? []).forEach((t) => items.push({ id: `task:${t.root.id}`, label: t.root.title, sub: repoName(t.team.repo), icon: <span className="h-[7px] w-[7px] rounded-full" style={{ background: STATE_COLOR[t.state] }} />, run: () => setSelected(t.root.id) }));
     items.push({ id: "list", label: listOpen ? "Hide the task list" : "Show the task list", keys: `${MOD}B`, icon: <PanelLeft size={13} />, run: () => setListOpen((v) => !v) });
@@ -290,6 +295,21 @@ export function CodeView() {
           />
         </>
       )}
+      {!task ? (
+        <main className="flex min-w-0 flex-1 flex-col">
+          <ShellWorkspace
+            embedded
+            lead={
+              <>
+                <button type="button" onClick={() => setListOpen((v) => !v)} aria-label={showList ? "Hide the task list" : "Show the task list"} title={`Tasks  ${MOD}B`} className="-ml-1.5 grid h-8 w-8 place-items-center rounded-lg text-[#a1a1aa] transition-colors hover:bg-white/[.06] hover:text-[#f2f2f4]">
+                  <PanelLeft size={16} strokeWidth={1.8} />
+                </button>
+                <span className="text-[14px] font-semibold">Shells</span>
+              </>
+            }
+          />
+        </main>
+      ) : (
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex h-12 shrink-0 items-center gap-2.5 border-b border-white/[.06] pl-3 pr-3">
           <button type="button" onClick={() => setListOpen((v) => !v)} aria-label={showList ? "Hide the task list" : "Show the task list"} title={`Tasks  ${MOD}B`} className="grid h-8 w-8 place-items-center rounded-lg text-[#a1a1aa] transition-colors hover:bg-white/[.06] hover:text-[#f2f2f4]">
@@ -361,7 +381,7 @@ export function CodeView() {
         {/* a tmux-style status line: the task, its panes, and what needs you */}
         {(task || paneIds.length > 0) && (
           <footer className="flex h-[26px] shrink-0 items-center gap-0.5 overflow-x-auto border-t border-white/[.06] bg-[#121215] px-2 font-mono text-[11.5px] text-[#a1a1aa]">
-            <span className="mr-2 shrink-0 rounded-[3px] bg-[#3fb950] px-2 py-px font-semibold text-[#06200f]">{task ? statusName(task) : "shells"}</span>
+            <span className="mr-2 shrink-0 rounded-[3px] bg-[#26262b] px-2 py-px font-semibold text-[#f2f2f4]">{task ? statusName(task) : "shells"}</span>
             {paneIds.map((id, i) => {
               const a = taskAgents.find((x) => x.id === id);
               const st = a && task ? paneState(task, a.id, approvals, Object.values(live).some((r) => r.agentId === a.id)) : null;
@@ -380,6 +400,7 @@ export function CodeView() {
           </footer>
         )}
       </main>
+      )}
       {review && task && <ReviewPanel key={task.root.id} task={task} tab={reviewTab} setTab={setReviewTab} version={tasksVersion} />}
       {sheet && <NewTaskSheet onClose={() => setSheet(false)} onStarted={(id) => (setSheet(false), id && setSelected(id))} />}
       {palette && <Palette items={paletteItems} onClose={() => setPalette(false)} />}

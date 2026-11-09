@@ -258,6 +258,8 @@ export const HubToNode = z.discriminatedUnion("type", [
     rows: z.number().int().min(1).max(500),
     code: z.string().max(200).optional(),
     /** the owner took the keyboard: the shell is this agent's own harness session for that thread, resumed */
+    /** a harness's CLI to start in a plain shell (an id from HARNESSES) */
+    launch: z.string().max(40).optional(),
     takeover: z.object({ agentId: z.string(), channelId: z.string(), threadId: z.string().nullable() }).optional(),
   }),
   z.object({ type: z.literal("term_resize"), termId: z.string(), cols: z.number().int().min(2).max(1000), rows: z.number().int().min(1).max(500) }),

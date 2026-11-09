@@ -54,6 +54,8 @@ export function TerminalPane({
   open,
   title,
   closeLabel,
+  launch,
+  label,
 }: {
   target: ShellTarget;
   session: string;
@@ -65,6 +67,10 @@ export function TerminalPane({
   title?: string;
   /** a word on the close button instead of ×, e.g. "Hand back" */
   closeLabel?: string;
+  /** start in this harness's CLI (an id from HARNESSES) instead of a plain shell */
+  launch?: string;
+  /** what the header says after the name; the session's name when left out */
+  label?: string;
 }) {
   const holder = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal | null>(null);
@@ -144,7 +150,7 @@ export function TerminalPane({
       setStatus({ state: "connecting" });
       let url: string;
       try {
-        ({ url } = await (open ? open(code.current) : api<{ url: string }>("POST", `/api/computers/${target.id}/terminal`, { session, code: code.current })));
+        ({ url } = await (open ? open(code.current) : api<{ url: string }>("POST", `/api/computers/${target.id}/terminal`, { session, code: code.current, ...(launch ? { launch } : {}) })));
       } catch (err) {
         if (gone) return;
         const text = (err as Error).message;
@@ -202,7 +208,7 @@ export function TerminalPane({
       sock.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.id, session, attempt]);
+  }, [target.id, session, launch, attempt]);
 
   useEffect(() => {
     if (focused && status.state === "live") term.current?.focus();
@@ -231,7 +237,7 @@ export function TerminalPane({
       <header className="flex h-9 shrink-0 items-center gap-2 border-b border-white/[.06] px-3 text-[12.5px] text-[#a1a1aa]">
         <span className="h-1.5 w-1.5 shrink-0 rounded-full transition-colors" style={{ background: dot }} />
         <span className="truncate font-medium text-[#f2f2f4]">{title ?? target.name}</span>
-        <span className="truncate font-mono text-[11.5px] text-[#6b6b75]">{session}</span>
+        <span className="truncate font-mono text-[11.5px] text-[#6b6b75]">{label ?? session}</span>
         <span className="flex-1" />
         {closeLabel ? (
           <button type="button" onClick={close} className="-mr-1 inline-flex h-6 items-center rounded-md border border-white/[.09] bg-[#1d1d21] px-2 text-[11.5px] text-[#f2f2f4] transition-[background-color,transform] hover:bg-[#26262b] active:scale-[.96]">
