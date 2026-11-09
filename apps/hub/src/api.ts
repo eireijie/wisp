@@ -130,6 +130,7 @@ const SETTINGS = z
     access: z.enum(["read-only", "edit", "full"]),
     soulLocked: z.boolean(),
     fast: z.boolean(),
+    ownPlugins: z.boolean(),
     appearance: APPEARANCE,
     voice: z.object({ device: z.string().max(300).optional(), openai: z.string().max(100).optional(), elevenlabs: z.string().max(100).optional() }).strict(),
     headless: z.boolean(),
@@ -1356,6 +1357,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     }
     // who it answers is one choice: on the owner's own device it also opens the device up (or closes it)
     if (body.settings?.respondTo !== undefined && body.settings.anyoneCanAsk === undefined && store.node(after.nodeId ?? "")?.ownerId === c.actor.id) body.settings.anyoneCanAsk = body.settings.respondTo !== "me";
+    // the plugins are the device owner's own: only they can let an agent use them
+    if (body.settings?.ownPlugins === true && !agent.settings.ownPlugins) {
+      const target = store.node(body.nodeId ?? agent.nodeId ?? "");
+      if (target && target.ownerId !== c.actor.id) return reply.code(403).send({ error: "only the device's owner can let an agent use their own plugins" });
+    }
     if (body.settings?.anyoneCanAsk !== undefined) {
       const target = store.node(body.nodeId ?? agent.nodeId ?? "");
       if (target?.ownerId !== c.actor.id) return reply.code(403).send({ error: "only the device's owner decides who can ask an agent that runs on it" });

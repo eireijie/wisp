@@ -49,7 +49,7 @@ export function NavRow({ to, label, value, danger }: { to: string; label: string
 
 export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChange: (on: boolean) => void; label: string; disabled?: boolean }) {
   return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)} className={cx("relative h-[30px] w-[52px] shrink-0 rounded-full transition-colors disabled:opacity-50", on ? "bg-accent" : "bg-chip")}>
+    <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)} className={cx("relative h-[30px] w-[52px] shrink-0 rounded-full transition-colors disabled:opacity-50", on ? "m-switch-on" : "bg-chip")}>
       <span className={cx("m-knob absolute top-[3px] left-[3px] size-6 rounded-full bg-white shadow", on && "translate-x-[22px]")} />
     </button>
   );

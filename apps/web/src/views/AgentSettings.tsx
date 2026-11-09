@@ -354,7 +354,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
           onClick={toggleLock}
           role="switch"
           aria-checked={!locked}
-          className={cx("relative h-6 w-11 shrink-0 rounded-full transition-colors", locked ? "bg-hover" : "bg-accent")}
+          className={cx("relative h-6 w-11 shrink-0 rounded-full transition-colors", locked ? "bg-hover" : "m-switch-on")}
           aria-label={`Let @${agent.handle} refine its own personality`}
         >
           <span className={cx("m-knob absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow", !locked && "translate-x-5")} />
@@ -692,7 +692,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
             aria-checked={form.fast}
             disabled={!selected?.fast}
             onClick={() => setForm({ ...form, fast: !form.fast })}
-            className={cx("relative h-5 w-9 rounded-full transition-colors", form.fast && selected?.fast ? "bg-accent" : "bg-chip")}
+            className={cx("relative h-5 w-9 rounded-full transition-colors", form.fast && selected?.fast ? "m-switch-on" : "bg-chip")}
           >
             <span className={cx("m-knob absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow", form.fast && selected?.fast && "translate-x-4")} />
           </button>
@@ -868,6 +868,9 @@ export function accessScope(access: AccessLevel, name: string, p: AccessPlace): 
   return `${name} can change any file and run any command on ${p.device}, where its AI runs, if ${p.device} allows full access. If it doesn't, ${name} can edit files only.`;
 }
 
+/** Harnesses Wisp can keep the person's own plugins out of. */
+const OWN_PLUGINS_HARNESSES = ["codex", "claude-code", "gemini"];
+
 function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent; nodes: NodeInfo[]; onDirty: (d: boolean) => void; active: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const agents = useStore((s) => s.agents);
@@ -880,13 +883,16 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
     handle: agent.handle,
     advanced,
   };
-  const saved = agent.settings.access ?? "edit";
-  const [{ access }, setPermissions] = useSavedDraft({ access: saved });
-  const setAccess = (value: AccessLevel) => setPermissions({ access: value });
+  const savedAccess = agent.settings.access ?? "edit";
+  const savedOwn = !!agent.settings.ownPlugins;
+  const [{ access, ownPlugins }, setPermissions] = useSavedDraft({ access: savedAccess, ownPlugins: savedOwn });
+  const setAccess = (value: AccessLevel) => setPermissions({ access: value, ownPlugins });
+  const setOwnPlugins = (value: boolean) => setPermissions({ access, ownPlugins: value });
+  const canOwnPlugins = OWN_PLUGINS_HARNESSES.includes(agent.harness);
   const [memory, setMemory] = useState<{ rules: AccessRule[]; sharedOut: AccessRule[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dirty = access !== saved;
+  const dirty = access !== savedAccess || ownPlugins !== savedOwn;
   useEffect(() => {
     onDirty(dirty);
   }, [dirty, onDirty]);
@@ -901,7 +907,7 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
     setSaving(true);
     setError(null);
     try {
-      await api("PATCH", `/api/agents/${agent.id}`, { settings: { access } });
+      await api("PATCH", `/api/agents/${agent.id}`, { settings: { access, ...(canOwnPlugins ? { ownPlugins } : {}) } });
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
@@ -936,6 +942,29 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
               <>Only for an agent you trust: it can change anything {place.device ? `on ${place.device}` : ""}.</>
             )}
           </p>
+        )}
+        {canOwnPlugins && (
+          <div className="mt-4 max-w-2xl">
+            <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ownPlugins}
+                aria-label={`Use my own ${harnessLabel(agent.harness)} plugins`}
+                onClick={() => setOwnPlugins(!ownPlugins)}
+                className={cx("relative h-5 w-9 rounded-full transition-colors", ownPlugins ? "m-switch-on" : "bg-chip")}
+              >
+                <span className={cx("m-knob absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow", ownPlugins && "translate-x-4")} />
+              </button>
+              Use my own {harnessLabel(agent.harness)} plugins
+            </label>
+            {ownPlugins && (
+              <p className="mt-2 flex gap-2 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">
+                <ShieldAlert size={16} className="shrink-0 mt-0.5" />
+                These skip Wisp's approvals and the screen switch.
+              </p>
+            )}
+          </div>
         )}
       </section>
 
@@ -981,7 +1010,7 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
       </section>
 
       {error && <p className="text-sm text-bad">{error}</p>}
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => setAccess(saved)} active={active} note="Applies from the next message." />
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => setPermissions({ access: savedAccess, ownPlugins: savedOwn })} active={active} note="Applies from the next message." />
     </div>
   );
 }
