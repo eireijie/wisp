@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { CONNECTOR_CATALOG, HARNESSES, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, TERM_PREFIX, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
+import { CONNECTOR_CATALOG, HARNESSES, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, withArticle, TERM_PREFIX, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunCredential, type RunRequest } from "@wisp/core";
 import { HARNESS_SPECS, HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
 import { WispClient, WispError } from "@wisp/sdk";
 import { runUpdate, version } from "@wisp/update";
@@ -14,7 +14,7 @@ import { RemoteDesktopServer, type RemoteDesktopConfig } from "./computers/remot
 import type { RustdeskConfig } from "./rustdesk.ts";
 import { detectRemoteApps } from "./remote-apps.ts";
 import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
-import { Terminals, deviceShell, sessionName, vmShell } from "./terminals.ts";
+import { Terminals, deviceShell, sessionName, shellQuote, vmShell } from "./terminals.ts";
 import { HarnessLogins } from "./harness-login.ts";
 import { ModelLogins } from "./model-login.ts";
 import { type DockerVm } from "./computers/docker.ts";
@@ -225,13 +225,14 @@ export class NodeDaemon {
     const key = `${computer.kind === "vm" ? "vm" : "dev"}:${computer.id}:${session}`;
     const command = async () => {
       // a harness's CLI in the pane: only ones from Wisp's own list, by name
-      const launch = msg.launch ? HARNESSES.find((h) => h.id === msg.launch)?.binary : undefined;
-      if (msg.launch && !launch) throw new Error(`${msg.launch} isn't a harness Wisp knows`);
-      if (computer.kind === "device") return deviceShell(session, { launch });
-      const vm = await this.computers.vm(computer);
-      if (!vm) throw new Error("this VM isn't on this device");
-      await vm.ready();
-      return vmShell({ bin: vm.engine.bin, name: vm.name, user: vm.user, home: vm.home }, session, launch);
+      const harness = msg.launch ? HARNESSES.find((h) => h.id === msg.launch) : undefined;
+      if (msg.launch && !harness) throw new Error(`${msg.launch} isn't a harness Wisp knows`);
+      const vm = computer.kind === "vm" ? await this.computers.vm(computer) : null;
+      if (computer.kind === "vm" && !vm) throw new Error("this VM isn't on this device");
+      await vm?.ready();
+      const pane = harness ? await this.terminalLaunch(harness.id, harness.binary, msg.credential, vm, computer.name) : null;
+      const cmd = vm ? vmShell({ bin: vm.engine.bin, name: vm.name, user: vm.user, home: vm.home }, session, pane?.launch) : deviceShell(session, { launch: pane?.launch });
+      return { ...cmd, ended: pane?.ended };
     };
     const opening: { end?: boolean; gone?: boolean } = {};
     this.openingTerms.set(termId, opening);
@@ -255,6 +256,52 @@ export class NodeDaemon {
     } finally {
       this.openingTerms.delete(termId);
     }
+  }
+
+  /**
+   * What a terminal runs to start a harness's CLI: signed in with the model connection agent runs on
+   * that computer use (in the same folder, so a sign-in either renews stays shared), or the harness's
+   * own sign-in there. A VM's harness with neither is said in plain words instead of opening its own
+   * sign-in prompt.
+   */
+  private async terminalLaunch(harness: string, binary: string, cred: RunCredential | undefined, vm: DockerVm | null, where: string): Promise<{ launch: string; ended?: () => void }> {
+    const label = harnessLabel(harness);
+    const support = cred ? credentialSupport(harness, cred.provider, cred.kind) : null;
+    // PowerShell has no `. file` for the variables: Windows CLIs use their own sign-in
+    if (!cred || !support || (!vm && process.platform === "win32")) {
+      if (vm && (await vm.signedIn(harness).catch(() => null)) === false)
+        throw new Error(`${label} isn't signed in on ${where}. Connect a model for it in Settings → Models, or sign in to ${label} once from an agent's page → Computer.`);
+      return { launch: binary };
+    }
+    const id = safeId(cred.connectionId);
+    this.keepConnections?.add(id);
+    const files = vm ? vmCredentialFs(vm) : localCredentialFs;
+    const baseHome = vm ? `${vm.home}/${VM_HARNESS_DIR[harness] ?? ".config"}` : this.accounts.dir(harness, this.accounts.accountOf("", harness));
+    const connectionHome = vm ? `${vm.home}/.wisp/connections/${id}/${harness}` : path.join(this.cfg.dir, "connections", id, harness);
+    let prepared: PreparedCredential;
+    try {
+      prepared = await prepareCredential(harness, cred, { fs: files, baseHome, connectionHome });
+      // Codex's own screen reads a key only from auth.json (CODEX_API_KEY is for `codex exec`), so it
+      // gets one in the connection's folder, as `codex login --with-api-key` writes it
+      if (harness === "codex" && cred.kind === "key") {
+        if (cred.provider !== "openai") throw new Error(`Codex's own screen can't use ${withArticle(providerLabel(cred.provider))} key`);
+        await files.write(files.join(connectionHome, "auth.json"), JSON.stringify({ auth_mode: "apikey", OPENAI_API_KEY: cred.secret.key }, null, 2), 0o600);
+        for (const name of ["config.toml", "skills", "AGENTS.md", "rules", "prompts"]) await files.link(files.join(baseHome, name), files.join(connectionHome, name)).catch(() => {});
+        prepared = { env: { CODEX_HOME: connectionHome }, refreshed: async () => null };
+      }
+    } catch (err) {
+      throw new Error(`couldn't use the ${providerLabel(cred.provider)} connection: ${(err as Error).message}`);
+    }
+    // its variables in a private file, read by the CLI's own shell only (not left in the shell after it)
+    const file = files.join(connectionHome, "terminal.env");
+    await files.write(file, Object.entries(prepared.env).map(([k, v]) => `export ${k}=${shellQuote(v)}\n`).join(""), 0o600);
+    // a sign-in the CLI renewed goes back to the hub, as a run's does
+    const ended = () =>
+      void prepared
+        .refreshed()
+        .then((secret) => secret && this.send({ type: "credential_refreshed", connectionId: cred.connectionId, terminal: true, secret }))
+        .catch(() => {});
+    return { launch: `(. ${shellQuote(file)}; ${binary})`, ended };
   }
 
   /** A code was entered for this screen: tell its owner when it was wrong. */
