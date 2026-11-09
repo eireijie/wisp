@@ -226,6 +226,8 @@ export const HubToNode = z.discriminatedUnion("type", [
   z.object({ type: z.literal("cancel"), runId: z.string() }),
   /** merge a task branch into the base branch, in the device's checkout of the repo */
   z.object({ type: z.literal("merge"), requestId: z.string(), agentId: z.string(), repo: z.string(), branch: z.string(), base: z.string() }),
+  /** Code's review side: a task branch's diff, its files or one file, or its checks; answered with git_done (JSON in output) */
+  z.object({ type: z.literal("review"), requestId: z.string(), what: z.enum(["diff", "files", "file", "checks"]), repo: z.string(), branch: z.string(), base: z.string(), file: z.string().max(1000).optional() }),
   /** do something on a computer this device runs */
   /** `agentId`: the agent doing it, so a device can let agents whose harness runs on it use its screen */
   z.object({ type: z.literal("computer"), requestId: z.string(), computer: ComputerSpec, action: ComputerAction, agentId: z.string().optional() }),

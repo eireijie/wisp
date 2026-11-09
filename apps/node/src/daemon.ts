@@ -8,6 +8,7 @@ import WebSocket from "ws";
 import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, TERM_PREFIX, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
 import { HARNESS_SPECS, HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
 import { WispClient, WispError } from "@wisp/sdk";
+import { branchDiff, branchFiles, runChecks } from "./review.ts";
 import { runUpdate, version } from "@wisp/update";
 import { ComputerHost, type Tunnel } from "./computers/index.ts";
 import { RemoteDesktopServer, type RemoteDesktopConfig } from "./computers/remote-desktop.ts";
@@ -590,6 +591,20 @@ export class NodeDaemon {
       this.queues.set(msg.run.agentId, next.catch(() => undefined));
     } else if (msg.type === "cancel") {
       this.aborts.get(msg.runId)?.abort();
+    } else if (msg.type === "review") {
+      const answer = (p: Promise<unknown>) =>
+        p.then(
+          (r) => this.send({ type: "git_done", requestId: msg.requestId, ok: true, output: JSON.stringify(r) }),
+          (err) => this.send({ type: "git_done", requestId: msg.requestId, ok: false, output: (err as Error).message }),
+        );
+      const w = { repo: msg.repo, branch: msg.branch, base: msg.base };
+      if (msg.what === "diff") void answer(branchDiff(this.cfg.dir, w));
+      else if (msg.what === "files") void answer(branchFiles(this.cfg.dir, w));
+      else if (msg.what === "file") void answer(branchFiles(this.cfg.dir, { ...w, file: msg.file ?? "" }));
+      else {
+        this.log(`running checks on ${msg.branch}`);
+        void answer(runChecks(this.cfg.dir, w));
+      }
     } else if (msg.type === "merge") {
       this.log(`merging ${msg.branch} into ${msg.base}`);
       mergeBranch(this.cfg.dir, msg).then(
