@@ -4,16 +4,25 @@ import os from "node:os";
 import path from "node:path";
 import { BrowserProxy } from "../src/computers/browser-proxy.ts";
 
-/** A tiny stand-in for Playwright MCP: answers initialize, lists one tool, echoes calls. */
+/** A tiny stand-in for Playwright MCP: answers initialize, lists one tool, echoes calls, keeps tabs (logged to argv[1]). */
 const FAKE_MCP = `
 const rl = require("readline").createInterface({ input: process.stdin });
+const log = (s) => process.argv[1] && require("fs").appendFileSync(process.argv[1], s + "\\n");
 let inited = false;
+let tabs = ["a page someone else is on"], current = 0;
 rl.on("line", (l) => {
   const m = JSON.parse(l);
   const out = (r) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, ...r }) + "\\n");
   if (m.method === "initialize") { inited = true; return out({ result: { protocolVersion: m.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "pw" } } }); }
   if (!inited) return out({ error: { code: -1, message: "not initialized" } });
   if (m.method === "tools/list") return out({ result: { tools: [{ name: "browser_navigate", inputSchema: { type: "object" } }] } });
+  if (m.method === "tools/call" && m.params.name === "browser_tabs") {
+    const a = m.params.arguments;
+    log("tabs " + a.action + (a.index !== undefined ? " " + a.index : ""));
+    if (a.action === "new") { tabs.push("blank"); current = tabs.length - 1; }
+    if (a.action === "close") tabs.splice(a.index, 1);
+    return out({ result: { content: [{ type: "text", text: tabs.map((t, i) => "- " + i + ": " + (i === current ? "(current) " : "") + t).join("\\n") }] } });
+  }
   if (m.method === "tools/call") return out({ result: { content: [{ type: "text", text: "went to " + m.params.arguments.url }] } });
 });`;
 
@@ -23,12 +32,14 @@ function setup(cache?: unknown) {
   if (cache) fs.writeFileSync(toolsFile, JSON.stringify(cache));
   const out: any[] = [];
   let starts = 0;
-  const proxy = new BrowserProxy({ command: [process.execPath, "-e", FAKE_MCP], toolsFile, start: async () => void starts++, write: (m) => void out.push(m) });
+  const logFile = path.join(dir, "calls.log");
+  const proxy = new BrowserProxy({ command: [process.execPath, "-e", FAKE_MCP, logFile], toolsFile, start: async () => void starts++, write: (m) => void out.push(m) });
   const reply = async (id: number) => {
     for (let i = 0; i < 200 && !out.some((m) => m.id === id); i++) await new Promise((r) => setTimeout(r, 10));
     return out.find((m) => m.id === id);
   };
-  return { proxy, out, reply, toolsFile, starts: () => starts };
+  const calls = () => (fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8").trim().split("\n") : []);
+  return { proxy, out, reply, toolsFile, calls, starts: () => starts };
 }
 
 describe("browser tools for a computer that may be off", () => {
@@ -61,6 +72,18 @@ describe("browser tools for a computer that may be off", () => {
     expect((await t.reply(2)).result.tools[0].name).toBe("browser_navigate");
     expect(JSON.parse(fs.readFileSync(t.toolsFile, "utf8")).tools[0].name).toBe("browser_navigate");
     t.proxy.close();
+  });
+
+  it("works in a tab of its own on the shared computer, and closes it after", async () => {
+    const t = setup({ tools: [{ name: "browser_navigate" }] });
+    await t.proxy.handle({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } });
+    await t.proxy.handle({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "browser_navigate", arguments: { url: "etsy.com" } } });
+    expect((await t.reply(3)).result.content[0].text).toBe("went to etsy.com");
+    expect(t.calls()).toEqual(["tabs new"]);
+    // the proxy's own calls never reach the harness
+    expect(t.out.map((m) => m.id)).toEqual([1, 3]);
+    await t.proxy.close();
+    expect(t.calls()).toEqual(["tabs new", "tabs list", "tabs close 1"]);
   });
 
   it("says why when the computer can't start", async () => {

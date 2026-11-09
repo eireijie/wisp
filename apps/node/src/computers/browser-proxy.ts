@@ -10,6 +10,10 @@ import readline from "node:readline";
  * it answers the handshake and the tool list (from the last time the real one ran here), and on
  * the first call asks the hub to start the computer (which shows "Starting the computer…" in
  * chat), then starts the real tools in the VM and relays everything both ways.
+ *
+ * Agents on the shared computer share its one Chrome (that's how they share sign-ins), and each
+ * agent's tools would otherwise drive the same tab, so one agent's page load cuts off another's.
+ * So each run opens a tab of its own as the tools start, and closes it when the run ends.
  */
 
 type Msg = { jsonrpc: "2.0"; id?: number | string; method?: string; params?: unknown; result?: unknown; error?: unknown };
@@ -31,6 +35,8 @@ export class BrowserProxy {
   private init: Msg | null = null;
   private listIds = new Set<number | string>();
   private nextId = 1;
+  /** answers to calls this proxy makes itself (its own tab), kept from the harness */
+  private own = new Map<string, (r: Msg) => void>();
 
   constructor(private o: ProxyOptions) {}
 
@@ -83,6 +89,12 @@ export class BrowserProxy {
           } catch {
             return;
           }
+          const mine = typeof r.id === "string" ? this.own.get(r.id) : undefined;
+          if (mine) {
+            this.own.delete(r.id as string);
+            mine(r);
+            return;
+          }
           if (r.id === initId) {
             if (r.error) reject(new Error(JSON.stringify(r.error)));
             else resolve();
@@ -102,6 +114,8 @@ export class BrowserProxy {
       await ready;
       child.stdin!.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
       this.child = child;
+      // a tab of its own, so other agents on this computer don't navigate it away
+      await this.ask("tools/call", { name: "browser_tabs", arguments: { action: "new" } }, 30_000).catch(() => {});
     })().finally(() => (this.starting = null));
     return this.starting;
   }
@@ -115,7 +129,35 @@ export class BrowserProxy {
     } catch {}
   }
 
-  close() {
+  /** A call of this proxy's own to the real tools; its answer doesn't reach the harness. */
+  private ask(method: string, params: unknown, ms: number): Promise<Msg> {
+    const child = this.child;
+    if (!child) return Promise.reject(new Error("not running"));
+    const id = `wisp-own-${this.nextId++}`;
+    return new Promise<Msg>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.own.delete(id);
+        reject(new Error("timed out"));
+      }, ms);
+      this.own.set(id, (r) => {
+        clearTimeout(timer);
+        resolve(r);
+      });
+      child.stdin!.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+    });
+  }
+
+  /** Close its own tab (the one it's on), then stop the real tools. */
+  async close() {
+    if (!this.child) return;
+    try {
+      const r = await this.ask("tools/call", { name: "browser_tabs", arguments: { action: "list" } }, 5000);
+      const text = ((r.result as { content?: { text?: string }[] } | undefined)?.content ?? []).map((c) => c.text ?? "").join("\n");
+      const tabs = text.match(/^- \d+:/gm)?.length ?? 0;
+      const current = text.match(/^- (\d+): \(current\)/m)?.[1];
+      // never the last tab: closing it would close the browser for everyone
+      if (current !== undefined && tabs > 1) await this.ask("tools/call", { name: "browser_tabs", arguments: { action: "close", index: Number(current) } }, 5000);
+    } catch {}
     this.child?.kill();
   }
 }
@@ -151,10 +193,11 @@ export async function main() {
     }
     chain = chain.then(() => proxy.handle(m)).catch(() => {});
   });
-  lines.on("close", () => {
-    void chain.finally(() => {
-      proxy.close();
+  const end = () =>
+    void chain.finally(async () => {
+      await proxy.close();
       process.exit(0);
     });
-  });
+  lines.on("close", end);
+  process.once("SIGTERM", end);
 }
