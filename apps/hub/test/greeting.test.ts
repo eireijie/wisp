@@ -217,6 +217,14 @@ describe("a new agent speaks first", () => {
     for (const w of all) hub.watches.remove(w.id);
   });
 
+  it("tells the agent to move into the setup questions after a concrete first task", async () => {
+    const id = await make("tess");
+    onReply = async () => "Here's your packing list.";
+    const prompt = await answer(id, "make me a packing list as a file");
+    expect(prompt).toContain("do that task first and record it as the goal");
+    expect(prompt).toContain("Never finish a first task without moving into the setup questions");
+  });
+
   it("doesn't offer a role to an agent made for one", async () => {
     const id = await make("eli", { settings: { role: "Researcher" } });
     expect(setupOf(id).steps.role).toBe("Researcher");
