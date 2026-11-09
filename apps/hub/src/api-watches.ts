@@ -27,7 +27,7 @@ export function registerWatchesApi(app: FastifyInstance, hub: Hub, h: Helpers) {
   /** A person may change their own watches; an agent only takes itself off one. */
   const mine = (c: Caller, w: Watch | undefined) => !!w && w.workspaceId === c.workspaceId && (c.actor.kind === "user" ? w.userId === c.actor.id : w.agentIds.includes(c.actor.id));
 
-  const withEstimate = (w: Watch) => ({ ...w, estimate: watches.estimate(w.workspaceId, w.userId, w.service, w.everyMinutes) });
+  const withEstimate = (w: Watch) => ({ ...w, estimate: watches.estimate(w.workspaceId, w.userId, w.service, w.everyMinutes, w.id) });
 
   app.get("/api/watches", async (req, reply) => {
     const c = need(req, reply);

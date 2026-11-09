@@ -47,6 +47,11 @@ export interface RunInput {
   access?: AccessLevel;
   /** use the faster tier, where the harness and model offer one */
   fast?: boolean;
+  /**
+   * Let the harness load the person's own plugins, MCP servers and computer-use helpers.
+   * Anything but `true` keeps them out: only Wisp's own tools and the run's connectors load.
+   */
+  ownPlugins?: boolean;
   /** Harness-specific extras from the device's config. */
   options?: Record<string, string>;
   /**

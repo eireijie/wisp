@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from "react";
 import { Bot, Check, Copy, ExternalLink, Loader2, Monitor, Shuffle } from "lucide-react";
-import { HARNESSES, harnessLabel, runsInVm, type Agent, type HarnessLogin, type HarnessSettings } from "@wisp/core";
+import { HARNESSES, harnessLabel, preferSignedIn, runsInVm, type Agent, type HarnessLogin, type HarnessSettings } from "@wisp/core";
 import { api } from "../api.ts";
 import { awayEnabled, enableTailscale } from "../components/Access.tsx";
 import { onPublicAddress, skipAccess, useAccess, useAccessStore, type AccessInfo } from "../access.ts";
 import { completeSetupStep, nextStep, setDismissed, STEPS, useOnboarding, type StepId } from "../onboarding.ts";
-import { usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
+import { isSharedComputer, usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
+import { useComputerMode } from "../computerMode.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { canApproveJoin, unavailable } from "../join.ts";
@@ -186,19 +187,13 @@ export const NO_NODE = /Node\.js isn't installed on this computer/;
 /** Keep a detected sign-in on the device; install a new harness there when requested. */
 export async function makeFirstAgent(device: DeviceInfo, harness: string, name: string, agents: Agent[], computers: ComputerInfo[], appearance?: GhostAppearance) {
   const installed = device.harnesses?.some((h) => h.id === harness);
-  const inVm = !installed && runsInVm(harness) && device.role !== "headless" && device.role !== "screen" && !!device.capabilities?.vm.ok;
+  const canVm = device.role !== "headless" && device.role !== "screen" && !!device.capabilities?.vm.ok;
+  const inVm = !installed && runsInVm(harness) && canVm;
   if (!installed && !inVm) {
     await api("POST", `/api/nodes/${device.id}/install`, { harness });
     await api("POST", `/api/nodes/${device.id}/refresh`).catch(() => {});
   }
-  const canVm = device.role !== "headless" && device.role !== "screen" && !!device.capabilities?.vm.ok;
-  let computer = canVm ? computers.find((c) => c.kind === "vm" && c.nodeId === device.id && !c.agents.length) : undefined;
-  if (canVm && !computer) computer = await api<ComputerInfo>("POST", "/api/computers", { kind: "vm", nodeId: device.id, name: `${name}'s desk`, cpus: 2, memoryGb: 4 });
-  if (device.role === "screen" && device.mine && device.capabilities?.screen.ok) {
-    computer = computers.find((c) => c.kind === "device" && c.nodeId === device.id);
-    if (!computer) computer = await api<ComputerInfo>("POST", "/api/computers", { kind: "device", nodeId: device.id });
-  }
-  return api<Agent>("POST", "/api/agents", {
+  const common = {
     name,
     handle: freeHandle(
       name,
@@ -206,9 +201,32 @@ export async function makeFirstAgent(device: DeviceInfo, harness: string, name: 
     ),
     harness,
     nodeId: device.id,
-    computerId: computer?.id ?? null,
-    settings: { ...(inVm ? { runIn: "computer" } : computer ? { runIn: "device" } : { headless: true }), ...(appearance ? { appearance } : {}) },
-  });
+  };
+  const look = appearance ? { appearance } : {};
+  if (inVm) {
+    // an AI that only runs inside a computer gets one of its own, with the AI in it
+    let computer = computers.find((c) => c.kind === "vm" && c.nodeId === device.id && !c.agents.length);
+    if (!computer) computer = await api<ComputerInfo>("POST", "/api/computers", { kind: "vm", nodeId: device.id, name: `${name}'s desk`, cpus: 2, memoryGb: 4 });
+    return api<Agent>("POST", "/api/agents", { ...common, computerId: computer.id, settings: { runIn: "computer", ...look } });
+  }
+  // otherwise Wisp places it: the AI stays beside its sign-in, and it works on the shared computer
+  return api<Agent>("POST", "/api/agents", { ...common, useDefaults: true, settings: look });
+}
+
+export type SkipResult = { kept: Agent } | { kept: null; reason: "nothing-to-keep" } | { kept: null; reason: "failed"; message: string };
+
+/**
+ * "Skip for now" on the agent step must not lose the agent the person just named: make it now
+ * (without waiting for a sign-in; the Inbox says what it still needs) and only then move on.
+ * With no computer or no name there is nothing to make; a failure is reported, never swallowed.
+ */
+export async function skipKeepingAgent(o: { device: DeviceInfo | undefined; harness: string; name: string; agents: Agent[]; computers: ComputerInfo[]; look: GhostAppearance; make?: typeof makeFirstAgent }): Promise<SkipResult> {
+  if (!o.device || !o.name.trim()) return { kept: null, reason: "nothing-to-keep" };
+  try {
+    return { kept: await (o.make ?? makeFirstAgent)(o.device, o.harness, o.name.trim(), o.agents, o.computers, o.look) };
+  } catch (e) {
+    return { kept: null, reason: "failed", message: (e as Error).message || "something went wrong" };
+  }
 }
 
 /** The AI that powers your first agent, signing in to it, and making the agent. */
@@ -258,8 +276,18 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
     };
   }, [device?.id]);
   const installed = device?.harnesses ?? [];
-  const selected = harness || installed[0]?.id || "kimi";
   const account = (s: HarnessSettings) => s.accounts.find((a) => a.isDefault) ?? s.accounts[0];
+  // one that's signed in first: a harness that would fail its first reply is never preselected over one that works
+  const selected =
+    harness ||
+    preferSignedIn(
+      installed.map((h) => h.id),
+      (id) => {
+        const s = settings.find((x) => x.harness === id);
+        return s ? account(s)?.signedIn : undefined;
+      },
+    ) ||
+    "kimi";
   const pick = (id: string) => {
     setHarness(id);
     setUnknownOk(false);
@@ -285,6 +313,23 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
     } finally {
       setBusy(false);
     }
+  };
+  const [skipArmed, setSkipArmed] = useState(false);
+  const skip = async () => {
+    if (skipArmed) return onNext();
+    setBusy(true);
+    const r = await skipKeepingAgent({ device, harness: selected, name, agents, computers, look });
+    setBusy(false);
+    if (r.kept) {
+      await Promise.allSettled([useStore.getState().refreshAgents(), useStore.getState().refreshComputers()]);
+      return onNext();
+    }
+    if (r.reason === "failed") {
+      setError(`Couldn't set up ${name.trim()} yet: ${r.message}. Press Skip for now again to go on without it; you can make it later from Agents.`);
+      setSkipArmed(true);
+      return;
+    }
+    onNext();
   };
   const displayName = name.trim() || "Atlas";
   const tag = created?.handle ?? freeHandle(displayName, agents.map((a) => a.handle));
@@ -411,7 +456,7 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
             It's already signed in
           </AuthLink>
         )}
-        <AuthLink onClick={onNext} disabled={busy} className="self-center">
+        <AuthLink onClick={() => void skip()} disabled={busy} className="self-center">
           Skip for now
         </AuthLink>
       </Actions>
@@ -638,9 +683,13 @@ function HarnessSignInChat({ device, settings, account, onClose, onDone }: { dev
   );
 }
 
-function AgentCreated({ agent, device, onSignIn, onNext }: { agent: Agent; device?: string; onSignIn?: () => void; onNext: () => void }) {
+export function AgentCreated({ agent, device, onSignIn, onNext }: { agent: Agent; device?: string; onSignIn?: () => void; onNext: () => void }) {
   const inVm = agent.settings.runIn === "computer";
   const label = harnessLabel(agent.harness);
+  // where it works, plainly; which device hosts what is for Advanced
+  const { advanced } = useComputerMode();
+  const computer = useStore((s) => s.computers).find((c) => c.id === agent.computerId);
+  const place = advanced ? (device ? `, on ${device}` : "") : isSharedComputer(computer) || agent.settings.waitsForShared ? ", on the shared computer" : computer?.kind === "vm" ? ", on its own computer" : "";
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [checked, setChecked] = useState(false);
   const [screen, setScreen] = useState<string | null>(null);
@@ -667,7 +716,7 @@ function AgentCreated({ agent, device, onSignIn, onNext }: { agent: Agent; devic
   const waiting = checked && signedIn !== true;
   return (
     <>
-      <Thread title={waiting ? `${agent.name} needs a sign-in` : `${agent.name} is made`} sub={`Running on ${label}${device ? `, on ${device}` : ""}.`}>
+      <Thread title={waiting ? `${agent.name} needs a sign-in` : `${agent.name} is made`} sub={`Uses ${label}${place}.`}>
         {waiting && <Msg>{signedIn === null && !inVm ? `Wisp can't tell if ${label} is signed in. If it isn't, ${agent.name} can't answer yet.` : `${agent.name} can't answer until you sign in to ${label}${inVm ? ` on ${agent.name}'s computer` : ""}.`}</Msg>}
         {waiting && screen && <Msg>Finish signing in on the computer's screen, then come back here. This page updates by itself.</Msg>}
         <Problem>{error}</Problem>

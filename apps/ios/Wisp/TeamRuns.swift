@@ -55,7 +55,10 @@ struct FlowStrip: View {
   /** one step waiting on a person: its own buttons */
   private func waitingCard(_ s: ChannelTeam.Step, _ lane: TeamFlow.Lane, _ waiting: TeamFlow.Waiting, _ flow: TeamFlow, _ team: ChannelTeam) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text(s.action.isEmpty ? "A step" : s.action).font(.footnote.weight(.semibold))
+      HStack(spacing: 6) {
+        Text(s.action.isEmpty ? "A step" : s.action).font(.footnote.weight(.semibold))
+        if waiting.failed == true { Text("Failed").font(.footnote.weight(.semibold)).foregroundStyle(.red) }
+      }
       if waiting.options == "ask" {
         Label("Waiting for you", systemImage: "hand.raised").font(.footnote).foregroundStyle(.orange)
         Text(waiting.why).font(.footnote).foregroundStyle(.secondary)
@@ -68,8 +71,13 @@ struct FlowStrip: View {
         Text(waiting.why).font(.footnote).foregroundStyle(.orange)
         HStack(spacing: 8) {
           // the app tint is the text color, so a filled button's label is the background's (as in primaryButton)
-          Button("Approve anyway") { decide("approve", stepId: s.id) }.foregroundStyle(Color(.systemBackground)).buttonStyle(.borderedProminent)
-          Button(waiting.options == "rounds" ? "Another round" : "Try again") { decide("retry", stepId: s.id) }.buttonStyle(.bordered)
+          if waiting.failed == true {
+            Button("Try again") { decide("retry", stepId: s.id) }.foregroundStyle(Color(.systemBackground)).buttonStyle(.borderedProminent)
+            Button("Skip this step") { decide("approve", stepId: s.id) }.buttonStyle(.bordered)
+          } else {
+            Button("Approve anyway") { decide("approve", stepId: s.id) }.foregroundStyle(Color(.systemBackground)).buttonStyle(.borderedProminent)
+            Button(waiting.options == "rounds" ? "Another round" : "Try again") { decide("retry", stepId: s.id) }.buttonStyle(.bordered)
+          }
           Button("Stop", role: .destructive) { decide("stop", stepId: s.id) }.buttonStyle(.bordered)
         }
         .controlSize(.small)

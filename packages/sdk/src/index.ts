@@ -139,9 +139,16 @@ export class WispClient {
       throw err;
     }
   }
-  /** Do something on this agent's computer (screenshots come back as base64 JPEG). */
-  computer<T = any>(action: ComputerAction) {
-    return this.request<T>("POST", "/api/computers/mine/act", { action });
+  /**
+   * Do something on this agent's computer (screenshots come back as base64 JPEG), or with `on`, on
+   * one of its person's own computers they allowed it (`why` goes on the card when it has to ask).
+   */
+  computer<T = any>(action: ComputerAction, on?: { device: string; why?: string }) {
+    return this.request<T>("POST", "/api/computers/mine/act", { action, ...(on ? { on: on.device, ...(on.why ? { why: on.why } : {}) } : {}) });
+  }
+  /** Its person's own computers this agent may use, and whether it asks first ("ask") or tells after ("tell"). */
+  myDevices() {
+    return this.request<{ id: string; name: string; how: "ask" | "tell"; online: boolean; screenOn: boolean }[]>("GET", "/api/computers/mine/devices");
   }
   /** Sign in to a website on this agent's own computer with a login from the person's password manager; may ask them first. */
   fillLogin(site: string, account?: string) {

@@ -432,13 +432,15 @@ struct ChatRow: View {
       let doing = store.activity[a.id].flatMap { $0 == "started" ? nil : $0 }
       HStack(spacing: 6) {
         WorkingDots(color: Palette.statusWorking)
-        Text(["Working", doing].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 13)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
+        Text(ActivityText.line(doing)).font(.system(size: 13)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
       }
     } else if let agent = workingHere {
       HStack(spacing: 6) {
         WorkingDots(color: Palette.statusWorking)
         Text("\(agent.name) is working").font(.system(size: 13)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
       }
+    } else if case .agent(let a) = entry.kind, let live = store.agent(a.id) ?? Optional(a), live.needsSignIn, let signIn = live.signIn {
+      Text("Needs sign-in · \(HarnessChoice.label(signIn.harness)) on \(signIn.where_)").font(.system(size: 13)).foregroundStyle(Palette.statusNeedsText).lineLimit(1)
     } else if let waiting = needsApproval {
       Text("Needs approval" + (waiting.isEmpty ? "" : " · \(waiting)")).font(.system(size: 13)).foregroundStyle(Palette.statusNeedsText).lineLimit(1)
     } else if let line = channel.flatMap({ Loops.listLine($0) }) {

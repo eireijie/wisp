@@ -19,7 +19,8 @@ import { LEVEL_LABEL, pathLabel, subjectLabel } from "../components/AccessDialog
 import { ComputerPanel, RoutinesPanel, runsOnDevice } from "./AgentComputer.tsx";
 import { BackgroundPanel } from "./AgentBackground.tsx";
 import { MoreOptions } from "../components/MoreOptions.tsx";
-import { agentReadiness, computerKindLabel, useDevices, type DeviceInfo } from "../devices.ts";
+import { agentReadiness, computerKindLabel, isSharedComputer, useDevices, type DeviceInfo } from "../devices.ts";
+import { useComputerMode } from "../computerMode.ts";
 import { setupNextStep } from "../components/AgentPanel.tsx";
 import { openDm } from "../openDm.ts";
 
@@ -105,7 +106,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
       <span className="size-[7px] rounded-full bg-ok" /> Working
     </span>
   ) : (
-    <StatusChip status={agent.status} />
+    <StatusChip status={agent.status} needsSignIn={!!agent.signIn} />
   );
 
   const link = (id: AgentTab, label: string, icon: ReactNode) => {
@@ -353,7 +354,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
           onClick={toggleLock}
           role="switch"
           aria-checked={!locked}
-          className={cx("relative h-6 w-11 shrink-0 rounded-full transition-colors", locked ? "bg-hover" : "bg-accent")}
+          className={cx("relative h-6 w-11 shrink-0 rounded-full transition-colors", locked ? "bg-hover" : "m-switch-on")}
           aria-label={`Let @${agent.handle} refine its own personality`}
         >
           <span className={cx("m-knob absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow", !locked && "translate-x-5")} />
@@ -527,9 +528,9 @@ function InstructionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDir
 // --- Model --------------------------------------------------------------------
 
 const ACCESS: Record<AccessLevel, { label: string; short: string; body: string }> = {
-  "read-only": { label: "Read only", short: "read only", body: "Reads files and answers. Can't change anything on the device." },
-  edit: { label: "Can edit files", short: "can edit", body: "Edits files in its own working folder. Recommended." },
-  full: { label: "Full access", short: "full access", body: "No sandbox or permission checks. Only works on devices started with --allow-full-access." },
+  "read-only": { label: "Read only", short: "read only", body: "Reads files and answers. Changes nothing." },
+  edit: { label: "Can edit files", short: "can edit", body: "Changes files in its own folder. Recommended." },
+  full: { label: "Full access", short: "full access", body: "Can change any file and run any command." },
 };
 
 function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: boolean) => void; active: boolean }) {
@@ -691,7 +692,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
             aria-checked={form.fast}
             disabled={!selected?.fast}
             onClick={() => setForm({ ...form, fast: !form.fast })}
-            className={cx("relative h-5 w-9 rounded-full transition-colors", form.fast && selected?.fast ? "bg-accent" : "bg-chip")}
+            className={cx("relative h-5 w-9 rounded-full transition-colors", form.fast && selected?.fast ? "m-switch-on" : "bg-chip")}
           >
             <span className={cx("m-knob absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow", form.fast && selected?.fast && "translate-x-4")} />
           </button>
@@ -843,25 +844,55 @@ function DevicePanel({ agent, nodes, onDirty, active }: { agent: FullAgent; node
  * An agent whose harness runs directly on someone's device can reach that device's files, so by
  * default only the device's owner can ask it for things. The owner can open it up.
  */
-/** The effective reach of an access level in plain words (edit = the harness's workspace sandbox: its own folder). */
-export function accessScope(access: AccessLevel, name: string, handle: string, device: string | undefined): string {
-  if (!device) return "It has no device yet, so it can't touch any files.";
-  if (access === "read-only") return `${name} asks before changing any file on ${device}.`;
-  if (access === "edit") return `${name} may change files in its own working folder on ${device} (~/.wisp/agents/${handle}) and asks before changing files elsewhere. Some harnesses can't enforce this strictly.`;
-  return `${name} may change files and run commands on ${device}, if ${device} allows full access (a device can refuse and drop it to Edit).`;
+/** Where an agent's files are, for the access text: the shared computer, its own, or a device's folder. */
+export interface AccessPlace {
+  /** the device its AI runs on */
+  device?: string;
+  /** the computer it works on: the shared one, its own, or none (it works in a folder on the device) */
+  computer: "shared" | "own" | null;
+  handle: string;
+  advanced: boolean;
 }
+
+/**
+ * The effective reach of an access level, plainly (edit = the harness's workspace sandbox: its own
+ * folder). An agent with a computer works in that computer's files (on the shared one, a folder of
+ * its own in them); without one, in a folder on its device. Paths and caveats are for Advanced.
+ */
+export function accessScope(access: AccessLevel, name: string, p: AccessPlace): string {
+  if (!p.device) return "It has no device yet, so it can't touch any files.";
+  const folder = p.computer === "shared" ? "its own folder on the shared computer" : p.computer === "own" ? "its computer's files" : `its own folder on ${p.device}`;
+  const path = p.computer === "shared" ? `~/files/${p.handle}` : p.computer === "own" ? "~/files" : `~/.wisp/agents/${p.handle}`;
+  if (access === "read-only") return `${name} reads files and asks before changing any.`;
+  if (access === "edit") return `${name} can change files in ${folder}, and asks before changing anything else.${p.advanced ? ` (${path}; some AI tools can't hold to this strictly.)` : ""}`;
+  return `${name} can change any file and run any command on ${p.device}, where its AI runs, if ${p.device} allows full access. If it doesn't, ${name} can edit files only.`;
+}
+
+/** Harnesses Wisp can keep the person's own plugins out of. */
+const OWN_PLUGINS_HARNESSES = ["codex", "claude-code", "gemini"];
 
 function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent; nodes: NodeInfo[]; onDirty: (d: boolean) => void; active: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);
-  const saved = agent.settings.access ?? "edit";
-  const [{ access }, setPermissions] = useSavedDraft({ access: saved });
-  const setAccess = (value: AccessLevel) => setPermissions({ access: value });
+  const computer = useStore((s) => s.computers).find((c) => c.id === agent.computerId);
+  const { advanced } = useComputerMode();
+  const place: AccessPlace = {
+    device: nodes.find((n) => n.id === agent.nodeId)?.name,
+    computer: isSharedComputer(computer) ? "shared" : computer?.kind === "vm" ? "own" : null,
+    handle: agent.handle,
+    advanced,
+  };
+  const savedAccess = agent.settings.access ?? "edit";
+  const savedOwn = !!agent.settings.ownPlugins;
+  const [{ access, ownPlugins }, setPermissions] = useSavedDraft({ access: savedAccess, ownPlugins: savedOwn });
+  const setAccess = (value: AccessLevel) => setPermissions({ access: value, ownPlugins });
+  const setOwnPlugins = (value: boolean) => setPermissions({ access, ownPlugins: value });
+  const canOwnPlugins = OWN_PLUGINS_HARNESSES.includes(agent.harness);
   const [memory, setMemory] = useState<{ rules: AccessRule[]; sharedOut: AccessRule[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dirty = access !== saved;
+  const dirty = access !== savedAccess || ownPlugins !== savedOwn;
   useEffect(() => {
     onDirty(dirty);
   }, [dirty, onDirty]);
@@ -876,7 +907,7 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
     setSaving(true);
     setError(null);
     try {
-      await api("PATCH", `/api/agents/${agent.id}`, { settings: { access } });
+      await api("PATCH", `/api/agents/${agent.id}`, { settings: { access, ...(canOwnPlugins ? { ownPlugins } : {}) } });
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
@@ -889,8 +920,8 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
   return (
     <div className="space-y-8">
       <section>
-        <Intro title="On its device">
-          <p>What @{agent.handle} may do with files and commands on the computer it runs on.</p>
+        <Intro title="Files and commands">
+          <p>What @{agent.handle} may change{place.computer === "shared" ? " on the shared computer" : place.computer === "own" ? " on its computer" : ""} without asking.</p>
         </Intro>
         <div className="grid sm:grid-cols-3 gap-2">
           {(Object.keys(ACCESS) as AccessLevel[]).map((a) => (
@@ -898,13 +929,42 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
           ))}
         </div>
         <p role="status" className="mt-3 text-sm">
-          {accessScope(access, agent.name, agent.handle, nodes.find((n) => n.id === agent.nodeId)?.name)}
+          {accessScope(access, agent.name, place)}
         </p>
         {access === "full" && (
           <p className="mt-3 flex gap-2 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">
             <ShieldAlert size={16} className="shrink-0 mt-0.5" />
-            The agent can run any command as the device's user. The device must opt in with <code>wisp node start --allow-full-access</code>; otherwise it runs with edit access.
+            {advanced ? (
+              <>
+                It can run any command as {place.device ?? "the device"}'s user. The device must opt in with <code>wisp node start --allow-full-access</code>; otherwise it runs with edit access.
+              </>
+            ) : (
+              <>Only for an agent you trust: it can change anything {place.device ? `on ${place.device}` : ""}.</>
+            )}
           </p>
+        )}
+        {canOwnPlugins && (
+          <div className="mt-4 max-w-2xl">
+            <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ownPlugins}
+                aria-label={`Use my own ${harnessLabel(agent.harness)} plugins`}
+                onClick={() => setOwnPlugins(!ownPlugins)}
+                className={cx("relative h-5 w-9 rounded-full transition-colors", ownPlugins ? "m-switch-on" : "bg-chip")}
+              >
+                <span className={cx("m-knob absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow", ownPlugins && "translate-x-4")} />
+              </button>
+              Use my own {harnessLabel(agent.harness)} plugins
+            </label>
+            {ownPlugins && (
+              <p className="mt-2 flex gap-2 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">
+                <ShieldAlert size={16} className="shrink-0 mt-0.5" />
+                These skip Wisp's approvals and the screen switch.
+              </p>
+            )}
+          </div>
         )}
       </section>
 
@@ -950,7 +1010,7 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
       </section>
 
       {error && <p className="text-sm text-bad">{error}</p>}
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => setAccess(saved)} active={active} note="Applies from the next message." />
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => setPermissions({ access: savedAccess, ownPlugins: savedOwn })} active={active} note="Applies from the next message." />
     </div>
   );
 }
