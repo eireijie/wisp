@@ -785,13 +785,15 @@ export interface TeamFlowPiece {
   lastReviewId?: string;
   status: "building" | "reviewing" | "approved" | "failed";
   /** why a failed piece waits for a person, and what trying again redoes */
-  problem?: { why: string; options: "retry" | "rounds"; redo: "build" | "review" };
+  problem?: { why: string; options: "retry" | "rounds"; redo: "build" | "review"; failed?: boolean };
 }
 
 /** What a waiting request asks of a person. "ask" = an ask-me step, answered from the Inbox. */
 export interface FlowWaiting {
   why: string;
   options: "retry" | "rounds" | "ask";
+  /** the step (or its hand-over) ran and failed: offer Try again or Skip, never Approve */
+  failed?: boolean;
   /** `piece` when it's one piece of a hand-out that needs a person, not the whole step */
   piece?: string;
 }
@@ -871,4 +873,22 @@ export interface TeamDraft {
   /** how it works, one line per step */
   lines?: FlowLine[];
   problem?: string;
+}
+
+/** What a team's newest request says about it, for the Inbox: never "quiet" when it failed. */
+export type TeamRunState = { state: "working" | "failed" | "needs-you" | "stopped" | "quiet"; text: string };
+
+export function teamRunState(flows: Pick<TeamFlow, "status" | "waitingFor" | "lanes">[], busyName?: string | null): TeamRunState {
+  const latest = flows[0];
+  if (latest && (latest.status === "waiting" || latest.status === "running")) {
+    // steps that run together each have a lane: one failed step shows even while the others still work
+    const waiting = Object.values(latest.lanes ?? {}).filter((l) => l.status === "waiting");
+    const failed = latest.waitingFor?.failed || waiting.some((l) => l.waitingFor?.failed);
+    if (failed) return { state: "failed", text: "Failed · a step didn't finish. Try again or skip it" };
+    if (latest.status === "waiting" || waiting.length) return { state: "needs-you", text: "Waiting for you" };
+  }
+  if (latest?.status === "running") return { state: "working", text: busyName ? `Working · ${busyName} is on it` : "Working" };
+  if (latest?.status === "failed") return { state: "stopped", text: "Stopped · the last request didn't finish" };
+  if (busyName != null) return { state: "working", text: busyName ? `Working · ${busyName} is on it` : "Working" };
+  return { state: "quiet", text: "Quiet" };
 }

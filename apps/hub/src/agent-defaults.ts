@@ -1,10 +1,15 @@
+import { accountsSignedIn, preferSignedIn } from "@wisp/core";
 import type { Store } from "./store.ts";
 
-/** What "Use my defaults" in New agent fills in: a harness, a model, the device it runs on, and whether it gets its own VM. */
+/**
+ * What "Use my defaults" in New agent fills in: a harness, a model, the device it runs on, and its
+ * computer: the shared one (the default), its own VM, or none. In Simple (shared-computer.ts) an
+ * owner's agents always get the shared one and members' agents their own; the choice is Advanced's.
+ */
 export interface AgentDefaults {
   harness: string | null;
   model: string | null;
-  computer: "own-vm" | "none";
+  computer: "shared" | "own-vm" | "none";
   nodeId: string | null;
   /** A default model for each AI tool (harness id to model id); a tool left out uses `model` when it is the default tool, else its own default. */
   models: Record<string, string>;
@@ -46,12 +51,19 @@ export function agentDefaults(store: Store, workspaceId: string): AgentDefaults 
   const latest = store.agents(workspaceId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 
   const nodeId = known(saved.nodeId) ? saved.nodeId! : known(latest?.nodeId) ? latest!.nodeId! : (nodes.find((n) => canRunVms(n.id)) ?? nodes[0])?.id ?? null;
+  // a tool that's signed in beats one that would fail its first run; "can't tell" beats "signed out".
+  // Its device says first; another device's sign-in counts when its own can't tell.
   const offered = [...(nodeId ? [nodeId] : []), ...nodes.map((n) => n.id)].flatMap((id) => store.nodeCatalog(id));
-  // a tool that's signed in beats one that would fail its first run; "can't tell" beats "signed out"
-  const readiness = (accounts: Record<string, boolean | null> | undefined) => (Object.values(accounts ?? {}).some((v) => v === true) ? 0 : Object.values(accounts ?? {}).some((v) => v === false) ? 2 : 1);
-  const firstOffered = [...offered].sort((a, b) => readiness(a.accounts) - readiness(b.accounts))[0];
-  const harness = saved.harness !== undefined ? saved.harness : (latest?.harness ?? firstOffered?.harness ?? null);
+  const signedIn = (harness: string) => {
+    const here = nodeId ? accountsSignedIn(store.nodeCatalog(nodeId).find((h) => h.harness === harness)?.accounts) : null;
+    return here ?? (offered.some((h) => h.harness === harness && accountsSignedIn(h.accounts) === true) ? true : null);
+  };
+  // what was saved or used last stays, unless it's known to be signed out and another tool is signed in
+  const wanted = saved.harness !== undefined ? saved.harness : (latest?.harness ?? null);
+  const candidates = [...(wanted ? [wanted] : []), ...offered.map((h) => h.harness)];
+  const best = preferSignedIn(candidates, signedIn);
+  const harness = wanted && !(signedIn(wanted) === false && best && signedIn(best) === true) ? wanted : (best ?? null);
   const model = saved.model !== undefined ? saved.model : latest && latest.harness === harness ? latest.model : null;
-  const computer = saved.computer ?? (nodes.some((n) => canRunVms(n.id)) ? "own-vm" : "none");
+  const computer = saved.computer ?? "shared";
   return { harness, model, computer, nodeId, models: saved.models ?? {} };
 }

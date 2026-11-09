@@ -137,8 +137,8 @@ describe("remote MCP", () => {
     const names = (await mcp.listTools()).tools.map((t) => t.name);
     expect(names).toContain("chat_send");
     expect(names).toContain("task_delegate");
-    // the hub's own files aren't the caller's
-    expect(names).not.toContain("file_upload");
+    // the hub's own files aren't the caller's: file_upload reads its computer, and nothing downloads here
+    expect(names).toContain("file_upload");
     expect(names).not.toContain("file_download");
 
     const sent = await mcp.callTool({ name: "chat_send", arguments: { channel: "general", message: "hello from the car" } });

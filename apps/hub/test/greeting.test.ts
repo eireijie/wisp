@@ -226,17 +226,27 @@ describe("a new agent speaks first", () => {
     expect(prompt).not.toContain("Offer the role that fits");
   });
 
-  it("keeps the chat going when the model fails", async () => {
+  it("doesn't carry on with the scripted questions when the model fails; Try again then works and clears the failure", async () => {
     const id = await make("fin");
     onReply = async () => {
       throw new Error("model overloaded");
     };
     await answer(id, "Plan my week");
+    const dm = dmOf(id).id;
+    const failure = () => hub.store.messages(dm).filter((m) => m.parts.some((p) => p.type === "run_failed"));
+    await waitFor(() => (failure().length ? true : undefined));
+    // no "Which accounts…" from Wisp on the agent's behalf, and the step isn't marked answered
+    expect(said(id).map((m) => m.body)).not.toContain("Which accounts should I work with? For example Google, Meta or Instagram.");
+    expect(setupOf(id).steps.goal).toBeUndefined();
+    // Try again works: the old failure line and its button go away
     onReply = async () => "Got it.";
-    const last = said(id).at(-1)!;
-    expect(last.author).toEqual({ kind: "agent", id });
-    expect(last.body).toBe("Which accounts should I work with? For example Google, Meta or Instagram.");
-    expect(setupOf(id).steps.goal).toBe('"Plan my week" (their words)');
+    const run = hub.store.messages(dm).flatMap((m) => m.parts).find((p) => p.type === "run_failed");
+    const before = calls.length;
+    await owner.request("POST", `/api/runs/${(run as { runId: string }).runId}/retry`);
+    await waitFor(() => calls.length > before || undefined);
+    await idle();
+    await waitFor(() => (failure().length === 0 ? true : undefined));
+    expect(said(id).at(-1)!.body).toBe("Got it.");
   });
 
   it("ends after a fixed number of the person's messages even if the agent never finishes it", async () => {
@@ -273,8 +283,27 @@ describe("a new agent speaks first", () => {
     const [hello] = said(id);
     expect(hello.body).toMatch(/^Hey, I'm Hal!/);
     expect(hello.body).toContain("needs to be signed in on box");
-    expect(hello.body).toContain("Settings → Harnesses");
+    expect(hello.body).toContain("Press Sign in in this chat");
     expect(hello.parts).toEqual([]);
+    // the agent itself says so too, before anyone writes, so apps don't show it as ready
+    const agents = await owner.request<{ id: string; signIn: unknown }[]>("GET", "/api/agents");
+    expect(agents.find((a) => a.id === id)?.signIn).toEqual({ harness: "claude-code", where: "box", nodeId, computerId: null, account: "default" });
+  });
+
+  it("knows an agent in its own computer can't answer when its harness isn't signed in in there, whatever the device says", async () => {
+    const id = await make("vic", { harness: "codex" });
+    const ws = hub.store.agent(id)!.workspaceId;
+    const comp = hub.store.createComputer({ workspaceId: ws, name: "Vic's computer", kind: "vm", nodeId, config: { cpus: 2, memoryGb: 4 }, status: "ready" });
+    hub.store.updateAgent(id, { computerId: comp.id, settings: { runIn: "computer" } });
+    // not listed yet: nobody can tell, so nothing is claimed
+    expect(hub.signInNeeded(hub.store.agent(id)!)).toBeNull();
+    hub.store.setComputerCatalog(nodeId, comp.id, [{ harness: "codex", version: "1", models: [], accounts: { default: false } } as never]);
+    expect(hub.signInNeeded(hub.store.agent(id)!)).toEqual({ harness: "codex", where: "Vic's computer", nodeId, computerId: comp.id, account: "default" });
+    // a model connection brings its own sign-in
+    expect(hub.signInNeeded({ ...hub.store.agent(id)!, settings: { ...hub.store.agent(id)!.settings, connectionId: "mc_1" } })).toBeNull();
+    hub.store.setComputerCatalog(nodeId, comp.id, [{ harness: "codex", version: "1", models: [], accounts: { default: true } } as never]);
+    expect(hub.signInNeeded(hub.store.agent(id)!)).toBeNull();
+    hub.store.updateAgent(id, { computerId: null });
   });
 
   it("greets whoever its maker works for when an agent makes one", async () => {

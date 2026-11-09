@@ -75,9 +75,11 @@ final class ChatBubbleTests: XCTestCase {
     XCTAssertNil(ToolLine.remembered("mcp__wisp__memory_remember", input: ["text": .string("x")], output: "Not saved"))
   }
 
-  func testWorkingLabel() {
-    XCTAssertEqual(WorkLabel.of(tool: "Read", file: "/x/main.ts", activity: nil), "Reading main.ts")
-    XCTAssertEqual(WorkLabel.of(tool: nil, file: nil, activity: "started"), "Thinking…")
+  func testWorkingLine() {
+    XCTAssertEqual(ActivityText.line("Running a command"), "Running a command")
+    XCTAssertEqual(ActivityText.line("started"), "Working")
+    XCTAssertEqual(ActivityText.line(nil), "Working")
+    XCTAssertEqual(CallActivity.line(tool: "Read", file: "/x/main.ts"), "Reading main.ts")
   }
 
   func testMessageDecodesReplyQuote() throws {

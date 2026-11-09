@@ -463,7 +463,7 @@ private struct HarnessAccountsBlock: View {
 }
 
 /** Signing an account in without the device's terminal: Wisp shows the link and code the harness prints. */
-private struct HarnessSignInSheet: View {
+struct HarnessSignInSheet: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
   @Environment(\.openURL) private var openURL
@@ -477,6 +477,8 @@ private struct HarnessSignInSheet: View {
   @State private var code = ""
   @State private var error: String?
   @State private var started = false
+  /** what it had printed when a code was sent: anything after is its answer */
+  @State private var sentAt: String?
 
   private var label: String { HarnessChoice.label(settings.harness) }
   private var perProvider: Bool { settings.harness == "hermes" }
@@ -532,7 +534,7 @@ private struct HarnessSignInSheet: View {
   @ViewBuilder private var steps: some View {
     CardGroup {
       if let url = login?.url.flatMap(URL.init(string:)) {
-        step(1, "Open the sign-in page", trailing: { AddButton(title: "Open") { openURL(url) } })
+        step(1, login?.code == nil ? "Open the sign-in page and sign in" : "Open the sign-in page", trailing: { AddButton(title: "Open") { openURL(url) } })
       } else {
         step(1, "Open the sign-in page", { HStack { ProgressView(); Text("Starting \(label)'s sign-in on \(device.name)…").font(.system(size: 13)).foregroundStyle(Palette.muted) } })
       }
@@ -541,10 +543,23 @@ private struct HarnessSignInSheet: View {
           CircleButton(symbol: "doc.on.doc", label: "Copy code", size: 44) { UIPasteboard.general.string = value }
         })
       } else if login?.url != nil {
-        step(2, "Paste the code the page gives you", { MarketField(label: nil, placeholder: "Paste it here", text: $code, plain: true) })
+        step(2, "Copy the code the page shows, then paste it here", {
+          HStack(spacing: 8) {
+            MarketField(label: nil, placeholder: "Paste the code", text: $code, plain: true)
+            // the system's Paste button reads the clipboard without asking each time
+            PasteButton(payloadType: String.self) { strings in
+              if let text = strings.first?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty { code = text }
+            }
+            .buttonBorderShape(.capsule).labelStyle(.titleOnly).tint(Palette.control).foregroundStyle(Palette.text)
+          }
+        })
       }
     }
-    Text("Wisp passes the code to \(label) on \(device.name). Your password stays with the harness.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+    if let sentAt, let answer = Optional(HarnessLogin.replyAfter(sentAt, login?.output ?? "")), !answer.isEmpty {
+      Text("\(answer) Copy the whole code from the page and paste it again.").font(.footnote).foregroundStyle(Palette.red).padding(.horizontal, 4)
+        .accessibilityIdentifier("sign-in-answer")
+    }
+    Text(login?.url != nil && login?.code == nil ? "After you sign in, the page shows a code. Come back here and paste it; Wisp passes it to \(label) on \(device.name). Your password stays with the harness." : "Wisp passes the code to \(label) on \(device.name). Your password stays with the harness.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
     HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Waiting for you to finish signing in").font(.footnote).foregroundStyle(Palette.muted) }.padding(.horizontal, 4)
   }
 
@@ -573,10 +588,14 @@ private struct HarnessSignInSheet: View {
   private func send() {
     guard let id = login?.id, !code.trimmed.isEmpty else { return }
     let text = code.trimmed
+    // what it says after this is its answer to that code ("Invalid code…")
+    let before = login?.output ?? ""
     Task {
       do {
         let data = try await act(["op": AnyEncodable("login_input"), "loginId": AnyEncodable(id), "text": AnyEncodable(text)])
-        login = try Wire.decoder.decode(HarnessLogin.self, from: data); code = ""
+        let next = try Wire.decoder.decode(HarnessLogin.self, from: data)
+        sentAt = before
+        login = next; code = ""
       } catch { self.error = error.localizedDescription }
     }
   }
@@ -654,6 +673,144 @@ struct InstallHarnessSheet: View {
     }
     .confirmationDialog("Install this harness on \(node?.name ?? "the device")?", isPresented: Binding(get: { installing != nil }, set: { if !$0 { installing = nil } }), titleVisibility: .visible) {
       Button("Install") { if let harness = installing { action.run { output = try await store.installHarness(harness, node: nodeId) } } }
+    }
+  }
+}
+
+
+/**
+ * "Sign in" for an agent's harness where it runs, right here: on a device it opens that harness's
+ * own sign-in (link, code, paste box); inside the agent's own computer it starts the sign-in on that
+ * computer's screen and opens it to finish there. Any harness, any computer.
+ */
+struct AgentSignInButton: View {
+  @Environment(Store.self) private var store
+  /** the agent it's for; only needed when it runs in its own computer */
+  var agent: Agent?
+  var signIn: AgentSignIn
+  /** told when its sign-in sheet opens or closes */
+  var onOpenChange: (Bool) -> Void = { _ in }
+  @State private var target: Target?
+  @State private var computerRoute: String?
+  @State private var action = FormAction()
+
+  struct Target: Identifiable {
+    var device: HarnessesResponse.Device
+    var settings: HarnessSettings
+    var account: HarnessAccount
+    var id: String { "\(device.id)/\(settings.harness)/\(account.id)" }
+  }
+
+  var body: some View {
+    Button { start() } label: {
+      HStack(spacing: 6) {
+        if action.busy { ProgressView().controlSize(.mini) } else { Image(systemName: "key").font(.system(size: 12, weight: .medium)) }
+        Text("Sign in")
+      }
+    }
+    .buttonStyle(CardPill(tone: .soft))
+    .disabled(action.busy)
+    .accessibilityIdentifier("agent-sign-in")
+    .onChange(of: target?.id) { _, id in onOpenChange(id != nil) }
+    .sheet(item: $target) { t in
+      HarnessSignInSheet(device: t.device, settings: t.settings, account: t.account) { Task { try? await store.refreshAgents() } }
+    }
+    .navigationDestination(item: $computerRoute) { ComputerDetail(computerId: $0) }
+    .managementAlert(action)
+  }
+
+  private func start() {
+    action.run {
+      if signIn.computerId != nil, let agent {
+        computerRoute = try await store.signInAgent(agent.id)
+        return
+      }
+      let account = signIn.account ?? "default"
+      let r = try await store.harnessSettings(device: signIn.nodeId, harness: signIn.harness, account: account)
+      guard let settings = r.harnesses.first(where: { $0.harness == signIn.harness }),
+            let acct = settings.accounts.first(where: { $0.id == account }) ?? settings.accounts.first(where: \.isDefault) ?? settings.accounts.first
+      else { throw SignInError.gone("\(HarnessChoice.label(signIn.harness)) isn't on \(signIn.where_) anymore") }
+      target = Target(device: r.device, settings: settings, account: acct)
+    }
+  }
+
+  enum SignInError: LocalizedError {
+    case gone(String)
+    var errorDescription: String? { if case .gone(let s) = self { return s }; return nil }
+  }
+}
+
+/** The line a chat shows while its agent can't answer because its harness isn't signed in where it runs. */
+struct AgentSignInBar: View {
+  var agent: Agent
+  // while its sign-in is open the bar stays, so the sheet isn't lost when the status changes under it
+  @State private var open = false
+  @State private var last: AgentSignIn?
+
+  var body: some View {
+    Group {
+      if let signIn = agent.signIn ?? (open ? last : nil) { bar(signIn) }
+    }
+    .onAppear { if let s = agent.signIn { last = s } }
+    .onChange(of: agent.signIn?.harness) { _, _ in if let s = agent.signIn { last = s } }
+  }
+
+  private func bar(_ signIn: AgentSignIn) -> some View {
+      HStack(spacing: 10) {
+        Text("\(HarnessChoice.label(signIn.harness)) isn't signed in on \(signIn.where_), so \(agent.name) can't answer yet.")
+          .font(.system(size: 13)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
+        Spacer(minLength: 4)
+        AgentSignInButton(agent: agent, signIn: signIn) { open = $0 }
+      }
+      .padding(.horizontal, 14).padding(.vertical, 10)
+      .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.statusNeeds.tint16))
+      .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.statusNeeds.opacity(0.35)))
+      .padding(.horizontal, 12)
+      .accessibilityElement(children: .contain)
+      .accessibilityIdentifier("agent-sign-in-bar")
+  }
+}
+
+extension AgentNode {
+  /** Is any account of this harness signed in here (true), are all known to be signed out (false), or can't anyone tell (nil)? */
+  func harnessSignedIn(_ harness: String) -> Bool? {
+    let values = (harnesses?.first { $0.id == harness }?.accounts ?? [:]).values
+    if values.contains(where: { $0 == true }) { return true }
+    return !values.isEmpty && values.allSatisfy({ $0 == false }) ? false : nil
+  }
+}
+
+enum HarnessPick {
+  /**
+   * The harness to preselect for a new agent: the first of `ids` that's signed in, else the first
+   * nobody can tell about, else the first. One that would fail its first reply is never picked over
+   * one that works. Mirrors preferSignedIn in @wisp/core.
+   */
+  static func preferSignedIn(_ ids: [String], _ signedIn: (String) -> Bool?) -> String? {
+    var seen: [String] = []
+    for id in ids where !seen.contains(id) { seen.append(id) }
+    return seen.first { signedIn($0) == true } ?? seen.first { signedIn($0) != false } ?? seen.first
+  }
+}
+
+/** Before a new agent is made: its AI isn't signed in on the device it will run on. Says so, with Sign in. */
+struct HarnessSignInNotice: View {
+  var harness: String
+  var node: AgentNode?
+
+  var body: some View {
+    if let node, node.mine == true, node.harnessSignedIn(harness) == false {
+      let none = !(node.harnesses ?? []).contains { node.harnessSignedIn($0.id) != false }
+      HStack(spacing: 10) {
+        Text(none ? "No AI is signed in on \(node.name) yet. Sign in to \(HarnessChoice.label(harness)) so it can answer." : "\(HarnessChoice.label(harness)) isn't signed in on \(node.name). Sign in, or pick another.")
+          .font(.system(size: 13)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
+        Spacer(minLength: 4)
+        AgentSignInButton(agent: nil, signIn: AgentSignIn(harness: harness, where_: node.name, nodeId: node.id, computerId: nil, account: "default"))
+      }
+      .padding(.horizontal, 14).padding(.vertical, 10)
+      .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.statusNeeds.tint16))
+      .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.statusNeeds.opacity(0.35)))
+      .accessibilityIdentifier("new-sign-in-notice")
     }
   }
 }

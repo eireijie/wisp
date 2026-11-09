@@ -6,7 +6,8 @@ import { GhostColors } from "../components/GhostColors.tsx";
 import { HarnessLogo } from "../components/HarnessLogo.tsx";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
 import { prettyModel } from "../components/EffortSlider.tsx";
-import { HARNESSES, runsInVm, type Agent, type Connector, type DiscoveredAgent, type Skill } from "@wisp/core";
+import { HARNESSES, accountsSignedIn, preferSignedIn, runsInVm, type Agent, type AgentSignIn, type Connector, type DiscoveredAgent, type Skill } from "@wisp/core";
+import { HarnessSignInButton } from "../components/HarnessSignInButton.tsx";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go } from "../router.ts";
@@ -16,6 +17,7 @@ import { computerKindLabel, usableDevices } from "../devices.ts";
 import { defaultComputer, resolveComputer, vmOnDevice, withComputer, type ComputerChoice } from "../agentComputer.ts";
 import { MoreOptions } from "../components/MoreOptions.tsx";
 import { useFeature } from "../features.ts";
+import { useComputerMode } from "../computerMode.ts";
 import { LookEditorScreen } from "./LookEditor.tsx";
 import { Button, Field, harnessLabel, Input, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
 
@@ -190,7 +192,7 @@ function HarnessGrid({ list, harness, onPick, label }: { list: HarnessChoice[]; 
 export interface AgentDefaults {
   harness: string | null;
   model: string | null;
-  computer: "own-vm" | "none";
+  computer: "shared" | "own-vm" | "none";
   nodeId: string | null;
 }
 
@@ -201,12 +203,12 @@ type View = "form" | "look" | "external" | "discover" | "invitation";
 type RespondTo = "me" | "anyone" | "people";
 
 /** "Claude Code · Sonnet 5.5" and "Its own computer on my-mac": the defaults in a line each. */
-export function defaultsSummary(d: AgentDefaults, nodes: Pick<NodeInfo, "id" | "name">[]): { ai: string; computer: string } {
+export function defaultsSummary(d: AgentDefaults, nodes: Pick<NodeInfo, "id" | "name">[], simple = false): { ai: string; computer: string } {
   const harness = d.harness ? (harnessLabel(d.harness) ?? d.harness) : "Not picked yet";
   const node = nodes.find((n) => n.id === d.nodeId);
   return {
     ai: `${harness} · ${d.model ? prettyModel(d.model) : "Automatic model"}`,
-    computer: d.computer === "own-vm" ? (node ? `Its own computer on ${node.name}` : "Its own computer") : "No computer",
+    computer: simple || d.computer === "shared" ? "The shared computer" : d.computer === "own-vm" ? (node ? `Its own computer on ${node.name}` : "Its own computer") : "No computer",
   };
 }
 
@@ -280,9 +282,12 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
       },
       () => {
         if (!live) return;
-        // an older hub has no defaults: pick here instead
+        // an older hub has no defaults: pick here instead, starting on an AI that's signed in
         setDefaults("error");
         setMode("custom");
+        const on = nodes.find((n) => n.id === nodeId);
+        const pick = preferSignedIn((on?.harnesses ?? []).map((h) => h.id), (id) => accountsSignedIn(on?.harnesses?.find((h) => h.id === id)?.accounts));
+        if (pick && !touched.current) setHarness(pick);
       },
     );
     return () => {
@@ -326,10 +331,17 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
     ...declared.map((h) => ({ id: h.id, label: h.id.slice(4), protocol: "acp" as const, note: "Available on a connected device", binary: "" })),
     HARNESSES.find((h) => h.id === "custom")!,
   ];
-  const useDefaults = mode === "defaults" && !invite && defaults !== null && defaults !== "error";
-  const effectiveHarness = useDefaults ? ((defaults as AgentDefaults).harness ?? harness) : harness;
+  // Simple (the default): Wisp places it, so only the AI is a choice here; Advanced picks where it runs too
+  const { advanced: pickWhere } = useComputerMode();
+  const simple = !pickWhere && defaults !== "error";
+  const useDefaults = (mode === "defaults" || simple) && !invite && defaults !== null && defaults !== "error";
+  const effectiveHarness = mode === "defaults" && useDefaults ? ((defaults as AgentDefaults).harness ?? harness) : harness;
   const selectedHarness = harnesses.find((h) => h.id === effectiveHarness) ?? harnesses[0];
   const external = invite || selectedHarness.protocol === "mcp";
+  // the AI picked is known not to be signed in on its device: say so, with Sign in, before it's made
+  const signedInOn = (id: string) => accountsSignedIn(node?.harnesses?.find((h) => h.id === id)?.accounts);
+  const signInFirst: AgentSignIn | null = node?.mine && !external && signedInOn(selectedHarness.id) === false ? { harness: selectedHarness.id, where: node.name, nodeId: node.id, computerId: null, account: "default" } : null;
+  const noneSignedIn = !!signInFirst && !(node?.harnesses ?? []).some((h) => accountsSignedIn(h.accounts) !== false);
 
   const cleanName = name.trim();
   const finalHandle = handle || slug(cleanName);
@@ -362,7 +374,9 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
         };
         const common = { name: cleanName, handle: finalHandle, instructions };
         if (useDefaults) {
-          a = await api<Agent>("POST", "/api/agents", { ...common, useDefaults: true, settings });
+          // Customize in Simple: the AI picked here, the rest placed by Wisp
+          const ai = mode === "custom" && !external ? { harness, ...(model.trim() ? { model: model.trim() } : {}) } : {};
+          a = await api<Agent>("POST", "/api/agents", { ...common, ...ai, useDefaults: true, settings });
         } else {
           const computerId = external ? null : await resolveComputer(computer, nodeId, cleanName);
           // Keep a newly created computer selected if creating the agent needs a retry.
@@ -413,7 +427,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
     }
   };
 
-  const summary = defaults && defaults !== "error" ? defaultsSummary(defaults, nodes) : null;
+  const summary = defaults && defaults !== "error" ? defaultsSummary(defaults, nodes, simple) : null;
 
   return (
     <Modal title="New agent" label="New agent" onClose={busy ? () => {} : onClose} headerless className="sm:max-w-[920px]!" contentClassName="p-0!">
@@ -578,8 +592,8 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                             />
                             <datalist id="new-agent-models">{defaults && defaults !== "error" && defaults.model && <option value={defaults.model} />}</datalist>
                           </label>
-                          {/* only ask which device when there's a real choice */}
-                          {usable.length < 2 ? (
+                          {/* only ask which device when there's a real choice, and only in Advanced */}
+                          {simple ? null : usable.length < 2 ? (
                             <div className="space-y-1.5">
                               <span className="block text-[13px] font-medium text-muted">Device</span>
                               <div className="h-10 flex items-center text-sm">
@@ -615,17 +629,25 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                           </label>
                           )}
                         </div>
-                        {selectedHarness.protocol !== "mcp" && <ComputerPicker value={computer} onChange={chooseComputer} node={node} nodes={nodes} />}
-                        {node && !runsInVm(harness) && !installed.has(harness) && selectedHarness.protocol !== "mcp" && (
+                        {selectedHarness.protocol !== "mcp" && !simple && <ComputerPicker value={computer} onChange={chooseComputer} node={node} nodes={nodes} />}
+                        {!simple && node && !runsInVm(harness) && !installed.has(harness) && selectedHarness.protocol !== "mcp" && (
                           <p className="text-xs text-muted">
                             Install {selectedHarness.label} on {node.name} before its first run.
                           </p>
                         )}
-                        {node && !node.online && (
+                        {!simple && node && !node.online && (
                           <p role="status" className="text-xs text-warn">
                             {node.name} is offline. You can create {cleanName || "this agent"} now, but it can't answer until {node.name} reconnects.
                           </p>
                         )}
+                      </div>
+                    )}
+                    {signInFirst && (
+                      <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-warn/40 bg-warn/10 px-3.5 py-2.5 text-[13px]">
+                        <span className="min-w-0 flex-1">
+                          {noneSignedIn ? `No AI is signed in on ${signInFirst.where} yet. Sign in to ${harnessLabel(signInFirst.harness)} so ${cleanName || "this agent"} can answer.` : `${harnessLabel(signInFirst.harness)} isn't signed in on ${signInFirst.where}. Sign in, or pick another AI.`}
+                        </span>
+                        <HarnessSignInButton signIn={signInFirst} />
                       </div>
                     )}
                   </div>

@@ -134,6 +134,16 @@ export class AcpError extends Error {
   }
 }
 
+/**
+ * Flags that keep a harness's own extensions and MCP servers out of a run, for the ACP harnesses
+ * that have them (Wisp's servers are passed in with the session, by name). Exported for tests.
+ */
+export function acpIsolationArgs(id: string, input: Pick<RunInput, "mcp" | "browser" | "connectors">): string[] {
+  if (id !== "gemini") return [];
+  const names = acpMcpServers(input.mcp, input.browser, input.connectors).map((s) => String(s.name));
+  return ["-e", "none", ...(names.length ? names.flatMap((n) => [`--allowed-mcp-server-names=${n}`]) : ["--allowed-mcp-server-names=wisp"])];
+}
+
 /** ACP wants MCP server env as a list of {name, value}. Exported for tests. */
 export function acpMcpServers(mcp: McpServerSpec | undefined, browser?: McpServerSpec, connectors: ConnectorSpec[] = []): Json[] {
   const out: Json[] = [];
@@ -260,9 +270,11 @@ function lastLine(s: string) {
  * these in its node.json `harnesses` section; see deviceAdapters).
  */
 export function acpAdapter(info: { id: string; label: string; binary: string; args: string[]; vm?: { binary: string; args: string[] } }): HarnessAdapter {
-  const command = (input?: RunInput): AcpCommand =>
+  const command = (input?: RunInput): AcpCommand => {
     // inside a VM the agent is the copy that comes with the image, not whatever this device's node.json points at
-    input?.launch && info.vm ? { command: info.vm.binary, args: info.vm.args } : { command: info.binary, args: info.args };
+    const base = input?.launch && info.vm ? { command: info.vm.binary, args: info.vm.args } : { command: info.binary, args: info.args };
+    return input && input.ownPlugins !== true ? { ...base, args: [...base.args, ...acpIsolationArgs(info.id, input)] } : base;
+  };
 
   return {
     id: info.id,

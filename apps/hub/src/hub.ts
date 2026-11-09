@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, TERM_PREFIX, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential } from "@wisp/core";
+import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, TERM_PREFIX, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential, type AgentSignIn } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Terminals } from "./terminals.ts";
@@ -29,11 +29,13 @@ import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
 import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
 import { spawnSection } from "./spawn.ts";
-import { askNextIfStalled, recordSetupReply, setupChat, setupSection } from "./greeting.ts";
+import { recordSetupReply, setupChat, setupSection } from "./greeting.ts";
 import { foldTeams } from "./fold-teams.ts";
 import { TeamFlows } from "./team-flows.ts";
 import type { RunKind, Store } from "./store.ts";
 import { guestEvent } from "./guest-computers.ts";
+import { adoptShared } from "./shared-computer.ts";
+import { DeviceUse } from "./device-use.ts";
 
 const CONTEXT_MESSAGES = 20;
 /** How long after a run ends its device may still send back the sign-in it renewed. */
@@ -84,6 +86,7 @@ export class Hub {
   readonly computers: Computers;
   /** the Code mod's terminals, relayed to devices */
   readonly terminals: Terminals;
+  readonly deviceUse: DeviceUse;
   /** logins agents fill from the person's password manager */
   readonly logins: Logins;
   /** files on the person's own storage (the Storage mod) */
@@ -141,6 +144,7 @@ export class Hub {
     this.flows = new TeamFlows(this);
     this.computers = new Computers(this);
     this.terminals = new Terminals(this);
+    this.deviceUse = new DeviceUse(this);
     this.logins = new Logins(this);
     this.storage = new Storage(this);
     this.routines = new Routines(this);
@@ -389,6 +393,24 @@ export class Hub {
     return vm ?? this.store.nodeCatalog(agent.nodeId);
   }
 
+  /**
+   * Where the agent's harness has to be signed in before it can answer, when Wisp knows it isn't:
+   * on its device, or inside its own computer (a VM) when it runs there. null when it's signed in,
+   * runs on a model connection (which brings its own sign-in), or nobody can tell yet.
+   */
+  signInNeeded(agent: Pick<Agent, "id" | "nodeId" | "computerId" | "harness" | "settings">): AgentSignIn | null {
+    if (!agent.nodeId || agent.settings.connectionId || harnessInfo(agent.harness)?.protocol === "mcp") return null;
+    if (this.runsInComputer(agent)) {
+      const comp = this.store.computer(agent.computerId!)!;
+      const here = this.store.computerCatalog(agent.nodeId, comp.id)?.find((h) => h.harness === agent.harness);
+      return here?.accounts?.default === false ? { harness: agent.harness, where: comp.name, nodeId: agent.nodeId, computerId: comp.id, account: "default" } : null;
+    }
+    const here = this.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness);
+    const account = here?.agentAccounts?.[agent.id] ?? "default";
+    if (here?.accounts?.[account] !== false) return null;
+    return { harness: agent.harness, where: this.store.node(agent.nodeId)?.name ?? "its device", nodeId: agent.nodeId, computerId: null, account };
+  }
+
   /** The catalog an agent's models, efforts and "/" commands come from: its harness where it runs. */
   catalogFor(agent: Pick<Agent, "nodeId" | "computerId" | "harness" | "settings">): HarnessCatalog | undefined {
     return this.harnessesWhere(agent).find((h) => h.harness === agent.harness);
@@ -588,7 +610,10 @@ export class Hub {
         return;
       }
       case "capabilities": {
+        const couldRunVms = !!store.nodeCapabilities(conn.nodeId)?.vm.ok;
         store.setNodeCapabilities(conn.nodeId, msg.capabilities);
+        // a device that can now run computers: agents still waiting for the shared one get it
+        if (!couldRunVms && msg.capabilities.vm.ok) adoptShared(this, conn.workspaceId);
         const was = this.pausedNodes.has(conn.nodeId);
         if (msg.capabilities.paused) this.pausedNodes.add(conn.nodeId);
         else this.pausedNodes.delete(conn.nodeId);
@@ -615,7 +640,7 @@ export class Hub {
       case "computer_status": {
         const c = store.computer(msg.computerId);
         if (!c || c.nodeId !== conn.nodeId) return;
-        store.updateComputer(c.id, { status: msg.status, statusText: msg.text });
+        store.updateComputer(c.id, { status: msg.status, statusText: msg.text || (msg.status === "stopped" ? "Off. It starts when it's needed." : "") });
         this.computers.changed(c.id);
         return;
       }
@@ -640,13 +665,15 @@ export class Hub {
         return;
       }
       case "catalog": {
+        // what it says about sign-ins changes whether its agents can answer: apps show that before anyone writes
+        const agents = store.agentsOnNode(conn.nodeId);
+        const before = JSON.stringify(agents.map((a) => this.signInNeeded(a)));
         // a VM's harnesses only for a VM of this device
         if (msg.computerId) {
           const c = store.computer(msg.computerId);
           if (c?.kind === "vm" && c.nodeId === conn.nodeId) store.setComputerCatalog(conn.nodeId, c.id, msg.catalog);
-          return;
-        }
-        store.setNodeCatalog(conn.nodeId, msg.catalog);
+        } else store.setNodeCatalog(conn.nodeId, msg.catalog);
+        if (JSON.stringify(agents.map((a) => this.signInNeeded(a))) !== before) this.broadcast(conn.workspaceId, { type: "agents_changed" });
         return;
       }
       case "credential_refreshed": {
@@ -696,7 +723,9 @@ export class Hub {
             this.connectionsChanged(cid);
           }
         }
-        const live = this.live.get(run.id) ?? { parts: [], text: "" };
+        // a person's own computer it used on "tell me after": it says so now, after the reply
+    queueMicrotask(() => this.deviceUse.runEnded(run));
+    const live = this.live.get(run.id) ?? { parts: [], text: "" };
         collect(live, msg.event);
         this.live.set(run.id, live);
         // a background check works quietly: nothing shows in the DM unless it messages the person
@@ -757,12 +786,14 @@ export class Hub {
       // a memory pass posts nothing: what it saved is in Memory's history
       store.setRunStatus(run.id, "finalText" in result ? "done" : "failed", "error" in result ? result.error : undefined);
       this.autoMemory.finished(run.id);
+      if (agent && run.requestedBy) this.background.warnIfClimbing(agent.workspaceId, run.requestedBy);
     } else if (run.kind === "background") {
       store.setRunStatus(run.id, "finalText" in result ? "done" : "failed", "error" in result ? result.error : undefined);
       this.background.finished(run, "finalText" in result ? result.finalText.trim() || live.text.trim() : `The check failed: ${result.error}`);
       this.loops.runEnded(run, null);
     } else if ("finalText" in result) {
       store.setRunStatus(run.id, "done");
+      this.clearEarlierFailures(run);
       this.routines.runFinished(run);
       body = result.finalText.trim() || live.text.trim();
       // a harness command (/compact, say) may finish without a word; say it ran
@@ -781,7 +812,9 @@ export class Hub {
       // it worked on its screen: the reply keeps the screen, so it doesn't vanish when the run ends
       const screen = agent?.computerId && !gone ? this.screenAfterRun(agent.computerId, live.parts, body, run) : null;
       const parts = [...live.parts, ...(screen ? [screen] : []), ...skillParts];
-      const reply = body && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy, conversationId: this.chatOfRun(run) }) : null;
+      // files it sent go out even when it said nothing with them
+      const sentFiles = live.parts.some((p) => p.type === "file");
+      const reply = (body || sentFiles) && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy, conversationId: this.chatOfRun(run) }) : null;
       // follow-ups it set and how it left the chat show under its answer
       this.loops.runEnded(run, reply?.id ?? (repeated && posted ? posted.id : null));
       // work worth remembering that it didn't save gets a memory pass once the chat goes quiet
@@ -795,7 +828,7 @@ export class Hub {
         const fix = agent ? this.failureFix(agent, result.error) : undefined;
         this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "status", text: `Run failed: ${text}` }, ...(result.error === "cancelled" ? [] : [{ type: "run_failed" as const, runId: run.id, retry: !!run.triggerMessageId && !run.discussionId, ...(fix ? { fix } : {}) }])], hop: run.hop + 1, route: false, conversationId: this.chatOfRun(run) });
         failTaskOfRun(this, run, text);
-        if (result.error !== "cancelled" && agent && store.channel(run.channelId)?.kind === "dm") askNextIfStalled(this, agent.id, run.channelId, !!fix);
+        // setup's scripted questions wait: the person sees the failure and its Try again first
       }
     }
     if (agent) this.broadcast(workspaceId, { type: "agent_status", agentId: agent.id, status: this.agentStatus(agent) });
@@ -837,6 +870,19 @@ export class Hub {
   }
 
   /** Ask again after a failed run: a new run for the same request, for whoever is asking now. */
+  /** A retry worked: the "Run failed" lines (and their Try again buttons) from the earlier tries of the same message go away. */
+  private clearEarlierFailures(run: NonNullable<ReturnType<Store["run"]>>) {
+    if (!run.triggerMessageId) return;
+    for (const m of this.store.messages(run.channelId, { threadId: run.threadId, limit: 60 })) {
+      if (m.author.kind !== "agent" || m.author.id !== run.agentId || m.body) continue;
+      const failed = m.parts.find((p) => p.type === "run_failed");
+      if (!failed || failed.type !== "run_failed" || failed.runId === run.id) continue;
+      if (this.store.run(failed.runId)?.triggerMessageId !== run.triggerMessageId) continue;
+      this.store.deleteMessage(m.id);
+      this.broadcast(this.store.channel(run.channelId)!.workspaceId, { type: "message_removed", messageId: m.id, channelId: m.channelId, threadId: m.threadId }, this.audience(m.channelId));
+    }
+  }
+
   retryRun(run: NonNullable<ReturnType<Store["run"]>>, requestedBy: string): string {
     const task = run.threadId ? this.store.taskByThread(run.threadId) : undefined;
     if (task?.toAgentId === run.agentId && task.status === "failed" && !task.result?.startsWith("Cancelled")) {
@@ -1334,6 +1380,39 @@ export class Hub {
     return running.length === 1 ? this.store.run(running[0].id) : undefined;
   }
 
+  /** A status line in a run's live reply that comes from the hub, not its device ("Starting the computer…"). */
+  runStatus(runId: string, text: string) {
+    const run = this.store.run(runId);
+    if (!run || run.status !== "running" || run.kind) return;
+    const event = { type: "status" as const, text };
+    const live = this.live.get(run.id) ?? { parts: [], text: "" };
+    collect(live, event);
+    this.live.set(run.id, live);
+    const ws = this.store.agent(run.agentId)?.workspaceId;
+    if (ws) this.broadcast(ws, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, ...this.whereRuns(run), event }, this.audience(run.channelId));
+  }
+
+  /**
+   * A file an agent sent while working on a run: it's attached to that run's reply (or its
+   * "Run failed" line), so it shows in the chat. A background check, which posts nothing, keeps none.
+   */
+  attachToRun(runId: string, file: { id: string; name: string }) {
+    const run = this.store.run(runId);
+    if (!run || run.status !== "running" || run.kind) return;
+    const live = this.live.get(runId) ?? { parts: [], text: "" };
+    if (!live.parts.some((p) => p.type === "file" && p.fileId === file.id)) live.parts.push({ type: "file", fileId: file.id, name: file.name });
+    this.live.set(runId, live);
+  }
+
+  /** Files an agent posted with chat_send aren't attached to its reply as well. */
+  detachFromRun(agentId: string, fileIds: string[]) {
+    const ids = new Set(fileIds);
+    for (const [runId, live] of this.live) {
+      if (this.store.run(runId)?.agentId !== agentId) continue;
+      live.parts = live.parts.filter((p) => !(p.type === "file" && ids.has(p.fileId)));
+    }
+  }
+
   currentRun(agentId: string) {
     const r = this.store.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 1").get(agentId) as { id: string } | undefined;
     return r ? this.store.run(r.id) : undefined;
@@ -1657,6 +1736,7 @@ export class Hub {
       teamNotes ? `\n${teamNotes}` : "",
       `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the wisp MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available, and follow your memory skill (me/skills/memory/SKILL.md) whenever you save something.`,
       background ? "" : `Reply with the message you want posted. Keep it conversational; only @mention another agent when you actually need them to act.`,
+      background ? "" : `To send a file you made (a report, an image, a spreadsheet), call file_upload with its path; it's attached to your reply. Only say a file is attached after file_upload succeeded.`,
       asks.length
         ? `Before any of these that nobody asked for in so many words: ${asks.join("; ")}, ask first with approval_request and end your turn; you'll be woken with the answer. Ask about anything else that's hard to undo, too.`
         : `When something is hard to undo and nobody asked for it in so many words, ask first with approval_request and end your turn; you'll be woken with the answer.`,

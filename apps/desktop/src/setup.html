@@ -206,7 +206,6 @@
   .fix { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
   .fix b { display: block; font-weight: 600; font-size: 14px; margin-bottom: 3px; }
   .fix p { margin: 0; color: var(--muted); font-size: 13.5px; }
-  .rd-id { font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: 0.02em; color: var(--ink); }
   :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
   /* the wisps: the same drawing and motion as the app's ghost */
   .w { position: absolute; left: 0; top: 0; width: 300px; height: 300px; pointer-events: none; transition: left 850ms cubic-bezier(0.3, 0.85, 0.3, 1), top 850ms cubic-bezier(0.3, 0.85, 0.3, 1), transform 850ms cubic-bezier(0.3, 0.85, 0.3, 1), opacity 600ms; }
@@ -272,7 +271,7 @@
   <header>
     <div>
       <h1 id="title">Welcome to Wisp</h1>
-      <p id="subtitle">Two questions, then pick where your agents live.</p>
+      <p id="subtitle">One question, then pick where your agents live.</p>
     </div>
   </header>
 
@@ -282,13 +281,6 @@
       <div class="seg" role="radiogroup" aria-labelledby="q-on">
         <button type="button" role="radio" data-q="on" data-v="no">No, it sleeps or travels</button>
         <button type="button" role="radio" data-q="on" data-v="yes">Yes, it stays on</button>
-      </div>
-    </div>
-    <div class="q">
-      <p id="q-use">Should agents use this computer's apps too?</p>
-      <div class="seg" role="radiogroup" aria-labelledby="q-use">
-        <button type="button" role="radio" data-q="use" data-v="no">No</button>
-        <button type="button" role="radio" data-q="use" data-v="yes">Yes</button>
       </div>
     </div>
     <button class="choice" id="pick-cloud" aria-pressed="false">
@@ -423,24 +415,6 @@
     </section>
   </div>
 
-  <section id="rustdesk" hidden>
-    <h2>Watch this computer from anywhere</h2>
-    <p>Your agents can use this <span data-computer>computer</span>. To see or take over its screen from your phone, add a remote desktop app.</p>
-    <div class="choice" aria-pressed="true" style="cursor:default">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
-      <span class="text"><strong>RustDesk<span class="tag rec">Recommended</span></strong><span id="rd-text">Free and open source. Wisp installs it and shows its ID on this computer's page. You set its password; Wisp never sees it.</span></span>
-    </div>
-    <div class="choice" id="rd-own" style="cursor:default;margin-top:10px">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
-      <span class="text"><strong>Wisp's own view</strong><span>Watch inside Wisp with your screen code. Linux and Windows today.</span></span>
-    </div>
-    <p class="error" id="rd-error" hidden></p>
-    <div class="push"></div>
-    <button class="primary wide" id="rd-go">Install RustDesk</button>
-    <a class="button" id="rd-get" href="https://rustdesk.com/download" target="_blank" hidden style="justify-content:center;margin-top:8px">Get RustDesk <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
-    <button class="link wide" id="rd-skip">Not now</button>
-  </section>
-
   <section id="starting" class="center" hidden>
     <h2 id="starting-title">Getting ready…</h2>
     <p>The first start can take a minute.</p>
@@ -461,19 +435,19 @@
   const $ = (id) => document.getElementById(id);
   const state = JSON.parse(new URLSearchParams(location.search).get("state") || "{}");
   const setup = window.wispSetup;
-  const SCREENS = ["welcome", "create", "installing", "ready", "join", "cloud", "rustdesk", "waiting", "starting", "unreachable"];
+  const SCREENS = ["welcome", "create", "installing", "ready", "join", "cloud", "waiting", "starting", "unreachable"];
   const show = (id) => {
     SCREENS.forEach((s) => ($(s).hidden = s !== id));
     document.querySelector("main")?.setAttribute("data-screen", id);
-    $("back").hidden = ["welcome", "installing", "ready", "rustdesk", "waiting", "starting", "unreachable"].includes(id) && !(id === "welcome" && state.canReturn);
+    $("back").hidden = ["welcome", "installing", "ready", "waiting", "starting", "unreachable"].includes(id) && !(id === "welcome" && state.canReturn);
   };
   const err = (id, msg) => { $(id).hidden = !msg; $(id).textContent = msg || ""; };
 
-  // ------------------------------------------------ the two questions, and the recommended start
+  // ------------------------------------------------ the question, and the recommended start
   // On all day: Self-Host is free there and recommended. Otherwise (a laptop, or not sure) Cloud,
-  // because a server never sleeps. Agents using this computer doesn't change that: on Cloud this
-  // computer joins too, and either way RustDesk is offered at the end.
-  const answers = { on: "no", use: "no" };
+  // because a server never sleeps. Either way this computer joins as a device, its screen off until
+  // someone turns it on there; whether an agent may use it is a switch on that agent, later.
+  const answers = { on: "no" };
   let picked = null;
   const recommended = () => (answers.on === "yes" ? "self" : "cloud");
   function renderWelcome() {
@@ -485,7 +459,7 @@
       if (tag.hidden !== (rec !== which)) { tag.hidden = rec !== which; tag.style.animation = "none"; void tag.offsetWidth; tag.style.animation = ""; }
       $(`why-${id}`).hidden = rec !== which;
     }
-    $("why-cloud").textContent = answers.use === "yes" ? "Agents live on the server and use this computer when it's awake." : "Because this computer sleeps, and a server never does.";
+    $("why-cloud").textContent = "Because this computer sleeps, and a server never does.";
     $("pick-cloud").setAttribute("aria-pressed", String(choice === "cloud"));
     $("pick-create").setAttribute("aria-pressed", String(choice === "self"));
     $("welcome-go").textContent = `Continue with ${choice === "cloud" ? "Cloud" : "Self-Host"}`;
@@ -951,7 +925,7 @@
     stopTicker();
     ticker = setInterval(() => renderChecks(), 1000);
     const account = { name: $("cloud-name").value.trim(), email: $("cloud-email").value.trim(), password: $("cloud-password").value };
-    const r = await setup.cloudCreate(prov.id, cloudToken, { type: p?.type, location: p?.location, account, device: answers.use === "yes", resume });
+    const r = await setup.cloudCreate(prov.id, cloudToken, { type: p?.type, location: p?.location, account, device: true, resume });
     stopTicker();
     running = false;
     if (r.ok) {
@@ -1031,40 +1005,15 @@
     });
   }
 
-  // ------------------------------------------------ after the server: RustDesk when agents use this computer
-  async function afterServer(opening) {
-    const wantsScreen = answers.use === "yes";
-    const rd = wantsScreen ? await setup.rustdeskStatus() : null;
-    if (!wantsScreen || rd?.id) return openWisp(opening);
-    $("rd-own").hidden = computer === "Mac"; // Wisp's own view isn't on a Mac yet
-    $("rd-go").textContent = rd.installed ? "Set up RustDesk" : "Install RustDesk";
-    $("rd-go").dataset.opening = opening;
-    show("rustdesk");
+  // ------------------------------------------------ after the server: open Wisp
+  function afterServer(opening) {
+    openWisp(opening);
   }
   function openWisp(opening) {
     $("starting-title").textContent = opening;
     show("starting");
     setup.open();
   }
-  $("rd-go").onclick = async () => {
-    err("rd-error", "");
-    $("rd-go").disabled = true;
-    $("rd-go").textContent = "Installing…";
-    const r = await setup.rustdeskInstall();
-    $("rd-go").disabled = false;
-    if (r.ok) {
-      $("rd-text").innerHTML = "";
-      $("rd-text").append("This computer's ID is ", Object.assign(document.createElement("span"), { className: "rd-id", textContent: r.id.replace(/(\d{3})(?=\d)/g, "$1 ") }), ". In RustDesk, set a permanent password under Settings, Security, and keep it in your password manager.");
-      $("rd-go").textContent = "Continue";
-      $("rd-go").onclick = () => openWisp($("rd-go").dataset.opening);
-      $("rd-skip").hidden = true;
-      return;
-    }
-    $("rd-go").textContent = "Check again";
-    err("rd-error", r.error);
-    $("rd-get").hidden = !r.url;
-  };
-  $("rd-skip").onclick = () => openWisp($("rd-go").dataset.opening);
 </script>
 <script>
   // The stage's wisps. Plain script, because this page runs before the app does; the drawing and the
@@ -1137,9 +1086,9 @@ const CREW = [
     const SCENE = {
       welcome: [50, 47, 260, "awake"], create: [50, 42, 170, "awake"], installing: [50, 46, 240, "working"], ready: [50, 40, 190, "done"],
       join: [50, 47, 190, "waiting"], waiting: [50, 47, 190, "waiting"], cloud: [50, 56, 170, "awake"], "cloud-progress": [50, 56, 240, "working"],
-      starting: [50, 46, 210, "awake"], unreachable: [50, 46, 190, "waiting"], "cloud-choose": [50, 56, 170, "awake"], rustdesk: [50, 42, 170, "awake"],
+      starting: [50, 46, 210, "awake"], unreachable: [50, 46, 190, "waiting"], "cloud-choose": [50, 56, 170, "awake"],
     };
-    const PROGRESS = { welcome: 4, create: 12, installing: 22, ready: 36, cloud: 14, "cloud-choose": 24, "cloud-progress": 34, rustdesk: 38, starting: 40, join: 4, waiting: 4, unreachable: 4 };
+    const PROGRESS = { welcome: 4, create: 12, installing: 22, ready: 36, cloud: 14, "cloud-choose": 24, "cloud-progress": 34, starting: 40, join: 4, waiting: 4, unreachable: 4 };
     const BOX = 300;
     const stage = document.getElementById("stage");
     const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -1231,7 +1180,7 @@ const CREW = [
       if (s[3] !== mood) { mood = s[3]; main.innerHTML = svg(0, WHITE, mood); }
       const shown = id === "welcome" ? 1 : id === "join" || id === "waiting" ? 0.32 : 0;
       crew.forEach((el) => (el.style.opacity = shown));
-      props.innerHTML = (id === "create" || id === "ready" || id === "rustdesk" ? LAPTOP : "") + (cloudy ? CLOUD : "") + (id === "ready" ? spark(30, 24, 26, 0) + spark(68, 20, 34, 0.35) + spark(74, 50, 20, 0.7) + spark(24, 54, 22, 0.2) : "");
+      props.innerHTML = (id === "create" || id === "ready" ? LAPTOP : "") + (cloudy ? CLOUD : "") + (id === "ready" ? spark(30, 24, 26, 0) + spark(68, 20, 34, 0.35) + spark(74, 50, 20, 0.7) + spark(24, 54, 22, 0.2) : "");
     }
     new MutationObserver(update).observe(document.querySelector("main"), { attributes: true, attributeFilter: ["data-screen", "hidden"], subtree: true });
     window.addEventListener("wisp:scene", update);

@@ -106,3 +106,21 @@ export function signInProblem(harness: string, error: string): SignInProblem | n
   const { label, login } = info;
   return { harness, label, login, explain: (device) => `${label} on ${device} isn't signed in. Open Settings → Harnesses, sign in to ${label} on ${device}, then ask again.` };
 }
+
+/**
+ * The harness to preselect for a new agent: the first of `ids` that's signed in, else the first
+ * nobody can tell about, else the first (every one is known to be signed out, so the person is
+ * asked to sign in). A harness that would fail its first reply is never picked over one that works.
+ * `signedIn` says true, false, or null/undefined when unknown.
+ */
+export function preferSignedIn(ids: readonly string[], signedIn: (id: string) => boolean | null | undefined): string | undefined {
+  const seen = [...new Set(ids)];
+  return seen.find((id) => signedIn(id) === true) ?? seen.find((id) => signedIn(id) !== false) ?? seen[0];
+}
+
+/** Is any account of a harness signed in (true), are all known to be signed out (false), or can't anyone tell (null)? */
+export function accountsSignedIn(accounts: Record<string, boolean | null> | undefined): boolean | null {
+  const v = Object.values(accounts ?? {});
+  if (v.some((x) => x === true)) return true;
+  return v.length && v.every((x) => x === false) ? false : null;
+}
