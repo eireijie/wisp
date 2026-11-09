@@ -8,6 +8,7 @@ import type { Computer } from "@wisp/core";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
+import { harnessOn } from "../src/terminals.ts";
 
 /** The Code mod's terminals, end to end: a browser socket, the hub, a real device and a real shell. */
 
@@ -157,6 +158,17 @@ describe("who can open one", () => {
     expect(hub.terminalCredential(device, ownerId, "codex")).toMatchObject({ connectionId: mine, provider: "openai", kind: "key" });
     // one the harness can't use isn't handed to it
     expect(hub.terminalCredential(device, ownerId, "gemini")).toBeNull();
+  });
+
+  it("knows when a VM's agents run their harness on a device, signed in there", async () => {
+    const vm = hub.store.createComputer({ workspaceId: device.workspaceId, name: "shared", kind: "vm", nodeId: device.nodeId!, config: {} });
+    expect(harnessOn(hub, vm, "codex")).toEqual({});
+    const r = await api("POST", "/api/agents", { handle: "atlas", name: "Atlas", harness: "codex", nodeId: device.nodeId, computerId: vm.id });
+    expect(r.status).toBe(200);
+    expect(harnessOn(hub, vm, "codex")).toEqual({ harnessOn: "box" });
+    // one that runs inside the VM signs in there
+    hub.store.updateAgent(r.data.id, { settings: { runIn: "computer" } });
+    expect(harnessOn(hub, vm, "codex")).toEqual({});
   });
 
   it("a link works once", async () => {
