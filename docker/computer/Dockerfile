@@ -7,7 +7,7 @@ FROM node:22-trixie-slim
 
 ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 LC_ALL=C.UTF-8 TZ=UTC
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      xvfb x11vnc socat xdotool imagemagick xclip xdg-utils dbus-x11 x11-utils \
+      xvfb x11vnc socat xdotool imagemagick xclip xdg-utils dbus-x11 x11-utils tmux \
       xfce4 xfce4-terminal thunar mousepad ristretto greybird-gtk-theme papirus-icon-theme librsvg2-common \
       fonts-noto fonts-noto-color-emoji fonts-noto-cjk fonts-liberation \
       sudo curl wget ca-certificates gnupg git python3 python3-pip procps less nano unzip jq ripgrep \

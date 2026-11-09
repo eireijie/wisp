@@ -352,6 +352,7 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
                 <button
                   key={it.label}
                   role="menuitem"
+                  aria-label={it.label}
                   onClick={() => {
                     setOpen(false);
                     it.onSelect();
