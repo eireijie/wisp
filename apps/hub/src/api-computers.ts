@@ -301,11 +301,11 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     const comp = own(c, (req.params as { id: string }).id);
     if (!comp) return reply.code(404).send({ error: "computer not found" });
-    const body = parse(z.object({ session: z.string().max(60).optional(), code: SCREEN_CODE.optional() }), req.body ?? {}, reply);
+    const body = parse(z.object({ session: z.string().max(60).optional(), code: SCREEN_CODE.optional(), launch: z.enum(HARNESS_IDS as [string, ...string[]]).optional() }), req.body ?? {}, reply);
     if (!body) return;
     try {
       const session = sessionName(body.session);
-      return { session, url: `/ws/terminals/${comp.id}?ticket=${hub.terminals.ticket(comp, c.actor.id, session, body.code)}` };
+      return { session, url: `/ws/terminals/${comp.id}?ticket=${hub.terminals.ticket(comp, c.actor.id, session, body.code, body.launch)}` };
     } catch (err) {
       return fail(reply, err);
     }
