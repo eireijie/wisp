@@ -191,17 +191,43 @@ function relay(bindHost: string, port: number): Promise<number> {
   return p;
 }
 
+/** The name a VM goes by inside (prompt, tmux): "shared" for the shared computer, else its name as a slug. */
+export function vmHostname(spec: Pick<ComputerSpec, "name" | "config">): string {
+  if ((spec.config as VmConfig).shared) return "shared";
+  return (
+    spec.name
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "wisp"
+  );
+}
+
+/**
+ * Run as root in the VM each time it comes up, with its name as $1: that name in the shell prompt
+ * and tmux bar. Apple's container can't set a hostname, so they'd show the container's id
+ * ("wisp-cmp_…"). The prompt is fixed up just before it's shown (after ~/.bashrc set it).
+ */
+export const NAME_INSIDE_SCRIPT = [
+  "printf '%s\\n' \"$1\" > /etc/wisp-hostname",
+  "if ! grep -q wisp-hostname /etc/bash.bashrc 2>/dev/null; then",
+  "cat >> /etc/bash.bashrc <<'WISPNAME'",
+  "",
+  "# this computer's name in the prompt, not the container's id (wisp-hostname)",
+  "__wisp_name() { [ -r /etc/wisp-hostname ] && PS1=\"${PS1//\\\\h/$(cat /etc/wisp-hostname)}\"; }",
+  "PROMPT_COMMAND=\"__wisp_name${PROMPT_COMMAND:+;$PROMPT_COMMAND}\"",
+  "WISPNAME",
+  "fi",
+  "grep -q wisp-hostname /etc/tmux.conf 2>/dev/null || printf '%s\\n' \"set -g status-right '\\\"#(cat /etc/wisp-hostname)\\\" %H:%M %d-%b-%y' # wisp-hostname\" >> /etc/tmux.conf",
+  "",
+].join("\n");
+
 /** Arguments that create a VM's container. Exported for tests. */
 export function runArgs(spec: ComputerSpec, o: { name: string; volume: string; files: string; image: string; kind?: EngineKind }): string[] {
   const cfg = spec.config as VmConfig;
   const kind = o.kind ?? "docker";
   const resolution = /^\d{3,5}x\d{3,5}$/.test(cfg.resolution ?? "") ? cfg.resolution! : "1280x800";
-  const hostname =
-    spec.name
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "wisp";
+  const hostname = vmHostname(spec);
   const args = ["run", "-d", "--name", o.name, "--label", `wisp.computer=${spec.id}`, "--shm-size", "1g"];
   // Apple's container has no hostname or restart policy; Wisp starts a stopped VM when it's next used
   // stopped when idle and started when next needed, so it never comes back on its own (after a reboot, say)
@@ -381,7 +407,10 @@ export class DockerVm implements Driver {
     // wait for the desktop to come up
     for (let i = 0; i < 90; i++) {
       const r = await exec(this.bin, ["exec", "-u", this.user, "-e", `DISPLAY=${DISPLAY}`, this.name, "xdotool", "getdisplaygeometry"], { timeoutMs: 10_000 });
-      if (r.code === 0) return;
+      if (r.code === 0) {
+        await exec(this.bin, ["exec", "-i", "-u", "root", this.name, "sh", "-s", "--", vmHostname(this.spec)], { input: NAME_INSIDE_SCRIPT, timeoutMs: 15_000 }).catch(() => {});
+        return;
+      }
       await new Promise((res) => setTimeout(res, 1000));
     }
     throw new ActionError("the VM started but its desktop didn't come up within a minute and a half");

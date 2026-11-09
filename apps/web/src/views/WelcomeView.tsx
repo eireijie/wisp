@@ -5,7 +5,8 @@ import { api } from "../api.ts";
 import { awayEnabled, enableTailscale } from "../components/Access.tsx";
 import { onPublicAddress, skipAccess, useAccess, useAccessStore, type AccessInfo } from "../access.ts";
 import { completeSetupStep, nextStep, setDismissed, STEPS, useOnboarding, type StepId } from "../onboarding.ts";
-import { usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
+import { isSharedComputer, usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
+import { useComputerMode } from "../computerMode.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { canApproveJoin, unavailable } from "../join.ts";
@@ -639,9 +640,13 @@ function HarnessSignInChat({ device, settings, account, onClose, onDone }: { dev
   );
 }
 
-function AgentCreated({ agent, device, onSignIn, onNext }: { agent: Agent; device?: string; onSignIn?: () => void; onNext: () => void }) {
+export function AgentCreated({ agent, device, onSignIn, onNext }: { agent: Agent; device?: string; onSignIn?: () => void; onNext: () => void }) {
   const inVm = agent.settings.runIn === "computer";
   const label = harnessLabel(agent.harness);
+  // where it works, plainly; which device hosts what is for Advanced
+  const { advanced } = useComputerMode();
+  const computer = useStore((s) => s.computers).find((c) => c.id === agent.computerId);
+  const place = advanced ? (device ? `, on ${device}` : "") : isSharedComputer(computer) || agent.settings.waitsForShared ? ", on the shared computer" : computer?.kind === "vm" ? ", on its own computer" : "";
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [checked, setChecked] = useState(false);
   const [screen, setScreen] = useState<string | null>(null);
@@ -668,7 +673,7 @@ function AgentCreated({ agent, device, onSignIn, onNext }: { agent: Agent; devic
   const waiting = checked && signedIn !== true;
   return (
     <>
-      <Thread title={waiting ? `${agent.name} needs a sign-in` : `${agent.name} is made`} sub={`Running on ${label}${device ? `, on ${device}` : ""}.`}>
+      <Thread title={waiting ? `${agent.name} needs a sign-in` : `${agent.name} is made`} sub={`Uses ${label}${place}.`}>
         {waiting && <Msg>{signedIn === null && !inVm ? `Wisp can't tell if ${label} is signed in. If it isn't, ${agent.name} can't answer yet.` : `${agent.name} can't answer until you sign in to ${label}${inVm ? ` on ${agent.name}'s computer` : ""}.`}</Msg>}
         {waiting && screen && <Msg>Finish signing in on the computer's screen, then come back here. This page updates by itself.</Msg>}
         <Problem>{error}</Problem>

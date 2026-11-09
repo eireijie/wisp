@@ -55,6 +55,20 @@ export function osName(platform: string | undefined) {
   return (platform && OS[platform]) ?? "computer";
 }
 
+/** Is this the organization's shared computer (Simple)? */
+export const isSharedComputer = (c: { config?: unknown } | null | undefined) => !!(c?.config as { shared?: boolean } | undefined)?.shared;
+
+/**
+ * Where an agent works, in a line. Simple says it plainly ("Shared computer", "Its own computer");
+ * Advanced adds which device hosts it ("Shared computer · VM on box").
+ */
+export function computerSummary(c: Pick<ComputerInfo, "kind" | "nodeId" | "name"> & { config?: unknown }, devices: DeviceInfo[] | null, advanced: boolean): string {
+  if (advanced) return `${c.name} · ${computerKindLabel(c, devices)}`;
+  if (isSharedComputer(c)) return "Shared computer";
+  if (c.kind === "vm") return "Its own computer";
+  return computerKindLabel(c, devices);
+}
+
 /** "VM on box", "Your screen on my-laptop", "Orgo cloud computer". */
 export function computerKindLabel(c: Pick<ComputerInfo, "kind" | "nodeId">, devices: DeviceInfo[] | null): string {
   const device = devices?.find((d) => d.id === c.nodeId)?.name ?? "a device";

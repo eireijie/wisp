@@ -335,7 +335,7 @@ function ArchivedBar({ channel }: { channel: ChannelInfo }) {
 const ACCESS: Record<AccessLevel, { label: string; body: string }> = {
   "read-only": { label: "Read only", body: "Reads files and answers; changes nothing." },
   edit: { label: "Can edit files", body: "Edits files in its own working folder." },
-  full: { label: "Full access", body: "No sandbox. Needs a device started with --allow-full-access." },
+  full: { label: "Full access", body: "Can change any file and run any command." },
 };
 
 /** What an agent may do on its computer: read only, edit files, or everything. */

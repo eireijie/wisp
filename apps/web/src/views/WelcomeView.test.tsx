@@ -3,12 +3,19 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Agent } from "@wisp/core";
 import { api } from "../api.ts";
-import { advanceTailscale, HarnessChoice, makeFirstAgent, NO_NODE, serverAddress, SETUP_LABELS, TailscaleScreen, tailscaleProblem } from "./WelcomeView.tsx";
+import { advanceTailscale, AgentCreated, HarnessChoice, makeFirstAgent, NO_NODE, serverAddress, SETUP_LABELS, TailscaleScreen, tailscaleProblem } from "./WelcomeView.tsx";
 import type { AccessInfo } from "../access.ts";
 import type { DeviceInfo } from "../devices.ts";
 
+
 vi.mock("../api.ts", () => ({ api: vi.fn() }));
 vi.mock("../theme.ts", () => ({ motionReduced: () => false }));
+const view = vi.hoisted(() => ({ advanced: false, computers: [] as unknown[] }));
+vi.mock("../computerMode.ts", () => ({ useComputerMode: () => ({ advanced: view.advanced, sharedComputerId: null, loaded: true }) }));
+vi.mock("../store.ts", async (original) => {
+  const real = await original<typeof import("../store.ts")>();
+  return { ...real, useStore: Object.assign((select: (s: unknown) => unknown) => select({ ...real.useStore.getState(), computers: view.computers }), real.useStore) };
+});
 afterEach(() => vi.mocked(api).mockReset());
 const device: DeviceInfo = { id: "mac", name: "My Mac", mine: true, online: true, agents: [], harnesses: [{ id: "codex", version: null }] };
 
@@ -90,6 +97,20 @@ describe("Wisp setup after the account", () => {
     vi.mocked(api).mockReset().mockResolvedValue({});
     await makeFirstAgent(device, "kimi", "Atlas", [], []);
     expect(api).toHaveBeenNthCalledWith(1, "POST", "/api/nodes/mac/install", { harness: "kimi" });
+  });
+});
+
+describe("the agent's made", () => {
+  const agent = { id: "a1", name: "Atlas", handle: "atlas", harness: "codex", computerId: "c1", settings: {} } as unknown as Agent;
+  const show = (advanced: boolean) => {
+    view.advanced = advanced;
+    view.computers = [{ id: "c1", kind: "vm", name: "Shared computer", nodeId: "mac", config: { shared: true }, agents: ["a1"] }];
+    return renderToStaticMarkup(createElement(AgentCreated, { agent, device: "This Mac", onNext() {} }));
+  };
+  it("says plainly it works on the shared computer, and which device only in Advanced", () => {
+    expect(show(false)).toContain("Uses Codex, on the shared computer.");
+    expect(show(false)).not.toContain("This Mac");
+    expect(show(true)).toContain("Uses Codex, on This Mac.");
   });
 });
 

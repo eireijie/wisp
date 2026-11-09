@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { HARNESSES, VM_HARNESSES, harnessInfo, runsInVm } from "@wisp/core";
-import { DockerVm, PRUNE_CONNECTIONS_SCRIPT, SIGNED_IN, SIGN_IN_COMMAND, recipeTag, runArgs, writeFileScript } from "../src/computers/docker.ts";
+import { DockerVm, PRUNE_CONNECTIONS_SCRIPT, SIGNED_IN, SIGN_IN_COMMAND, recipeTag, runArgs, vmHostname, writeFileScript } from "../src/computers/docker.ts";
 import { exec, jpegSize } from "../src/computers/driver.ts";
 import { localFiles, shellFiles } from "../src/computers/transfer.ts";
 import { spawn, spawnSync } from "node:child_process";
@@ -226,5 +226,15 @@ describe("secrets written inside a VM", () => {
     expect(fs.readdirSync(dir)).toEqual(["mc_keep"]);
     // no folder at all is fine
     expect(spawnSync("sh", ["-c", PRUNE_CONNECTIONS_SCRIPT, "sh", path.join(dir, "missing")]).status).toBe(0);
+  });
+});
+
+describe("a VM's name inside", () => {
+  it("is \"shared\" for the shared computer, and its name otherwise (never the container's id)", () => {
+    expect(vmHostname({ name: "Shared computer", config: { shared: true } })).toBe("shared");
+    expect(vmHostname({ name: "Atlas's computer", config: {} })).toBe("atlas-s-computer");
+    const spec = { id: "cmp_x", kind: "vm", name: "Shared computer", config: { shared: true } } as never;
+    const args = runArgs(spec, { name: "wisp-cmp_x", volume: "v", files: "/f", image: "img", kind: "docker" });
+    expect(args[args.indexOf("--hostname") + 1]).toBe("shared");
   });
 });
