@@ -46,21 +46,20 @@ describe("Wisp setup after the account", () => {
     expect(api).toHaveBeenCalledExactlyOnceWith(
       "POST",
       "/api/agents",
-      expect.objectContaining({ handle: "atlas-2", nodeId: "mac", computerId: null, settings: { headless: true } }),
+      expect.objectContaining({ handle: "atlas-2", nodeId: "mac", useDefaults: true, settings: {} }),
     );
   });
   it("saves the look you gave your agent", async () => {
     vi.mocked(api).mockResolvedValueOnce({ id: "agent" });
     const appearance = { shape: "tall", color: "#e771ff", color2: "#ffd87c", eyes: "dots", mouth: "smile", cheeks: false, hat: "crown", accessory: "none", motion: "float" } as const;
     await makeFirstAgent(device, "codex", "Atlas", [], [], appearance);
-    expect(api).toHaveBeenCalledExactlyOnceWith("POST", "/api/agents", expect.objectContaining({ settings: { headless: true, appearance } }));
+    expect(api).toHaveBeenCalledExactlyOnceWith("POST", "/api/agents", expect.objectContaining({ settings: { appearance } }));
   });
-  it("gives an installed harness a computer without moving its sign-in", async () => {
-    vi.mocked(api).mockResolvedValueOnce({ id: "vm" }).mockResolvedValueOnce({ id: "agent" });
+  it("lets Wisp place an installed harness (the shared computer), without moving its sign-in", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ id: "agent" });
     const ready = { ...device, capabilities: { vm: { ok: true } } } as DeviceInfo;
     await makeFirstAgent(ready, "codex", "Atlas", [], []);
-    expect(api).toHaveBeenNthCalledWith(1, "POST", "/api/computers", expect.objectContaining({ kind: "vm" }));
-    expect(api).toHaveBeenNthCalledWith(2, "POST", "/api/agents", expect.objectContaining({ computerId: "vm", settings: { runIn: "device" } }));
+    expect(api).toHaveBeenCalledExactlyOnceWith("POST", "/api/agents", expect.objectContaining({ nodeId: "mac", useDefaults: true }));
   });
   it("installs a missing npm harness before creating its agent", async () => {
     vi.mocked(api).mockResolvedValue({});

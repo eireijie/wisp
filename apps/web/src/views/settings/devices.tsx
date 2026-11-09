@@ -5,6 +5,7 @@ import { useAccess, useAccessStore, type AccessInfo } from "../../access.ts";
 import { canApproveJoin, loadMcpClients, unavailable, type McpClient } from "../../join.ts";
 import { useStore } from "../../store.ts";
 import { useDevices } from "../../devices.ts";
+import { useComputerMode } from "../../computerMode.ts";
 import { href } from "../../router.ts";
 import { AddDeviceDialog } from "../../components/AddDevice.tsx";
 import { AwayFromHome, awayEnabled, connectorBlocker, connectorOrigin, enableTailscale } from "../../components/Access.tsx";
@@ -21,6 +22,12 @@ export function DevicesPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const on = awayEnabled(info);
+  const owner = useStore((s) => s.me?.role === "owner");
+  const computers = useStore((s) => s.computers);
+  const mode = useComputerMode();
+  const sharedHost = computers.find((c) => c.id === mode.sharedComputerId)?.nodeId;
+  const [modeBusy, setModeBusy] = useState(false);
+  const [modeError, setModeError] = useState<string | null>(null);
   const cloudflare = info?.cloudflare?.state === "running";
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -65,7 +72,10 @@ export function DevicesPage() {
             <Monitor size={22} className="text-muted shrink-0" />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-medium truncate">{device.name}</span>
-              <span className="block text-xs text-muted mt-1">{device.paused ? "Paused" : device.online ? "Connected" : "Offline"}</span>
+              <span className="block text-xs text-muted mt-1">
+                {device.paused ? "Paused" : device.online ? "Connected" : "Offline"}
+                {device.id === sharedHost && " · Agents and the shared computer live here"}
+              </span>
             </span>
             <span className="text-xs text-muted">{device.mine ? "Yours" : device.ownerName}</span>
           </a>
@@ -80,6 +90,30 @@ export function DevicesPage() {
           Manage computers
         </a>
       </div>
+      {owner && (
+        <section className="mt-8 border-t border-line pt-3">
+          <Row label="Choose where agents run myself" hint="Off: Wisp picks for you. On: pick each agent's device, give agents their own sized computers or cloud computers, and set what each device does.">
+            <Toggle
+              label="Choose where agents run myself"
+              on={mode.advanced}
+              disabled={!mode.loaded || modeBusy}
+              onChange={(value) => {
+                setModeBusy(true);
+                setModeError(null);
+                mode
+                  .setAdvanced(value)
+                  .catch((e) => setModeError((e as Error).message))
+                  .finally(() => setModeBusy(false));
+              }}
+            />
+          </Row>
+          {modeError && (
+            <p role="alert" className="px-4 text-sm text-bad">
+              {modeError}
+            </p>
+          )}
+        </section>
+      )}
       <section className="mt-8 border-t border-line pt-3">
         <Row
           label={

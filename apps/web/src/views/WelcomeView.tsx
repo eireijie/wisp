@@ -186,19 +186,13 @@ export const NO_NODE = /Node\.js isn't installed on this computer/;
 /** Keep a detected sign-in on the device; install a new harness there when requested. */
 export async function makeFirstAgent(device: DeviceInfo, harness: string, name: string, agents: Agent[], computers: ComputerInfo[], appearance?: GhostAppearance) {
   const installed = device.harnesses?.some((h) => h.id === harness);
-  const inVm = !installed && runsInVm(harness) && device.role !== "headless" && device.role !== "screen" && !!device.capabilities?.vm.ok;
+  const canVm = device.role !== "headless" && device.role !== "screen" && !!device.capabilities?.vm.ok;
+  const inVm = !installed && runsInVm(harness) && canVm;
   if (!installed && !inVm) {
     await api("POST", `/api/nodes/${device.id}/install`, { harness });
     await api("POST", `/api/nodes/${device.id}/refresh`).catch(() => {});
   }
-  const canVm = device.role !== "headless" && device.role !== "screen" && !!device.capabilities?.vm.ok;
-  let computer = canVm ? computers.find((c) => c.kind === "vm" && c.nodeId === device.id && !c.agents.length) : undefined;
-  if (canVm && !computer) computer = await api<ComputerInfo>("POST", "/api/computers", { kind: "vm", nodeId: device.id, name: `${name}'s desk`, cpus: 2, memoryGb: 4 });
-  if (device.role === "screen" && device.mine && device.capabilities?.screen.ok) {
-    computer = computers.find((c) => c.kind === "device" && c.nodeId === device.id);
-    if (!computer) computer = await api<ComputerInfo>("POST", "/api/computers", { kind: "device", nodeId: device.id });
-  }
-  return api<Agent>("POST", "/api/agents", {
+  const common = {
     name,
     handle: freeHandle(
       name,
@@ -206,9 +200,16 @@ export async function makeFirstAgent(device: DeviceInfo, harness: string, name: 
     ),
     harness,
     nodeId: device.id,
-    computerId: computer?.id ?? null,
-    settings: { ...(inVm ? { runIn: "computer" } : computer ? { runIn: "device" } : { headless: true }), ...(appearance ? { appearance } : {}) },
-  });
+  };
+  const look = appearance ? { appearance } : {};
+  if (inVm) {
+    // an AI that only runs inside a computer gets one of its own, with the AI in it
+    let computer = computers.find((c) => c.kind === "vm" && c.nodeId === device.id && !c.agents.length);
+    if (!computer) computer = await api<ComputerInfo>("POST", "/api/computers", { kind: "vm", nodeId: device.id, name: `${name}'s desk`, cpus: 2, memoryGb: 4 });
+    return api<Agent>("POST", "/api/agents", { ...common, computerId: computer.id, settings: { runIn: "computer", ...look } });
+  }
+  // otherwise Wisp places it: the AI stays beside its sign-in, and it works on the shared computer
+  return api<Agent>("POST", "/api/agents", { ...common, useDefaults: true, settings: look });
 }
 
 /** The AI that powers your first agent, signing in to it, and making the agent. */
