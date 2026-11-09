@@ -25,6 +25,7 @@ import { WelcomeView } from "./views/WelcomeView.tsx";
 import { AboutView } from "./views/AboutView.tsx";
 import { ComputersView } from "./views/ComputersView.tsx";
 import { NewTask, TasksView } from "./views/TasksView.tsx";
+import { CodeView } from "./views/CodeView.tsx";
 import { DashboardView } from "./views/DashboardView.tsx";
 import { MarketplaceView } from "./views/MarketplaceView.tsx";
 import { ModsPage } from "./views/settings/features.tsx";
@@ -249,6 +250,8 @@ function Workspace() {
         return <AboutView onBack={phone ? toYou : undefined} />;
       case "tasks":
         return <TasksView onBack={phone ? toMore : undefined} />;
+      case "code":
+        return <CodeView />;
       case "computers":
         return <ComputersView computerId={route.computerId} teach={route.teach ?? null} deviceId={route.deviceId ?? null} />;
       case "settings":

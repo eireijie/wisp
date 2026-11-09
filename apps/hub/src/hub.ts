@@ -1,7 +1,8 @@
 import type { WebSocket } from "ws";
-import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential } from "@wisp/core";
+import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, TERM_PREFIX, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
+import { Terminals } from "./terminals.ts";
 import { Logins } from "./logins.ts";
 import { Storage } from "./storage.ts";
 import { Discussions } from "./discussions.ts";
@@ -81,6 +82,8 @@ export class Hub {
   /** stepped teams: requests going through a channel team's roles and steps */
   readonly flows: TeamFlows;
   readonly computers: Computers;
+  /** the Code mod's terminals, relayed to devices */
+  readonly terminals: Terminals;
   /** logins agents fill from the person's password manager */
   readonly logins: Logins;
   /** files on the person's own storage (the Storage mod) */
@@ -137,6 +140,7 @@ export class Hub {
     this.discussions = new Discussions(this);
     this.flows = new TeamFlows(this);
     this.computers = new Computers(this);
+    this.terminals = new Terminals(this);
     this.logins = new Logins(this);
     this.storage = new Storage(this);
     this.routines = new Routines(this);
@@ -274,6 +278,8 @@ export class Hub {
 
   /** Send an event to everyone in a workspace, or only to the people `only` picks. */
   broadcast(workspaceId: string, event: ClientEvent, only?: (userId: string) => boolean) {
+    // Code switched off: its terminals close now, not on the next keypress
+    if (event.type === "features") this.terminals.recheck(workspaceId);
     const data = JSON.stringify(event);
     const guest = guestEvent(event);
     for (const c of this.clients) {
@@ -334,6 +340,7 @@ export class Hub {
     conn.socket.close(4401, "device removed");
     for (const a of this.store.agentsOnNode(nodeId)) this.broadcast(conn.workspaceId, { type: "agent_status", agentId: a.id, status: "offline" });
     this.computers.nodeGone(nodeId);
+    this.terminals.nodeGone(nodeId);
     this.releaseNodeConnections(nodeId);
   }
 
@@ -528,7 +535,9 @@ export class Hub {
       if (this.closed) return;
       if (isBinary) {
         const frame = readTunnelFrame(new Uint8Array(raw as Buffer));
-        if (frame) this.computers.onTunnelData(nodeId, frame.tunnelId, frame.payload);
+        if (!frame) return;
+        if (frame.tunnelId.startsWith(TERM_PREFIX)) this.terminals.onData(nodeId, frame.tunnelId, frame.payload);
+        else this.computers.onTunnelData(nodeId, frame.tunnelId, frame.payload);
         return;
       }
       let msg: NodeToHub;
@@ -545,6 +554,7 @@ export class Hub {
       this.pausedNodes.delete(nodeId);
       for (const a of this.store.agentsOnNode(nodeId)) this.broadcast(workspaceId, { type: "agent_status", agentId: a.id, status: "offline" });
       this.computers.nodeGone(nodeId);
+    this.terminals.nodeGone(nodeId);
       this.releaseNodeConnections(nodeId);
     });
   }
@@ -603,6 +613,14 @@ export class Hub {
       }
       case "tunnel_closed": {
         this.computers.onTunnelClosed(conn.nodeId, msg.tunnelId, msg.error);
+        return;
+      }
+      case "term_ready": {
+        this.terminals.onReady(conn.nodeId, msg.termId, msg.resumed);
+        return;
+      }
+      case "term_closed": {
+        this.terminals.onClosed(conn.nodeId, msg.termId, msg.error, msg.exited);
         return;
       }
       case "catalog": {

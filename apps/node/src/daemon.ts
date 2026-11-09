@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
+import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, TERM_PREFIX, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
 import { HARNESS_SPECS, HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
 import { WispClient, WispError } from "@wisp/sdk";
 import { runUpdate, version } from "@wisp/update";
@@ -14,6 +14,7 @@ import { RemoteDesktopServer, type RemoteDesktopConfig } from "./computers/remot
 import type { RustdeskConfig } from "./rustdesk.ts";
 import { detectRemoteApps } from "./remote-apps.ts";
 import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
+import { Terminals, deviceShell, sessionName, vmShell } from "./terminals.ts";
 import { HarnessLogins } from "./harness-login.ts";
 import { ModelLogins } from "./model-login.ts";
 import { type DockerVm } from "./computers/docker.ts";
@@ -105,6 +106,10 @@ export class NodeDaemon {
   private remoteServer: RemoteDesktopServer;
   /** tunnels opened with the screen's code */
   private codeTunnels = new Set<string>();
+  /** the Code mod's shells, here and in the VMs (keys: "dev:<computer>:<session>" or "vm:…") */
+  private terminals = new Terminals();
+  /** terminals still starting (a VM coming up), and whether the hub let go of them meanwhile */
+  private openingTerms = new Map<string, { end?: boolean; gone?: boolean }>();
   /** each harness's logins here, and which agent uses which */
   private accounts: HarnessAccounts;
   /** whether each harness is signed in, where it runs ("<computer id or nothing>\\n<harness>") */
@@ -202,6 +207,53 @@ export class NodeDaemon {
     this.codeTunnels.clear();
   }
 
+  /**
+   * A shell for the Code mod, on this device or inside one of its VMs. The hub lets only the
+   * computer's owner ask; this device's own shell also needs the screen's code, checked here every time.
+   */
+  private async openTerminal(msg: Extract<HubToNode, { type: "term_open" }>) {
+    const { termId, computer } = msg;
+    const closed = (error?: string, exited?: boolean) => this.send({ type: "term_closed", termId, error, exited });
+    if (this.local.paused) return closed("the device is paused");
+    if (computer.kind !== "device" && computer.kind !== "vm") return closed("this computer has no terminal here");
+    if (computer.kind === "device" && this.lock.enabled) {
+      const r = this.lock.check(msg.code);
+      this.codeResult(r);
+      if (!r.ok) return closed(r.error);
+    }
+    const session = sessionName(msg.session);
+    const key = `${computer.kind === "vm" ? "vm" : "dev"}:${computer.id}:${session}`;
+    const command = async () => {
+      if (computer.kind === "device") return deviceShell(session);
+      const vm = await this.computers.vm(computer);
+      if (!vm) throw new Error("this VM isn't on this device");
+      await vm.ready();
+      return vmShell({ bin: vm.engine.bin, name: vm.name, user: vm.user, home: vm.home }, session);
+    };
+    const opening: { end?: boolean; gone?: boolean } = {};
+    this.openingTerms.set(termId, opening);
+    try {
+      const { resumed, replay } = await this.terminals.attach(
+        key,
+        termId,
+        { cols: msg.cols, rows: msg.rows },
+        command,
+        (b) => {
+          if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(tunnelFrame(termId, b));
+        },
+        closed,
+      );
+      if (opening.gone) return this.terminals.detach(termId, opening.end);
+      // ready first, so the page clears itself before the recent screen arrives
+      this.send({ type: "term_ready", termId, resumed });
+      replay();
+    } catch (err) {
+      closed((err as Error).message);
+    } finally {
+      this.openingTerms.delete(termId);
+    }
+  }
+
   /** A code was entered for this screen: tell its owner when it was wrong. */
   private codeResult(r: { ok: boolean; lockedOut?: boolean; triesLeft?: number }) {
     if (r.ok) return;
@@ -219,6 +271,7 @@ export class NodeDaemon {
       // a new code (or none) or a new server: whatever the old one opened closes
       this.lock.lockAll();
       this.closeTunnels();
+      if (codeChanged) this.terminals.killAll("dev:");
       this.computers.stopAll();
     }
     this.applyRemoteServer();
@@ -230,6 +283,7 @@ export class NodeDaemon {
       this.log("paused: stopping agents and computers until `wisp node resume`");
       for (const a of this.aborts.values()) a.abort("paused");
     }
+    if (this.local.paused) this.terminals.killAll();
     if (this.local.paused || !this.local.shareScreen) {
       this.computers.stopAll();
       this.closeTunnels();
@@ -277,6 +331,7 @@ export class NodeDaemon {
     this.logins.stopAll();
     this.modelLogins.stopAll();
     this.closeTunnels();
+    this.terminals.killAll();
     this.remoteServer.stop();
     const end = Date.now() + wait;
     while (this.aborts.size && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
@@ -299,7 +354,9 @@ export class NodeDaemon {
     ws.on("message", (raw, isBinary) => {
       if (isBinary) {
         const frame = readTunnelFrame(new Uint8Array(raw as Buffer));
-        if (frame) this.tunnels.get(frame.tunnelId)?.write(frame.payload);
+        if (!frame) return;
+        if (frame.tunnelId.startsWith(TERM_PREFIX)) this.terminals.write(frame.tunnelId, frame.payload);
+        else this.tunnels.get(frame.tunnelId)?.write(frame.payload);
         return;
       }
       let msg: HubToNode;
@@ -314,6 +371,8 @@ export class NodeDaemon {
       // live views and tunnels belong to this connection; the hub asks again after a reconnect
       this.computers.stopAll();
       this.closeTunnels();
+      // shells keep running for a while, so the person picks up where they were once it's back
+      this.terminals.detachAll();
       if (this.stopped) return;
       if (code === 4401) {
         this.log("hub rejected the node token. Create a new node in Wisp and run `wisp node start` again.");
@@ -400,7 +459,10 @@ export class NodeDaemon {
             void this.sendVmCatalog(msg.computer);
             void this.sweepVmConnections(msg.computer);
           }
-          if (msg.action.action === "destroy") this.forgetVm(msg.computer.id);
+          if (msg.action.action === "destroy") {
+            this.forgetVm(msg.computer.id);
+            this.terminals.killAll(`vm:${msg.computer.id}:`);
+          }
         },
         (err) => {
           this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message });
@@ -452,6 +514,14 @@ export class NodeDaemon {
             this.send({ type: "tunnel_closed", tunnelId, error: (err as Error).message });
           },
         );
+    } else if (msg.type === "term_open") {
+      void this.openTerminal(msg);
+    } else if (msg.type === "term_resize") {
+      this.terminals.resize(msg.termId, msg.cols, msg.rows);
+    } else if (msg.type === "term_close") {
+      const opening = this.openingTerms.get(msg.termId);
+      if (opening) Object.assign(opening, { gone: true, end: msg.end });
+      else this.terminals.detach(msg.termId, msg.end);
     } else if (msg.type === "tunnel_close") {
       this.tunnels.get(msg.tunnelId)?.close();
       this.tunnels.delete(msg.tunnelId);

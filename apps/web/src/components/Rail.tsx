@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { Blocks, BookOpen, Ellipsis, HardDrive, LifeBuoy, ListTodo, Store } from "lucide-react";
+import { Blocks, BookOpen, Ellipsis, HardDrive, LifeBuoy, ListTodo, SquareTerminal, Store } from "lucide-react";
 import type { FeatureKey } from "@wisp/core";
 import { useFeatures } from "../features.ts";
 import { useStore, useInboxCount, useChatsUnread } from "../store.ts";
@@ -63,6 +63,7 @@ function NavItem({ to, label, icon, active, badge, dot, accent }: { to: string; 
  * "more" items go in More. A mod adds its entry here instead of its own check in the rail.
  */
 const MOD_NAV: { feature: FeatureKey; place: "rail" | "more"; label: string; icon: (size: number) => ReactNode; to: Route; views: Route["view"][] }[] = [
+  { feature: "code", place: "rail", label: "Code", icon: (size) => <SquareTerminal size={size} strokeWidth={1.8} />, to: { view: "code" }, views: ["code"] },
   { feature: "storage", place: "more", label: "Storage", icon: (size) => <HardDrive size={size} strokeWidth={1.8} />, to: { view: "settings", page: "storage" }, views: [] },
 ];
 
