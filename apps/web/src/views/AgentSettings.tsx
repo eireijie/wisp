@@ -851,17 +851,23 @@ export function accessScope(access: AccessLevel, name: string, handle: string, d
   return `${name} may change files and run commands on ${device}, if ${device} allows full access (a device can refuse and drop it to Edit).`;
 }
 
+/** Harnesses Wisp can keep the person's own plugins out of. */
+const OWN_PLUGINS_HARNESSES = ["codex", "claude-code", "gemini"];
+
 function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent; nodes: NodeInfo[]; onDirty: (d: boolean) => void; active: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);
-  const saved = agent.settings.access ?? "edit";
-  const [{ access }, setPermissions] = useSavedDraft({ access: saved });
-  const setAccess = (value: AccessLevel) => setPermissions({ access: value });
+  const savedAccess = agent.settings.access ?? "edit";
+  const savedOwn = !!agent.settings.ownPlugins;
+  const [{ access, ownPlugins }, setPermissions] = useSavedDraft({ access: savedAccess, ownPlugins: savedOwn });
+  const setAccess = (value: AccessLevel) => setPermissions({ access: value, ownPlugins });
+  const setOwnPlugins = (value: boolean) => setPermissions({ access, ownPlugins: value });
+  const canOwnPlugins = OWN_PLUGINS_HARNESSES.includes(agent.harness);
   const [memory, setMemory] = useState<{ rules: AccessRule[]; sharedOut: AccessRule[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dirty = access !== saved;
+  const dirty = access !== savedAccess || ownPlugins !== savedOwn;
   useEffect(() => {
     onDirty(dirty);
   }, [dirty, onDirty]);
@@ -876,7 +882,7 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
     setSaving(true);
     setError(null);
     try {
-      await api("PATCH", `/api/agents/${agent.id}`, { settings: { access } });
+      await api("PATCH", `/api/agents/${agent.id}`, { settings: { access, ...(canOwnPlugins ? { ownPlugins } : {}) } });
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
@@ -905,6 +911,29 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
             <ShieldAlert size={16} className="shrink-0 mt-0.5" />
             The agent can run any command as the device's user. The device must opt in with <code>wisp node start --allow-full-access</code>; otherwise it runs with edit access.
           </p>
+        )}
+        {canOwnPlugins && (
+          <div className="mt-4 max-w-2xl">
+            <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ownPlugins}
+                aria-label={`Use my own ${harnessLabel(agent.harness)} plugins`}
+                onClick={() => setOwnPlugins(!ownPlugins)}
+                className={cx("relative h-5 w-9 rounded-full transition-colors", ownPlugins ? "bg-accent" : "bg-chip")}
+              >
+                <span className={cx("m-knob absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow", ownPlugins && "translate-x-4")} />
+              </button>
+              Use my own {harnessLabel(agent.harness)} plugins
+            </label>
+            {ownPlugins && (
+              <p className="mt-2 flex gap-2 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">
+                <ShieldAlert size={16} className="shrink-0 mt-0.5" />
+                These skip Wisp's approvals and the screen switch.
+              </p>
+            )}
+          </div>
         )}
       </section>
 
@@ -950,7 +979,7 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
       </section>
 
       {error && <p className="text-sm text-bad">{error}</p>}
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => setAccess(saved)} active={active} note="Applies from the next message." />
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => setPermissions({ access: savedAccess, ownPlugins: savedOwn })} active={active} note="Applies from the next message." />
     </div>
   );
 }
