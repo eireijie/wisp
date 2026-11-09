@@ -53,13 +53,14 @@ const KEYS: [string, string][] = [
   ["1–9", "tab"],
 ];
 
-export function ShellWorkspace(props: { lead?: ReactNode }) {
+/** `lead`: what the header starts with. `embedded`: inside a page that already keeps clear of the phone's tab bar. */
+export function ShellWorkspace(props: { lead?: ReactNode; embedded?: boolean }) {
   const workspaceId = useStore((s) => s.me?.workspace.id) ?? "none";
   // a workspace of its own each, started afresh when you switch
   return <Shells key={workspaceId} store={`${STORE}:${workspaceId}`} {...props} />;
 }
 
-function Shells({ lead, store }: { lead?: ReactNode; store: string }) {
+function Shells({ lead, embedded = false, store }: { lead?: ReactNode; embedded?: boolean; store: string }) {
   const on = useFeatures().code;
   const [targets, setTargets] = useState<ShellTarget[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -310,7 +311,7 @@ function Shells({ lead, store }: { lead?: ReactNode; store: string }) {
   const hasPanes = ws.tabs.some((t) => t.root);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#0c0c0e] text-[#f2f2f4] max-md:pb-[88px]">
+    <div className={cx("flex h-full min-h-0 flex-col bg-[#0c0c0e] text-[#f2f2f4]", !embedded && "max-md:pb-[88px]")}>
       <header className="flex h-12 shrink-0 items-center gap-1.5 px-4">
         {lead}
         <span className="flex-1" />

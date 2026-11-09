@@ -462,6 +462,7 @@ export const useStore = create<State>((set, get) => ({
     } else if (e.type === "model_login") {
       set((s) => ({ modelLogins: { ...s.modelLogins, [e.login.id]: e.login } }));
     } else if (e.type === "run_event") {
+      for (const tap of runTaps) tap(e);
       set((s) => {
         const cur = s.live[e.runId] ?? { runId: e.runId, agentId: e.agentId, channelId: e.channelId, threadId: e.threadId ?? null, threadPath: e.threadPath ?? [], text: "", tools: [], last: null, usedComputer: false };
         return { live: { ...s.live, [e.runId]: applyEvent(cur, e.event) } };
@@ -470,6 +471,10 @@ export const useStore = create<State>((set, get) => ({
     if (notify) notifyOn(e, before, get());
   },
 }));
+
+/** Views that need every step of a run (Code's agent panes), not the store's short summary. */
+export type RunEvent = Extract<ClientEvent, { type: "run_event" }>;
+export const runTaps = new Set<(e: RunEvent) => void>();
 
 /** A channel and each of its threads have independent history and load errors. */
 export const conversationKey = (channelId: string, threadId?: string) => threadId ? `${channelId}/t/${threadId}` : channelId;
