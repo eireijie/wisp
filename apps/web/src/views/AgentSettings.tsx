@@ -353,7 +353,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
           onClick={toggleLock}
           role="switch"
           aria-checked={!locked}
-          className={cx("relative h-6 w-11 shrink-0 rounded-full transition-colors", locked ? "bg-hover" : "bg-accent")}
+          className={cx("relative h-6 w-11 shrink-0 rounded-full transition-colors", locked ? "bg-hover" : "m-switch-on")}
           aria-label={`Let @${agent.handle} refine its own personality`}
         >
           <span className={cx("m-knob absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow", !locked && "translate-x-5")} />
@@ -691,7 +691,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
             aria-checked={form.fast}
             disabled={!selected?.fast}
             onClick={() => setForm({ ...form, fast: !form.fast })}
-            className={cx("relative h-5 w-9 rounded-full transition-colors", form.fast && selected?.fast ? "bg-accent" : "bg-chip")}
+            className={cx("relative h-5 w-9 rounded-full transition-colors", form.fast && selected?.fast ? "m-switch-on" : "bg-chip")}
           >
             <span className={cx("m-knob absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow", form.fast && selected?.fast && "translate-x-4")} />
           </button>
@@ -921,7 +921,7 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
                 aria-checked={ownPlugins}
                 aria-label={`Use my own ${harnessLabel(agent.harness)} plugins`}
                 onClick={() => setOwnPlugins(!ownPlugins)}
-                className={cx("relative h-5 w-9 rounded-full transition-colors", ownPlugins ? "bg-accent" : "bg-chip")}
+                className={cx("relative h-5 w-9 rounded-full transition-colors", ownPlugins ? "m-switch-on" : "bg-chip")}
               >
                 <span className={cx("m-knob absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow", ownPlugins && "translate-x-4")} />
               </button>
