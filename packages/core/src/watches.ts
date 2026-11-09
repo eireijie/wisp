@@ -75,15 +75,29 @@ export const BROWSER_CHECK_TOKENS = 60_000;
 /** About how many tokens one check about a batch of app changes uses. */
 export const EVENT_CHECK_TOKENS = 25_000;
 
-/** What a watch may cost a day, so people see it before saying yes. API watches only cost when something changes. */
-export function watchEstimate(service: WatchService, everyMinutes: number, dailyAllowance: number | null): { checksPerDay: number; tokensPerDay: number; shareOfAllowance: number | null; note: string } {
+/** "every 3 hours", "every 90 minutes" */
+function everyText(minutes: number): string {
+  if (minutes % 60 === 0) return minutes === 60 ? "every hour" : `every ${minutes / 60} hours`;
+  return `every ${minutes} minutes`;
+}
+
+/**
+ * What a watch may cost a day, so people see it before saying yes. API watches only cost when something
+ * changes; so do website watches on a page Wisp can read itself (`readsPage`): it compares the page's
+ * text and only wakes the agent when lines were added. Sites behind a sign-in are looked at by the
+ * agent on each check.
+ */
+export function watchEstimate(service: WatchService, everyMinutes: number, dailyAllowance: number | null, readsPage = false): { checksPerDay: number; tokensPerDay: number; shareOfAllowance: number | null; note: string } {
   if (service !== "browser") {
     return { checksPerDay: 0, tokensPerDay: 0, shareOfAllowance: 0, note: `Looking costs nothing. Each batch of changes is one check, about ${EVENT_CHECK_TOKENS / 1000}k tokens.` };
+  }
+  if (readsPage) {
+    return { checksPerDay: 0, tokensPerDay: 0, shareOfAllowance: 0, note: `Wisp reads the page itself ${everyText(everyMinutes)}, which costs nothing, and wakes the agent only when something on it changed (about ${BROWSER_CHECK_TOKENS / 1000}k tokens each time).` };
   }
   const checksPerDay = Math.max(1, Math.floor((24 * 60) / everyMinutes));
   const tokensPerDay = checksPerDay * BROWSER_CHECK_TOKENS;
   const share = dailyAllowance ? tokensPerDay / dailyAllowance : null;
-  return { checksPerDay, tokensPerDay, shareOfAllowance: share, note: `About ${checksPerDay} browser check${checksPerDay === 1 ? "" : "s"} a day, ${Math.round(tokensPerDay / 1000)}k tokens${share !== null ? ` (${Math.round(share * 100)}% of the daily allowance)` : ""}.` };
+  return { checksPerDay, tokensPerDay, shareOfAllowance: share, note: `The agent looks ${everyText(everyMinutes)} in its browser (the site needs a sign-in), slower while nothing changes: up to ${checksPerDay} check${checksPerDay === 1 ? "" : "s"} a day, ${Math.round(tokensPerDay / 1000)}k tokens${share !== null ? ` (${Math.round(share * 100)}% of the daily allowance)` : ""}.` };
 }
 
 /** How an agent names something it raised, so it's only raised once: "notion:<page id>". */
