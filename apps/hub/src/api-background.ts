@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { FEATURE_INFO, FEATURE_KEYS, type BackgroundWork, type FeatureKey, type MessagePart } from "@wisp/core";
+import { FEATURE_INFO, FEATURE_KEYS, UNLISTED_FEATURES, type BackgroundWork, type FeatureKey, type MessagePart } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import { DEFAULT_DAILY_CAP, parseWhen } from "./background.ts";
 import { setWorkspaceFeatures, workspaceFeatures } from "./features.ts";
@@ -342,7 +342,7 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     const features = workspaceFeatures(store, c.workspaceId);
     return {
       background: b ? { enabled: b.enabled, everyMinutes: b.everyMinutes, quietStart: b.quietStart, quietEnd: b.quietEnd, focus: b.focus } : null,
-      mods: FEATURE_KEYS.map((k) => ({ key: k, name: FEATURE_INFO[k].name, description: FEATURE_INFO[k].description, on: features[k] })),
+      mods: FEATURE_KEYS.filter((k) => !UNLISTED_FEATURES.includes(k)).map((k) => ({ key: k, name: FEATURE_INFO[k].name, description: FEATURE_INFO[k].description, on: features[k] })),
       canChangeMods: store.members(c.workspaceId).some((m) => m.id === userId && m.role === "owner"),
       allowance: hub.background.allowance(c.workspaceId, userId),
     };

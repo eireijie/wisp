@@ -272,6 +272,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const body = parse(z.object({ code: SCREEN_CODE.optional() }), req.body ?? {}, reply);
     if (!body) return;
     try {
+      if (computers.transport(comp) === "vnc" && !computers.canUse(comp, c.actor.id)) return reply.code(403).send({ error: computers.notYours(comp) });
       if (!computers.online(comp)) return reply.code(503).send({ error: comp.kind === "orgo" ? "add an Orgo API key in Settings → Computers first" : `${comp.name} is offline: its device isn't connected` });
       const transport = computers.transport(comp);
       return { transport, url: `/ws/computers/${comp.id}/${transport}?ticket=${await computers.ticket(comp, c.actor.id, body.code)}`, direct: false };

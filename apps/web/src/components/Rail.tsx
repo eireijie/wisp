@@ -1,5 +1,6 @@
 import { useRef, type ReactNode } from "react";
 import { Blocks, BookOpen, Ellipsis, HardDrive, LifeBuoy, ListTodo, Store } from "lucide-react";
+import type { FeatureKey } from "@wisp/core";
 import { useFeatures } from "../features.ts";
 import { useStore, useInboxCount, useChatsUnread } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
@@ -57,6 +58,18 @@ function NavItem({ to, label, icon, active, badge, dot, accent }: { to: string; 
   );
 }
 
+/**
+ * What mods add to the sidebar while they're on: "rail" items sit under Computers on desktops,
+ * "more" items go in More. A mod adds its entry here instead of its own check in the rail.
+ */
+const MOD_NAV: { feature: FeatureKey; place: "rail" | "more"; label: string; icon: (size: number) => ReactNode; to: Route; views: Route["view"][] }[] = [
+  { feature: "storage", place: "more", label: "Storage", icon: (size) => <HardDrive size={size} strokeWidth={1.8} />, to: { view: "settings", page: "storage" }, views: [] },
+];
+
+function modNav(features: Record<FeatureKey, boolean>, place: "rail" | "more") {
+  return MOD_NAV.filter((m) => m.place === place && features[m.feature]);
+}
+
 /** The views More opens, so More shows active on them. */
 export const MORE_VIEWS: Route["view"][] = ["more", "vault", "tasks", "marketplace", "connectors", "skills", "mods", "help"];
 
@@ -67,7 +80,7 @@ export function useMoreItems(guest: boolean, size = 16): { label: string; icon: 
   return [
     { label: "Memory", icon: <BookOpen {...icon} />, to: { view: "vault", path: null } },
     ...(!guest && features.tasks ? [{ label: "Tasks", icon: <ListTodo {...icon} />, to: { view: "tasks" } as Route }] : []),
-    ...(!guest && features.storage ? [{ label: "Storage", icon: <HardDrive {...icon} />, to: { view: "settings", page: "storage" } as Route }] : []),
+    ...(!guest ? modNav(features, "more").map((m) => ({ label: m.label, icon: m.icon(size), to: m.to })) : []),
     ...(!guest ? [{ label: "Marketplace", icon: <Store {...icon} />, to: { view: "marketplace" } as Route }, { label: "Mods", icon: <Blocks {...icon} />, to: { view: "mods" } as Route }] : []),
     { label: "Help", icon: <LifeBuoy {...icon} />, to: { view: "help" } },
   ];
@@ -100,6 +113,7 @@ export function Rail({ route }: { route: Route }) {
   const inbox = useInboxCount();
   const unreadChats = useChatsUnread();
   const isGuest = me.role === "guest";
+  const features = useFeatures();
   const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
   const index = route.view === "dashboard" ? 0 : route.view === "chat" || route.view === "chats" ? 1 : route.view === "agents" ? 2 : route.view === "computers" && !isGuest ? 3 : -1;
   return (
@@ -118,6 +132,7 @@ export function Rail({ route }: { route: Route }) {
         <NavItem to={chatsTarget()} label="Chats" icon={<ChatsIcon />} accent="chats" active={route.view === "chat" || route.view === "chats"} badge={unreadChats} />
         <NavItem to={href({ view: "agents", agentId: null })} label="Agents" icon={<AgentsIcon />} accent="agents" active={route.view === "agents"} />
         {!isGuest && <NavItem to={href({ view: "computers", computerId: null })} label="Computers" icon={<ComputersIcon />} accent="computers" active={route.view === "computers"} dot={working} />}
+        {!isGuest && modNav(features, "rail").map((m) => <NavItem key={m.feature} to={href(m.to)} label={m.label} icon={m.icon(22)} accent="more" active={m.views.includes(route.view)} />)}
       </div>
       <MoreItem route={route} guest={isGuest} />
       <span className="flex-1" />
