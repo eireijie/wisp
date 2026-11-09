@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
 import { Loader2, LogIn } from "lucide-react";
 import { harnessLabel, type AgentSignIn, type HarnessSettings } from "@wisp/core";
 import { api } from "../api.ts";
 import { go } from "../router.ts";
 import { useStore } from "../store.ts";
-import { HarnessSignIn, type HarnessesResponse } from "../views/settings/harnesses.tsx";
+import type { HarnessesResponse, HarnessSignIn as HarnessSignInDialog } from "../views/settings/harnesses.tsx";
 import { cx } from "./ui.tsx";
 
 /**
@@ -16,7 +16,7 @@ export function HarnessSignInButton({ signIn, agentId, className, children, onOp
   const refreshAgents = useStore((s) => s.refreshAgents);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState<{ device: HarnessesResponse["device"]; settings: HarnessSettings; account: HarnessSettings["accounts"][number] } | null>(null);
+  const [open, setOpen] = useState<{ Dialog: ComponentType<Parameters<typeof HarnessSignInDialog>[0]>; device: HarnessesResponse["device"]; settings: HarnessSettings; account: HarnessSettings["accounts"][number] } | null>(null);
   const start = async () => {
     setBusy(true);
     setError(null);
@@ -31,7 +31,9 @@ export function HarnessSignInButton({ signIn, agentId, className, children, onOp
       const settings = r.harnesses.find((h) => h.harness === signIn.harness);
       const account = settings?.accounts.find((a) => a.id === signIn.account) ?? settings?.accounts.find((a) => a.isDefault) ?? settings?.accounts[0];
       if (!settings || !account) throw new Error(`${harnessLabel(signIn.harness)} isn't on ${signIn.where} anymore`);
-      setOpen({ device: r.device, settings, account });
+      // the dialog lives with the Harnesses settings; loaded only when someone signs in
+      const { HarnessSignIn } = await import("../views/settings/harnesses.tsx");
+      setOpen({ Dialog: HarnessSignIn, device: r.device, settings, account });
       onOpenChange?.(true);
     } catch (e) {
       setError((e as Error).message);
@@ -45,7 +47,7 @@ export function HarnessSignInButton({ signIn, agentId, className, children, onOp
         {busy ? <Loader2 size={13} className="animate-spin" /> : <LogIn size={13} />} {children ?? "Sign in"}
       </button>
       {error && <span className="text-xs text-bad">{error}</span>}
-      {open && <HarnessSignIn device={open.device} settings={open.settings} account={open.account} onClose={() => (setOpen(null), onOpenChange?.(false))} onDone={() => void refreshAgents()} />}
+      {open && <open.Dialog device={open.device} settings={open.settings} account={open.account} onClose={() => (setOpen(null), onOpenChange?.(false))} onDone={() => void refreshAgents()} />}
     </>
   );
 }
