@@ -11,9 +11,9 @@ export { HarnessAccounts, SIGN_IN_STATUS, loginCommand, modelLoginCommand, setup
 export { changeHarnessSettings, editClaude, editCodex, editHermes, HARNESS_SPECS, harnessConfigPath, harnessConfigured, harnessDir, parseToml, readHarnessSettings, readHarnessSkill, type HarnessHomes } from "./harness-config.ts";
 export { RunFiles, commandVersion, execCommand, runJsonl, spawnCommand, stopProcess } from "./process.ts";
 export { claudeCode, claudeArgs, claudeEnv, claudeMcpConfig, claudePlan, claudeUsage, parseClaudeLine } from "./claude-code.ts";
-export { codex, codexArgs, codexConnectionArgs, codexDefaults, codexEnv, codexMcpConfig, codexPlan, codexTokens, codexUsageFromRollout, parseCodexCatalog, parseCodexLine, runCodexHome } from "./codex.ts";
+export { codex, codexArgs, codexConfiguredServers, codexConnectionArgs, codexIsolation, codexDefaults, codexEnv, codexMcpConfig, codexPlan, codexTokens, codexUsageFromRollout, parseCodexCatalog, parseCodexLine, runCodexHome } from "./codex.ts";
 export { codexAuthFromHermes, hermesEntryFromCodex, localCredentialFs, prepareCredential, type CredentialFs, type CredentialPlaces, type PreparedCredential } from "./credentials.ts";
-export { AcpConnection, acpAdapter, acpCommands, acpUsage, acpMcpServers, acpModels, parseAcpUpdate, permissionOutcome } from "./acp.ts";
+export { AcpConnection, acpAdapter, acpIsolationArgs, acpCommands, acpUsage, acpMcpServers, acpModels, parseAcpUpdate, permissionOutcome } from "./acp.ts";
 
 /**
  * Registered harnesses: Claude Code and Codex have their own adapters; every harness that
