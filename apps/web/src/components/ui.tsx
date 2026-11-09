@@ -204,9 +204,9 @@ export function UserAvatar({ name, size = 32 }: { name: string; size?: number })
  * accent; working is blue.
  */
 export const AGENT_STATUS: Record<Agent["status"], { label: string; hue: string; dot?: string }> = {
-  online: { label: "online", hue: "var(--status-online)" },
-  busy: { label: "working", hue: "var(--status-working)", dot: "var(--status-working)" },
-  offline: { label: "offline", hue: "var(--status-idle)" },
+  online: { label: "Online", hue: "var(--status-online)" },
+  busy: { label: "Working", hue: "var(--status-working)", dot: "var(--status-working)" },
+  offline: { label: "Offline", hue: "var(--status-idle)" },
 };
 
 /** How an online agent that can't answer until someone signs its harness in shows. */
@@ -249,7 +249,11 @@ export function GhostMark({ size = 20, draw, className }: { size?: number; draw?
 export function Loader({ label = "Loading…" }: { label?: string }) {
   return (
     <div role="status" className="h-full w-full grid place-items-center bg-panel" style={{ color: "var(--loader)" }}>
-      <GhostMark size={88} draw />
+      {/* a faint outline stays put so the screen is never empty while the ghost redraws */}
+      <span className="relative grid place-items-center">
+        <GhostMark size={88} className="opacity-20" />
+        <GhostMark size={88} draw className="absolute inset-0" />
+      </span>
       <span className="sr-only">{label}</span>
     </div>
   );
