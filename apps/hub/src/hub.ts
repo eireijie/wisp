@@ -28,7 +28,7 @@ import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
 import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
 import { spawnSection } from "./spawn.ts";
-import { askNextIfStalled, recordSetupReply, setupChat, setupSection } from "./greeting.ts";
+import { recordSetupReply, setupChat, setupSection } from "./greeting.ts";
 import { foldTeams } from "./fold-teams.ts";
 import { TeamFlows } from "./team-flows.ts";
 import type { RunKind, Store } from "./store.ts";
@@ -728,6 +728,7 @@ export class Hub {
       this.loops.runEnded(run, null);
     } else if ("finalText" in result) {
       store.setRunStatus(run.id, "done");
+      this.clearEarlierFailures(run);
       this.routines.runFinished(run);
       body = result.finalText.trim() || live.text.trim();
       // a harness command (/compact, say) may finish without a word; say it ran
@@ -760,7 +761,7 @@ export class Hub {
         const fix = agent ? this.failureFix(agent, result.error) : undefined;
         this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "status", text: `Run failed: ${text}` }, ...(result.error === "cancelled" ? [] : [{ type: "run_failed" as const, runId: run.id, retry: !!run.triggerMessageId && !run.discussionId, ...(fix ? { fix } : {}) }])], hop: run.hop + 1, route: false, conversationId: this.chatOfRun(run) });
         failTaskOfRun(this, run, text);
-        if (result.error !== "cancelled" && agent && store.channel(run.channelId)?.kind === "dm") askNextIfStalled(this, agent.id, run.channelId, !!fix);
+        // setup's scripted questions wait: the person sees the failure and its Try again first
       }
     }
     if (agent) this.broadcast(workspaceId, { type: "agent_status", agentId: agent.id, status: this.agentStatus(agent) });
@@ -802,6 +803,19 @@ export class Hub {
   }
 
   /** Ask again after a failed run: a new run for the same request, for whoever is asking now. */
+  /** A retry worked: the "Run failed" lines (and their Try again buttons) from the earlier tries of the same message go away. */
+  private clearEarlierFailures(run: NonNullable<ReturnType<Store["run"]>>) {
+    if (!run.triggerMessageId) return;
+    for (const m of this.store.messages(run.channelId, { threadId: run.threadId, limit: 60 })) {
+      if (m.author.kind !== "agent" || m.author.id !== run.agentId || m.body) continue;
+      const failed = m.parts.find((p) => p.type === "run_failed");
+      if (!failed || failed.type !== "run_failed" || failed.runId === run.id) continue;
+      if (this.store.run(failed.runId)?.triggerMessageId !== run.triggerMessageId) continue;
+      this.store.deleteMessage(m.id);
+      this.broadcast(this.store.channel(run.channelId)!.workspaceId, { type: "message_removed", messageId: m.id, channelId: m.channelId, threadId: m.threadId }, this.audience(m.channelId));
+    }
+  }
+
   retryRun(run: NonNullable<ReturnType<Store["run"]>>, requestedBy: string): string {
     const task = run.threadId ? this.store.taskByThread(run.threadId) : undefined;
     if (task?.toAgentId === run.agentId && task.status === "failed" && !task.result?.startsWith("Cancelled")) {

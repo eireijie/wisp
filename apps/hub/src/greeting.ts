@@ -281,23 +281,6 @@ export function setupSection(hub: Hub, agent: Agent, at: { channelId: string; li
     .join("\n");
 }
 
-/**
- * The model failed mid-setup for a reason other than sign-in: Wisp takes what they last wrote as
- * the answer to the step it was on and asks the next question itself, so the chat doesn't stall.
- */
-export function askNextIfStalled(hub: Hub, agentId: string, channelId: string, signInTrouble: boolean): void {
-  if (signInTrouble) return;
-  const agent = hub.store.agent(agentId);
-  const s = agent && activeSetup(agent, channelId);
-  if (!agent || !s || !s.replies.length) return;
-  const asked = remaining(s).find((k) => GUIDE[k].ask);
-  if (!asked) return;
-  const steps = { ...s.steps, [asked]: `"${s.replies.at(-1)}" (their words)` };
-  hub.store.updateAgent(agent.id, { settings: { setup: { ...s, steps } } });
-  const next = SETUP_STEPS.filter((k) => steps[k] === undefined).find((k) => GUIDE[k].ask);
-  if (next) hub.postMessage({ channelId, author: { kind: "agent", id: agent.id }, body: GUIDE[next].ask!, route: false });
-}
-
 interface Helpers {
   need(req: FastifyRequest, reply: FastifyReply, opts?: { owner?: boolean; user?: boolean; member?: boolean }): Caller | null;
   parse<S extends z.ZodTypeAny>(schema: S, data: unknown, reply: FastifyReply): z.output<S> | null;
