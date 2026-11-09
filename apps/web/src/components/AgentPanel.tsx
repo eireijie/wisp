@@ -15,7 +15,7 @@ import { useComputerState } from "../views/ComputersView.tsx";
 import { LiveScreen, WorkingBadge } from "./Screen.tsx";
 import { Ghost } from "./Ghost.tsx";
 import { prettyModel, effortName } from "./EffortSlider.tsx";
-import { AgentAvatar, AGENT_STATUS, Button, Pill, cx, timeAgo } from "./ui.tsx";
+import { AgentAvatar, AGENT_STATUS, NEEDS_SIGN_IN, Button, Pill, cx, timeAgo } from "./ui.tsx";
 import { RightPane } from "./RightPane.tsx";
 import { runActivity, stopRuns } from "./ActivityPill.tsx";
 import { minutesSince, runStartedAt, workSteps } from "./agentActivity.ts";
@@ -60,7 +60,7 @@ export function AgentPanel({ agent, tab, onTab, onClose, onCall, inDm = false }:
   }, [runs.length]);
   const working = runs.length > 0 || agent.status === "busy";
   const since = runs.length ? Math.min(...runs.map((r) => runStartedAt(r.runId))) : null;
-  const status = AGENT_STATUS[agent.status];
+  const status = agent.signIn && agent.status === "online" ? NEEDS_SIGN_IN : AGENT_STATUS[agent.status];
   return (
     <RightPane label={`${agent.name}'s details`}>
       <div className="h-15 shrink-0 flex items-center gap-1.5 px-4 border-b border-line">
@@ -144,7 +144,7 @@ function RoleLabel({ agent }: { agent: Agent }) {
 }
 
 function Details({ agent, onCall, runs, inDm }: { agent: Agent; onCall: () => void; runs: LiveRun[]; inDm: boolean }) {
-  const status = AGENT_STATUS[agent.status];
+  const status = agent.signIn && agent.status === "online" ? NEEDS_SIGN_IN : AGENT_STATUS[agent.status];
   const computer = useStore((s) => s.computers.find((c) => c.id === agent.computerId));
   const devices = useDevices();
   const readiness = agentReadiness(agent, devices);
@@ -268,13 +268,14 @@ function AnswersRow({ agent }: { agent: Agent }) {
 }
 
 /** The one thing to do about an unfinished helper, in plain words. Mirrors agentReadiness's order of checks; null when ready. */
-export function setupNextStep(agent: Pick<Agent, "id" | "nodeId" | "harness" | "name" | "settings" | "computerId">, devices: DeviceInfo[] | null): { text: string; href: string; action: string } | null {
+export function setupNextStep(agent: Pick<Agent, "id" | "nodeId" | "harness" | "name" | "settings" | "computerId"> & Partial<Pick<Agent, "signIn">>, devices: DeviceInfo[] | null): { text: string; href: string; action: string } | null {
   if (agentReadiness(agent, devices).ready) return null;
   if (!agent.nodeId) return { text: `Choose the computer that runs ${agent.name}.`, href: href({ view: "agents", agentId: agent.id, tab: "device" }), action: "Choose a device" };
   const device = devices?.find((d) => d.id === agent.nodeId);
   if (!device) return null;
   if (!device.online) return { text: `Open Wisp on ${device.name} so it reconnects. Messages wait until then.`, href: href({ view: "computers", computerId: null }), action: "See computers" };
   if (device.paused) return { text: `${device.name} is paused. Resume it on that computer.`, href: href({ view: "computers", computerId: null }), action: "See computers" };
+  if (agent.signIn) return { text: `Sign in to ${harnessLabel(agent.harness)} on ${agent.signIn.where} so ${agent.name} can answer.`, href: href(agent.signIn.computerId ? { view: "agents", agentId: agent.id, tab: "computer" } : { view: "settings", page: "harnesses" }), action: "Sign in" };
   if (agentSignedIn(agent, device) === false) {
     const inVm = agent.settings?.runIn === "computer" && !!agent.computerId;
     return { text: `Sign in to ${harnessLabel(agent.harness)} ${inVm ? `on ${agent.name}'s computer` : `on ${device.name}`} so ${agent.name} can answer.`, href: href(inVm ? { view: "agents", agentId: agent.id, tab: "computer" } : { view: "settings", page: "harnesses" }), action: "Sign in" };

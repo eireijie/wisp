@@ -178,7 +178,7 @@ export function AgentAvatar({
   return (
     <span className="relative inline-block shrink-0" style={{ width: size, height: size }}>
       <Ghost key={agent?.id} look={look} size={size} mood={mood} animate={animate ?? (live || interactive)} ambient={live} interactive={interactive} label={agent?.name ?? "agent"} />
-      {badge && agent?.status && <StatusDot status={agent.status} className="absolute bottom-0 right-0 ring-2 ring-panel" />}
+      {badge && agent?.status && <StatusDot status={agent.status} needsSignIn={!!(agent as { signIn?: unknown }).signIn} className="absolute bottom-0 right-0 ring-2 ring-panel" />}
     </span>
   );
 }
@@ -209,13 +209,19 @@ export const AGENT_STATUS: Record<Agent["status"], { label: string; hue: string;
   offline: { label: "offline", hue: "var(--status-idle)" },
 };
 
-export function StatusDot({ status, className }: { status: Agent["status"]; className?: string }) {
-  const s = AGENT_STATUS[status];
+/** How an online agent that can't answer until someone signs its harness in shows. */
+export const NEEDS_SIGN_IN = { label: "needs sign-in", hue: "var(--warn)", dot: "var(--warn)" };
+
+/** The look for an agent's status; online but with its harness signed out where it runs reads "needs sign-in". */
+const statusLook = (status: Agent["status"], needsSignIn?: boolean) => (needsSignIn && status === "online" ? NEEDS_SIGN_IN : AGENT_STATUS[status]);
+
+export function StatusDot({ status, needsSignIn, className }: { status: Agent["status"]; needsSignIn?: boolean; className?: string }) {
+  const s = statusLook(status, needsSignIn);
   return <span className={cx("inline-block size-2 rounded-full", status === "busy" && "animate-pulse", className)} style={{ background: s.dot ?? s.hue }} title={s.label} />;
 }
 
-export function StatusChip({ status }: { status: Agent["status"] }) {
-  const s = AGENT_STATUS[status];
+export function StatusChip({ status, needsSignIn }: { status: Agent["status"]; needsSignIn?: boolean }) {
+  const s = statusLook(status, needsSignIn);
   return (
     <span className={cx("status-chip inline-flex items-center gap-1.5 rounded-full px-2.5 h-[22px] text-xs font-medium leading-none whitespace-nowrap", status === "offline" && "opacity-70")} style={{ "--sc": s.hue } as CSSProperties}>
       {s.dot && <span className={cx("size-1.5 rounded-full", status === "busy" && "animate-pulse")} style={{ background: s.dot }} />}

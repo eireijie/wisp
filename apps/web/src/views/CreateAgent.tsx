@@ -6,7 +6,8 @@ import { GhostColors } from "../components/GhostColors.tsx";
 import { HarnessLogo } from "../components/HarnessLogo.tsx";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
 import { prettyModel } from "../components/EffortSlider.tsx";
-import { HARNESSES, runsInVm, type Agent, type Connector, type DiscoveredAgent, type Skill } from "@wisp/core";
+import { HARNESSES, accountsSignedIn, preferSignedIn, runsInVm, type Agent, type AgentSignIn, type Connector, type DiscoveredAgent, type Skill } from "@wisp/core";
+import { HarnessSignInButton } from "../components/HarnessSignInButton.tsx";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go } from "../router.ts";
@@ -280,9 +281,12 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
       },
       () => {
         if (!live) return;
-        // an older hub has no defaults: pick here instead
+        // an older hub has no defaults: pick here instead, starting on an AI that's signed in
         setDefaults("error");
         setMode("custom");
+        const on = nodes.find((n) => n.id === nodeId);
+        const pick = preferSignedIn((on?.harnesses ?? []).map((h) => h.id), (id) => accountsSignedIn(on?.harnesses?.find((h) => h.id === id)?.accounts));
+        if (pick && !touched.current) setHarness(pick);
       },
     );
     return () => {
@@ -330,6 +334,10 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
   const effectiveHarness = useDefaults ? ((defaults as AgentDefaults).harness ?? harness) : harness;
   const selectedHarness = harnesses.find((h) => h.id === effectiveHarness) ?? harnesses[0];
   const external = invite || selectedHarness.protocol === "mcp";
+  // the AI picked is known not to be signed in on its device: say so, with Sign in, before it's made
+  const signedInOn = (id: string) => accountsSignedIn(node?.harnesses?.find((h) => h.id === id)?.accounts);
+  const signInFirst: AgentSignIn | null = node?.mine && !external && signedInOn(selectedHarness.id) === false ? { harness: selectedHarness.id, where: node.name, nodeId: node.id, computerId: null, account: "default" } : null;
+  const noneSignedIn = !!signInFirst && !(node?.harnesses ?? []).some((h) => accountsSignedIn(h.accounts) !== false);
 
   const cleanName = name.trim();
   const finalHandle = handle || slug(cleanName);
@@ -626,6 +634,14 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                             {node.name} is offline. You can create {cleanName || "this agent"} now, but it can't answer until {node.name} reconnects.
                           </p>
                         )}
+                      </div>
+                    )}
+                    {signInFirst && (
+                      <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-warn/40 bg-warn/10 px-3.5 py-2.5 text-[13px]">
+                        <span className="min-w-0 flex-1">
+                          {noneSignedIn ? `No AI is signed in on ${signInFirst.where} yet. Sign in to ${harnessLabel(signInFirst.harness)} so ${cleanName || "this agent"} can answer.` : `${harnessLabel(signInFirst.harness)} isn't signed in on ${signInFirst.where}. Sign in, or pick another AI.`}
+                        </span>
+                        <HarnessSignInButton signIn={signInFirst} />
                       </div>
                     )}
                   </div>
