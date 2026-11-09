@@ -30,7 +30,7 @@ export interface HostOptions {
   /** Remote Desktop on this device's own screen, as set at the device (read on every use) */
   remoteDesktop?: () => RemoteDesktopConfig | undefined;
   /** a VM here is starting (saying what it's doing), came up, or couldn't, whatever started it */
-  onVmStatus?: (computerId: string, status: "starting" | "ready" | "error", text: string) => void;
+  onVmStatus?: (computerId: string, status: "starting" | "ready" | "stopped" | "error", text: string) => void;
 }
 
 export interface Tunnel {

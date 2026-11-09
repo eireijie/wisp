@@ -15,7 +15,7 @@ describe("VM containers", () => {
   it("keep their home in a volume, share files with the device, and expose no ports", () => {
     const args = runArgs({ id: "cmp_x", name: "Nova's Desk!", kind: "vm", config: { resolution: "1440x900", cpus: 2, memoryGb: 4 } }, { name: "wisp-cmp_x", volume: "wisp-cmp_x-home", files: "/n/files", image: "wisp-computer:1" });
     expect(args.slice(0, 4)).toEqual(["run", "-d", "--name", "wisp-cmp_x"]);
-    expect(args).toEqual(expect.arrayContaining(["--hostname", "nova-s-desk", "--restart", "unless-stopped"]));
+    expect(args).toEqual(expect.arrayContaining(["--hostname", "nova-s-desk", "--restart", "no"]));
     expect(args).toEqual(expect.arrayContaining(["-e", "RESOLUTION=1440x900", "-v", "wisp-cmp_x-home:/home/wisp", "-v", "/n/files:/home/wisp/files", "--cpus", "2", "--memory", "4g"]));
     expect(args.join(" ")).not.toMatch(/ -p /);
     expect(args.at(-1)).toBe("wisp-computer:1");

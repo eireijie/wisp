@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import WebSocket from "ws";
-import { ComputerAction, TRANSFER_ACTIONS, tunnelFrame, type Actor, type Computer, type ComputerController, type ComputerSpec, type NodeToHub, type OrgoConfig, type Screenshot } from "@wisp/core";
+import { ComputerAction, TRANSFER_ACTIONS, envVar, tunnelFrame, type Actor, type Computer, type ComputerController, type ComputerSpec, type NodeToHub, type OrgoConfig, type Screenshot } from "@wisp/core";
 import { id, now } from "./auth.ts";
 import { OrgoClient } from "./orgo.ts";
 import { relayVnc } from "./vnc-relay.ts";
@@ -16,6 +16,14 @@ const VIEW_UNLOCK_MS = 12 * 60 * 60_000;
 const AGENT_RECLAIM_MS = 30_000;
 /** The same thing done again within this long is one line in a computer's activity. */
 const LOG_COALESCE_MS = 60_000;
+/**
+ * How long a VM goes unused before it stops, freeing its memory. Its files, sign-ins and apps are
+ * kept, and it starts again when it's next needed. One fixed time, not a setting
+ * ($WISP_COMPUTER_IDLE_MS only shortens it for tests).
+ */
+export const IDLE_STOP_MS = Number(envVar("COMPUTER_IDLE_MS")) || 15 * 60_000;
+/** An agent waiting longer than this for its computer to come up hears "Starting the computer…" in chat. */
+const STARTING_NOTE_MS = 2000;
 
 export class ComputerError extends Error {
   constructor(
@@ -83,10 +91,13 @@ export class Computers {
   private activity = new Map<string, { agentId: string; text: string; at: string }>();
   private lastBroadcast = new Map<string, number>();
   private lastLog = new Map<string, { who: string; text: string; at: number }>();
+  /** when each computer was last used, and how many actions on it are under way, for stopping idle VMs */
+  private lastUse = new Map<string, number>();
+  private inFlight = new Map<string, number>();
   private sweeper: ReturnType<typeof setInterval>;
 
   constructor(private hub: Hub) {
-    this.sweeper = setInterval(() => this.sweep(), 30_000);
+    this.sweeper = setInterval(() => this.sweep(), Math.min(30_000, Math.max(1000, IDLE_STOP_MS / 4)));
     this.sweeper.unref();
   }
 
@@ -308,6 +319,71 @@ export class Computers {
       ctl.touched = Date.now();
     }
     const timeoutMs = opts.timeoutMs ?? (action.action === "start" ? 60 * 60_000 : action.action === "run" ? ((action.timeout ?? 120) + 30) * 1000 : transfer ? 10 * 60_000 : 120_000);
+    // thumbnails and status checks aren't use; everything else keeps it on (and starts it if it's off)
+    const use = !(by.kind === "user" && by.id === "system" && (action.action === "status" || action.action === "screenshot")) && action.action !== "stop" && action.action !== "destroy";
+    if (use) this.used(c.id, +1);
+    // an agent waiting on a VM that's off hears why, once it's been a moment
+    const note = by.kind === "agent" && use && c.kind === "vm" && this.hub.store.computer(c.id)?.status !== "ready" ? setTimeout(() => {
+      const run = this.hub.currentRun(by.id);
+      if (run && this.hub.store.computer(c.id)?.status !== "ready") this.hub.runStatus(run.id, "Starting the computer…");
+    }, STARTING_NOTE_MS) : null;
+    try {
+      return await this.perform(c, action, by, timeoutMs, transfer);
+    } finally {
+      if (note) clearTimeout(note);
+      if (use) this.used(c.id, -1);
+    }
+  }
+
+  /** Mark a computer used now; `delta` counts an action starting (+1) or ending (-1). */
+  private used(computerId: string, delta: number) {
+    this.lastUse.set(computerId, Date.now());
+    const n = (this.inFlight.get(computerId) ?? 0) + delta;
+    if (n > 0) this.inFlight.set(computerId, n);
+    else this.inFlight.delete(computerId);
+  }
+
+  /**
+   * Is something using it right now, so it mustn't stop: an action under way, an agent on it
+   * that's working, someone watching it live or in control, an open request for help, a live tunnel.
+   */
+  inUse(c: Computer): boolean {
+    if (this.inFlight.get(c.id)) return true;
+    if (this.viewers.get(c.id)?.size || this.control.has(c.id) || c.help) return true;
+    for (const t of this.tunnels.values()) if (t.computerId === c.id) return true;
+    return this.hub.store.agentsOnComputer(c.id).some((a) => !!this.hub.currentRun(a.id));
+  }
+
+  /** Stop VMs nobody has used for IDLE_STOP_MS. Returns the ones it stopped (for tests). */
+  stopIdle(at = Date.now()): string[] {
+    const stopped: string[] = [];
+    const rows = this.hub.store.db.prepare("SELECT id FROM computers WHERE kind = 'vm' AND status = 'ready'").all() as { id: string }[];
+    for (const { id: computerId } of rows) {
+      const c = this.hub.store.computer(computerId);
+      if (!c || !c.nodeId || !this.hub.isNodeOnline(c.nodeId)) continue;
+      // first seen (the hub just started): its idle time counts from now
+      if (!this.lastUse.has(c.id) || this.inUse(c)) {
+        this.lastUse.set(c.id, at);
+        continue;
+      }
+      if (at - this.lastUse.get(c.id)! < IDLE_STOP_MS) continue;
+      stopped.push(c.id);
+      this.lastUse.delete(c.id);
+      this.act(c, { action: "stop" }, { kind: "user", id: "system" }).then(
+        () => {
+          // a use that came in while it stopped has started it again
+          if (this.hub.store.computer(c.id)?.status !== "ready" || this.inFlight.get(c.id)) return;
+          this.hub.store.updateComputer(c.id, { status: "stopped", statusText: "Off. It starts when it's needed." });
+          this.changed(c.id);
+        },
+        () => {},
+      );
+      this.log(c, { kind: "user", id: "system" }, `Turned off after ${Math.max(1, Math.round(IDLE_STOP_MS / 60_000))} minutes unused`);
+    }
+    return stopped;
+  }
+
+  private async perform(c: Computer, action: ComputerAction, by: Actor, timeoutMs: number, transfer: boolean): Promise<unknown> {
     let result: unknown;
     // a login is put into the page through the VM's own browser, which only VMs on a device have
     if (action.action === "fill_login" && c.kind !== "vm") throw new ComputerError(`${c.name} can't fill logins: only VMs can`, 409);
@@ -377,6 +453,11 @@ export class Computers {
     // a screen with a code is asked every time, so a picture from while it was open isn't served once it's closed
     const f = this.codeKind(c) ? undefined : this.frames.get(c.id);
     if (f && Date.now() - f.at < maxAgeMs) return f;
+    // a VM that's off isn't started for a thumbnail: its last picture, or none
+    if (c.kind === "vm" && c.status !== "ready") {
+      if (f) return f;
+      throw new ComputerError(`${c.name} is off. It starts when it's needed.`, 409);
+    }
     let p = this.shooting.get(c.id);
     if (!p) {
       p = this.act(c, { action: "screenshot" }, { kind: "user", id: "system" }).then(() => this.frames.get(c.id)!);
@@ -473,6 +554,7 @@ export class Computers {
   }
 
   private sweep() {
+    this.stopIdle();
     for (const [computerId, ctl] of this.control) {
       const ws = this.hub.store.computer(computerId)?.workspaceId;
       const idle = ws ? this.idleMs(ws) : 10 * 60_000;

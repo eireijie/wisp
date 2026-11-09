@@ -589,7 +589,7 @@ export class Hub {
       case "computer_status": {
         const c = store.computer(msg.computerId);
         if (!c || c.nodeId !== conn.nodeId) return;
-        store.updateComputer(c.id, { status: msg.status, statusText: msg.text });
+        store.updateComputer(c.id, { status: msg.status, statusText: msg.text || (msg.status === "stopped" ? "Off. It starts when it's needed." : "") });
         this.computers.changed(c.id);
         return;
       }
@@ -1297,6 +1297,18 @@ export class Hub {
     }
     const running = this.store.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND status = 'running' LIMIT 2").all(agentId) as { id: string }[];
     return running.length === 1 ? this.store.run(running[0].id) : undefined;
+  }
+
+  /** A status line in a run's live reply that comes from the hub, not its device ("Starting the computer…"). */
+  runStatus(runId: string, text: string) {
+    const run = this.store.run(runId);
+    if (!run || run.status !== "running" || run.kind) return;
+    const event = { type: "status" as const, text };
+    const live = this.live.get(run.id) ?? { parts: [], text: "" };
+    collect(live, event);
+    this.live.set(run.id, live);
+    const ws = this.store.agent(run.agentId)?.workspaceId;
+    if (ws) this.broadcast(ws, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, ...this.whereRuns(run), event }, this.audience(run.channelId));
   }
 
   currentRun(agentId: string) {

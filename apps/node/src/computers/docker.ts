@@ -204,7 +204,8 @@ export function runArgs(spec: ComputerSpec, o: { name: string; volume: string; f
       .slice(0, 40) || "wisp";
   const args = ["run", "-d", "--name", o.name, "--label", `wisp.computer=${spec.id}`, "--shm-size", "1g"];
   // Apple's container has no hostname or restart policy; Wisp starts a stopped VM when it's next used
-  if (kind !== "apple") args.push("--hostname", hostname, "--restart", "unless-stopped");
+  // stopped when idle and started when next needed, so it never comes back on its own (after a reboot, say)
+  if (kind !== "apple") args.push("--hostname", hostname, "--restart", "no");
   // the hub, when it runs on this same device (Docker Engine on Linux needs to be told the name)
   if (kind === "docker") args.push("--add-host", "host.docker.internal:host-gateway");
   // no published ports: VNC listens inside the container and the device reaches it with exec
@@ -262,6 +263,8 @@ export class DockerVm implements Driver {
   readonly label = "Linux VM";
   private desktop: X11Driver;
   private starting: Promise<void> | null = null;
+  /** an idle stop under way: a use that arrives meanwhile waits for it, then starts the VM again */
+  private stopping: Promise<void> | null = null;
   name: string;
   user = "wisp";
   home = VM_HOME;
@@ -275,7 +278,7 @@ export class DockerVm implements Driver {
     nodeDir: string,
     readonly engine: Engine,
     /** how starting it goes: each step, then up or not, whatever asked for it */
-    private report: (status: "starting" | "ready" | "error", text: string) => void = () => {},
+    private report: (status: "starting" | "ready" | "stopped" | "error", text: string) => void = () => {},
   ) {
     const safe = spec.id.replace(/[^a-zA-Z0-9_.-]/g, "-");
     this.name = `wisp-${safe}`;
@@ -324,10 +327,18 @@ export class DockerVm implements Driver {
     }
   }
 
-  /** Make sure the VM exists and is running, getting the image the first time. */
+  /** Make sure the VM exists and is running, getting the image the first time. A stop under way finishes first. */
   ready(): Promise<void> {
-    this.starting ??= this.boot().finally(() => (this.starting = null));
+    this.starting ??= (async () => {
+      await this.stopping?.catch(() => {});
+      await this.boot();
+    })().finally(() => (this.starting = null));
     return this.starting;
+  }
+
+  /** Where it lives (its container's name and user), known without starting it. */
+  identityReady(): Promise<void> {
+    return this.resolveIdentity();
   }
 
   private async boot() {
@@ -399,8 +410,20 @@ export class DockerVm implements Driver {
     await this.ready();
   }
 
-  async stop() {
-    if (await this.running()) await must(this.bin, this.engine.kind === "apple" ? ["stop", "--time", "10", this.name] : ["stop", "-t", "10", this.name], { timeoutMs: 60_000 });
+  /**
+   * Stop it, keeping its files, sign-ins and apps. A start under way finishes first, and a use
+   * that arrives during the stop waits for it and then starts the VM again.
+   */
+  stop(): Promise<void> {
+    this.stopping ??= (async () => {
+      await this.starting?.catch(() => {});
+      if (!(await this.running())) return;
+      // made before VMs stopped when idle: don't let the engine bring it back on its own
+      if (this.engine.kind !== "apple") await exec(this.bin, ["update", "--restart", "no", this.name], { timeoutMs: 15_000 }).catch(() => {});
+      await must(this.bin, this.engine.kind === "apple" ? ["stop", "--time", "10", this.name] : ["stop", "-t", "10", this.name], { timeoutMs: 60_000 });
+      this.report("stopped", "");
+    })().finally(() => (this.stopping = null));
+    return this.stopping;
   }
 
   async destroy() {

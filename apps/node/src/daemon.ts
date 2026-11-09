@@ -16,7 +16,7 @@ import { detectRemoteApps } from "./remote-apps.ts";
 import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
 import { HarnessLogins } from "./harness-login.ts";
 import { ModelLogins } from "./model-login.ts";
-import { type DockerVm } from "./computers/docker.ts";
+import { recipeTag, type DockerVm } from "./computers/docker.ts";
 import { mcpBundle } from "./vm-tools.ts";
 import { NO_NODE, findNpmDir, withDir } from "./npm.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
@@ -26,6 +26,7 @@ import { bringBack, mergeBranch, prepareCheckout, prepareClone } from "./git.ts"
 /** How often a device looks again at whether its harnesses are signed in (someone may do it in a terminal). */
 const SIGN_IN_CHECK_MS = 20_000;
 const MCP_BIN = fileURLToPath(new URL("../../../bin/wisp-mcp.mjs", import.meta.url));
+const BROWSER_BIN = fileURLToPath(new URL("../../../bin/wisp-browser.mjs", import.meta.url));
 
 export interface NodeConfig {
   hub: string;
@@ -539,12 +540,13 @@ export class NodeDaemon {
     const adapter = this.registry[agent.harness];
     if (!adapter) return this.send({ type: "run_failed", runId: run.runId, error: `no headless adapter for ${agent.harness} yet; connect it with wisp-mcp instead` });
 
-    // its VM, when it has one here: it runs inside it, or at least gets its browser
+    // its VM, when it has one here: it runs inside it (started now), or gets its browser (the VM starts on first use)
     let vm: DockerVm | null = null;
     if (run.computer?.kind === "vm") {
       try {
         vm = await this.computers.vm(run.computer);
-        await vm?.ready();
+        if (run.inComputer) await vm?.ready();
+        else await vm?.identityReady();
       } catch (err) {
         if (run.inComputer) return this.send({ type: "run_failed", runId: run.runId, error: `couldn't start ${run.computer.name}: ${(err as Error).message}` });
         vm = null;
@@ -617,7 +619,7 @@ export class NodeDaemon {
       // the VM's Chrome as page-element tools, run inside the VM either way
       if (vm) {
         const browserBin = vm.user === "warren" ? "warren-browser-mcp" : "wisp-browser-mcp";
-        browser = inside ? { command: browserBin, args: [], env: {} } : { command: vm.engine.bin, args: ["exec", "-i", "-u", vm.user, vm.name, browserBin], env: {} };
+        browser = inside ? { command: browserBin, args: [], env: {} } : await this.lazyBrowser(agent.id, run.runId, vm, browserBin);
       }
     } catch (err) {
       this.aborts.delete(run.runId);
@@ -1045,6 +1047,26 @@ export class NodeDaemon {
       this.vmTools.set(vm.name, bundle.hash);
     }
     return { command: "node", args: [file], env: { WISP_URL: await vm.hubUrl(this.cfg.hub), WISP_TOKEN: token, WISP_RUN: runId } };
+  }
+
+  /**
+   * The VM's browser tools for a harness outside it, standing in until first used so a chat reply
+   * doesn't start the computer (see browser-proxy.ts). Without a token of its own (an older hub) it
+   * runs them in the VM straight away.
+   */
+  private async lazyBrowser(agentId: string, runId: string, vm: DockerVm, browserBin: string): Promise<McpServerSpec> {
+    const direct = [vm.engine.bin, "exec", "-i", "-u", vm.user, vm.name, browserBin];
+    const token = await this.harnessToken(agentId);
+    if (!token) {
+      await vm.ready();
+      return { command: direct[0], args: direct.slice(1), env: {} };
+    }
+    const asNode: Record<string, string> = process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {};
+    return {
+      command: process.execPath,
+      args: [BROWSER_BIN],
+      env: { ...asNode, WISP_URL: this.cfg.hub, WISP_TOKEN: token, WISP_RUN: runId, WISP_BROWSER_CMD: JSON.stringify(direct), WISP_BROWSER_TOOLS: path.join(this.cfg.dir, "computers", `browser-tools-${recipeTag()}.json`) },
+    };
   }
 
   private async harnessToken(agentId: string): Promise<string | null> {
