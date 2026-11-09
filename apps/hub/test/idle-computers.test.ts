@@ -27,7 +27,7 @@ function fakeVm(spec: ComputerSpec): Driver {
   vms.set(spec.id, st);
   const up = async () => {
     if (st.on) return;
-    report(spec.id, "starting", "Starting the VM…");
+    report(spec.id, "starting", "Starting the computer…");
     await new Promise((r) => setTimeout(r, bootMs));
     st.on = true;
     st.starts++;
