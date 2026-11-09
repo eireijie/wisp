@@ -3,6 +3,7 @@ import { Download, Loader2 } from "lucide-react";
 import { fileBlob } from "../api.ts";
 import { Modal } from "./ui.tsx";
 import { fileKind } from "./fileKind.ts";
+import { renderMarkdown } from "../markdown.ts";
 
 /** a text preview shows this much; the rest is in the download */
 export const TEXT_PREVIEW_BYTES = 200_000;
@@ -77,6 +78,11 @@ export function FilePreview({ id, name, onClose }: { id: string; name: string; o
           </div>
         ) : file.kind !== "text" ? (
           file.kind === "image" ? <img src={file.url} alt={name} className="block mx-auto max-h-[65vh] max-w-full object-contain" /> : <iframe src={file.url} title={name} className="block w-full h-[65vh] bg-white" />
+        ) : /\.(md|markdown)$/i.test(name) ? (
+          <div className="max-h-[65vh] overflow-auto p-4">
+            <div className="prose-w text-[14.5px]" dangerouslySetInnerHTML={{ __html: renderMarkdown(file.text, { stripFrontmatter: true }) }} />
+            {file.cut && <p className="pt-3 text-sm text-muted">Showing the start. Download it for the rest.</p>}
+          </div>
         ) : (
           <pre className="max-h-[65vh] overflow-auto p-4 text-[13px] leading-relaxed font-mono whitespace-pre-wrap break-words">
             {file.text}

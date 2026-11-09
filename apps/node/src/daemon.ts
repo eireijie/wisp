@@ -287,7 +287,7 @@ export class NodeDaemon {
     if (!cred || !support || (!vm && process.platform === "win32")) {
       if (vm && (await vm.signedIn(harness).catch(() => null)) === false) {
         // the agents here run it on a device, signed in there; that sign-in stays on the device
-        if (harnessOn) throw new Error(`The agents on ${where} run ${label} on ${harnessOn}, signed in there. Open ${label} on ${harnessOn}, or run \`${binary} login\` in a shell here to sign ${where} in too.`);
+        if (harnessOn) throw new Error(`The agents on ${where} run ${label} on ${harnessOn}, signed in there. Open ${label} on ${harnessOn}, or open a shell here and run \`${binary} login\`.`);
         throw new Error(`${label} isn't signed in on ${where}. Connect a model for it in Settings → Models, or sign in to ${label} once from an agent's page → Computer.`);
       }
       return { launch: binary };
