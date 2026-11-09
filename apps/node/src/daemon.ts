@@ -231,7 +231,7 @@ export class NodeDaemon {
       const vm = computer.kind === "vm" ? await this.computers.vm(computer) : null;
       if (computer.kind === "vm" && !vm) throw new Error("this VM isn't on this device");
       await vm?.ready();
-      const pane = harness ? await this.terminalLaunch(harness.id, harness.binary, msg.credential, vm, computer.name) : null;
+      const pane = harness ? await this.terminalLaunch(harness.id, harness.binary, msg.credential, vm, computer.name, msg.harnessOn) : null;
       const cmd = vm ? vmShell({ bin: vm.engine.bin, name: vm.name, user: vm.user, home: vm.home }, session, pane?.launch) : deviceShell(session, { launch: pane?.launch });
       return { ...cmd, ended: pane?.ended };
     };
@@ -265,13 +265,16 @@ export class NodeDaemon {
    * own sign-in there. A VM's harness with neither is said in plain words instead of opening its own
    * sign-in prompt.
    */
-  private async terminalLaunch(harness: string, binary: string, cred: RunCredential | undefined, vm: DockerVm | null, where: string): Promise<{ launch: string; ended?: () => void }> {
+  private async terminalLaunch(harness: string, binary: string, cred: RunCredential | undefined, vm: DockerVm | null, where: string, harnessOn?: string): Promise<{ launch: string; ended?: () => void }> {
     const label = harnessLabel(harness);
     const support = cred ? credentialSupport(harness, cred.provider, cred.kind) : null;
     // PowerShell has no `. file` for the variables: Windows CLIs use their own sign-in
     if (!cred || !support || (!vm && process.platform === "win32")) {
-      if (vm && (await vm.signedIn(harness).catch(() => null)) === false)
+      if (vm && (await vm.signedIn(harness).catch(() => null)) === false) {
+        // the agents here run it on a device, signed in there; that sign-in stays on the device
+        if (harnessOn) throw new Error(`The agents on ${where} run ${label} on ${harnessOn}, signed in there. Open ${label} on ${harnessOn}, or run \`${binary} login\` in a shell here to sign ${where} in too.`);
         throw new Error(`${label} isn't signed in on ${where}. Connect a model for it in Settings → Models, or sign in to ${label} once from an agent's page → Computer.`);
+      }
       return { launch: binary };
     }
     const id = safeId(cred.connectionId);
