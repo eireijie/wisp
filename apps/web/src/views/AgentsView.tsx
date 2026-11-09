@@ -120,11 +120,6 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
             })}
             {agents.length > 0 && shown.length === 0 && <p className="py-6 text-sm text-muted text-center">No agents match.</p>}
             {canEdit && (
-              <button onClick={() => setCreating(true)} className="w-full rounded-3xl border border-dashed border-input p-4 min-h-[88px] flex items-center justify-center gap-2.5 text-muted hover:text-ink hover:bg-hover text-base">
-                <Plus size={20} strokeWidth={1.8} /> New agent
-              </button>
-            )}
-            {canEdit && (
               <button onClick={() => setBringing(true)} className="md:hidden w-full rounded-3xl bg-card p-4 min-h-14 text-left">
                 <span className="block text-body font-medium">Bring an agent in</span>
                 <span className="block text-sm text-muted">Import one, or invite an outside agent</span>

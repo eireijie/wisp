@@ -11,8 +11,10 @@ export function MoreOptions({ children, about, title = "More options", className
     <div className={className}>
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="inline-flex items-center gap-1 min-h-8 text-xs text-muted hover:text-ink">
         <ChevronRight size={14} className={open ? "rotate-90 transition-transform" : "transition-transform"} aria-hidden />
-        {title}
-        {about && <span className="text-faint">: {about}</span>}
+        <span>
+          {title}
+          {about && <span className="text-faint">: {about}</span>}
+        </span>
       </button>
       {open && <div className="mt-2">{children}</div>}
     </div>
