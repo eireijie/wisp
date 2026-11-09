@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest, type VmConfig } from "@wisp/core";
+import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, signInProblem, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest, type VmConfig } from "@wisp/core";
 import { HARNESS_SPECS, HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
 import { WispClient, WispError } from "@wisp/sdk";
 import { runUpdate, version } from "@wisp/update";
@@ -109,6 +109,8 @@ export class NodeDaemon {
   /** each harness's logins here, and which agent uses which */
   private accounts: HarnessAccounts;
   /** whether each harness is signed in, where it runs ("<computer id or nothing>\\n<harness>") */
+  /** Harnesses in a VM ("computerId\nharness") whose last run there was turned away for its sign-in. */
+  private vmSignInFailed = new Set<string>();
   private signIns = new Map<string, { accounts: Record<string, boolean | null>; agentAccounts?: Record<string, string> }>();
   private vmSpecs = new Map<string, ComputerSpec>();
   private signInTimer: ReturnType<typeof setInterval> | null = null;
@@ -396,6 +398,8 @@ export class NodeDaemon {
         (result) => {
           this.send({ type: "result", requestId: msg.requestId, ok: true, result });
           if (msg.action.action === "start") this.send({ type: "computer_status", computerId: msg.computer.id, status: "ready", text: "" });
+          // someone is signing a harness in on the VM's screen: stop holding its last failure against it
+          if (msg.action.action === "signin") this.vmSignInFailed.delete(`${msg.computer.id}\n${msg.action.harness}`);
           // a VM that just came up: tell the hub which harnesses (and models) it has
           if (msg.action.action === "start" && msg.computer.kind === "vm") {
             void this.sendVmCatalog(msg.computer);
@@ -728,11 +732,14 @@ export class NodeDaemon {
       // commits made inside the VM go to the device's copy of the repo, for reviews and merges
       if (inside && run.workspace) await bringBack(this.cfg.dir, cwd, run.workspace).catch((err) => this.log(`couldn't bring ${run.workspace!.branch} back from ${run.computer!.name}: ${(err as Error).message}`));
       await reportRenewal();
+      if (!credential) this.signInWorked(agent, inside ? run.computer!.id : null);
       this.send({ type: "run_done", runId: run.runId, finalText: result.finalText });
       this.log(`@${agent.handle} finished ${run.runId}`);
     } catch (err) {
       const message = abort.signal.aborted ? (abort.signal.reason === "paused" ? `stopped: ${this.cfg.name} was paused` : "cancelled") : (err as Error).message;
       await reportRenewal();
+      // turned away for its own sign-in (not a Models connection's): show it as signed out from now on
+      if (!credential && !abort.signal.aborted && signInProblem(agent.harness, message)) this.signInFailed(agent, inside ? run.computer!.id : null);
       this.send({ type: "run_failed", runId: run.runId, error: message });
       this.log(`@${agent.handle} failed ${run.runId}: ${message}`);
     } finally {
@@ -857,7 +864,7 @@ export class NodeDaemon {
     if (action.op === "login_status") {
       const status = this.logins.status(action.loginId);
       if (status.status === "done") {
-        a.forgetChecks();
+        a.forgetChecks(harness);
         void this.refreshSignIns();
       }
       return status;
@@ -945,6 +952,7 @@ export class NodeDaemon {
     this.vmLists.delete(computerId);
     this.vmSpecs.delete(computerId);
     for (const key of [...this.signIns.keys()]) if (key.startsWith(`${computerId}\n`)) this.signIns.delete(key);
+    for (const key of [...this.vmSignInFailed]) if (key.startsWith(`${computerId}\n`)) this.vmSignInFailed.delete(key);
     for (const key of [...this.runCommands.keys()]) if (key.startsWith(`${computerId}\n`)) this.runCommands.delete(key);
   }
 
@@ -969,6 +977,23 @@ export class NodeDaemon {
     return JSON.stringify(list.map((c) => this.signIns.get(`\n${c.harness}`))) !== before;
   }
 
+  /**
+   * A run's harness said its sign-in expired or was revoked. Its status command can still say it's
+   * signed in (Claude Code does, for an OAuth session it can't refresh), so remember the failure and
+   * tell the hub now, so the agent shows "Needs sign-in" before anyone asks it again.
+   */
+  private signInFailed(agent: Pick<Agent, "id" | "harness">, computerId: string | null) {
+    if (computerId) this.vmSignInFailed.add(`${computerId}\n${agent.harness}`);
+    else this.accounts.markSignedOut(agent.harness, this.accounts.accountOf(agent.id, agent.harness));
+    void this.refreshSignIns().catch(() => {});
+  }
+
+  /** A run worked: forget an earlier sign-in failure there. */
+  private signInWorked(agent: Pick<Agent, "id" | "harness">, computerId: string | null) {
+    const changed = computerId ? this.vmSignInFailed.delete(`${computerId}\n${agent.harness}`) : this.accounts.markWorked(agent.harness, this.accounts.accountOf(agent.id, agent.harness));
+    if (changed) void this.refreshSignIns().catch(() => {});
+  }
+
   /** Look again (someone signed in or out, here or inside a VM), and tell the hub what changed. */
   private async refreshSignIns() {
     if (this.stopped) return;
@@ -984,7 +1009,7 @@ export class NodeDaemon {
 
   private async readVmSignIns(id: string, vm: DockerVm, list: HarnessCatalog[]): Promise<boolean> {
     const before = JSON.stringify(list.map((c) => this.signIns.get(`${id}\n${c.harness}`)));
-    await Promise.all(list.map(async (c) => this.signIns.set(`${id}\n${c.harness}`, { accounts: { default: await vm.signedIn(c.harness).catch(() => null) } })));
+    await Promise.all(list.map(async (c) => this.signIns.set(`${id}\n${c.harness}`, { accounts: { default: this.vmSignInFailed.has(`${id}\n${c.harness}`) ? false : await vm.signedIn(c.harness).catch(() => null) } })));
     return JSON.stringify(list.map((c) => this.signIns.get(`${id}\n${c.harness}`))) !== before;
   }
 

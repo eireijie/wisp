@@ -57,6 +57,45 @@ describe("asking a harness whether it's signed in", () => {
   });
 });
 
+describe("a sign-in that expired", () => {
+  const expired = (refreshToken?: string) => {
+    fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(home, ".claude/.credentials.json"), JSON.stringify({ claudeAiOauth: { accessToken: "a", expiresAt: Date.now() - 60_000, ...(refreshToken ? { refreshToken } : {}) } }));
+  };
+  it("counts a Claude Code login that expired with nothing to renew it as signed out", () => {
+    expired();
+    expect(accounts().list("claude-code")[0].signedIn).toBe(false);
+  });
+  it("still counts an expired one that can be renewed as signed in (Claude Code renews it itself)", () => {
+    expired("r");
+    expect(accounts().list("claude-code")[0].signedIn).toBe(true);
+  });
+  it("shows signed out after a run was turned away, though the harness's status still says signed in", async () => {
+    const a = accounts();
+    const yes = vi.fn(async () => true);
+    expect((await a.listChecked("claude-code", undefined, yes))[0].signedIn).toBe(true);
+    a.markSignedOut("claude-code", "default");
+    // a new HarnessAccounts too: the device restarting doesn't forget it
+    expect((await accounts().listChecked("claude-code", undefined, yes))[0].signedIn).toBe(false);
+    expect(a.markWorked("claude-code", "default")).toBe(true);
+    expect(a.markWorked("claude-code", "default")).toBe(false);
+    a.forgetChecks();
+    expect((await a.listChecked("claude-code", undefined, yes))[0].signedIn).toBe(true);
+  });
+  it("asks again once someone signs in, through Wisp or by changing its login files", async () => {
+    expired("r");
+    const a = accounts();
+    a.markSignedOut("claude-code", "default");
+    expect((await a.listChecked("claude-code"))[0].signedIn).toBe(false);
+    // signed in again in a terminal: the login file changed
+    fs.utimesSync(path.join(home, ".claude/.credentials.json"), new Date(), new Date(Date.now() + 5000));
+    expect((await a.listChecked("claude-code"))[0].signedIn).toBe(true);
+    a.markSignedOut("claude-code", "default");
+    a.forgetChecks("claude-code");
+    expect((await a.listChecked("claude-code"))[0].signedIn).toBe(true);
+  });
+});
+
 describe("what a signed-out harness shows", () => {
   it("never reports Claude Code's <synthetic> as a model (W-18)", () => {
     const u = claudeUsage({ message: { model: "<synthetic>", usage: { input_tokens: 0, output_tokens: 0 } } }, null);
