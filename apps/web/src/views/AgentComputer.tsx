@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, Check, Cloud, FileText, KeyRound, Laptop, Loader2, Lock, Monitor, Play, Plus, Trash2, Video } from "lucide-react";
+import { CalendarClock, Check, Cloud, Eye, FileText, KeyRound, Laptop, Loader2, Lock, Monitor, Play, Plus, Power, Trash2, Video } from "lucide-react";
 import { describeCron, harnessInfo, harnessLabel, nextRun, runsInVm, type Agent, type Routine } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { agentReadiness, computerKindLabel, useDevices, type DeviceInfo } from "../devices.ts";
-import { AddComputer, ComputerMini } from "./ComputersView.tsx";
+import { AddComputer, ComputerMini, useComputerState } from "./ComputersView.tsx";
+import { ScreenThumb } from "../components/Screen.tsx";
+import { Toggle } from "./settings/parts.tsx";
+import { useComputerMode } from "../computerMode.ts";
 import { Intro } from "./SettingsParts.tsx";
 import { Button, Field, Input, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 import { MoreOptions } from "../components/MoreOptions.tsx";
@@ -18,9 +21,231 @@ export function runsOnDevice(harness: string) {
 // --- Computer -------------------------------------------------------------------------------------
 
 /**
- * Which computer the agent sees and uses. Agents aren't headless unless someone picks that here.
+ * Which computer the agent sees and uses. Simple (the default): the shared computer or one of its
+ * own, and which of your computers it may use. Advanced (Settings → Devices): every choice there is.
  */
 export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInfo[] }) {
+  const mode = useComputerMode();
+  if (!mode.loaded) return null;
+  return mode.advanced ? (
+    <div className="space-y-8 max-w-3xl">
+      <AdvancedComputerPanel agent={agent} nodes={nodes} />
+      <UseMyComputers agent={agent} nodes={nodes} />
+    </div>
+  ) : (
+    <SimpleComputerPanel agent={agent} nodes={nodes} sharedId={mode.sharedComputerId} />
+  );
+}
+
+/** Simple: what its computer is doing, where it works (shared or its own), and your computers it may use. */
+function SimpleComputerPanel({ agent, nodes, sharedId }: { agent: Agent; nodes: DeviceInfo[]; sharedId: string | null }) {
+  const computers = useStore((s) => s.computers);
+  const refreshAgents = useStore((s) => s.refreshAgents);
+  const isOwner = useStore((s) => s.me?.role === "owner");
+  const [busy, setBusy] = useState<"shared" | "own" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const current = computers.find((c) => c.id === agent.computerId);
+  const onShared = !!current && (current.id === sharedId || !!(current.config as { shared?: boolean }).shared);
+
+  const move = async (to: "shared" | "own") => {
+    setBusy(to);
+    setError(null);
+    try {
+      let target: ComputerInfo;
+      if (to === "shared") target = await api<ComputerInfo>("POST", "/api/computers/shared");
+      else {
+        // its own: one it already has from before, else a new one beside the shared computer
+        const nodeId = current?.nodeId ?? agent.nodeId;
+        const mine = computers.find((c) => c.kind === "vm" && c.id !== sharedId && !(c.config as { shared?: boolean }).shared && c.agents.length === 0 && c.nodeId === nodeId && c.name === `${agent.name}'s computer`);
+        target = mine ?? (await api<ComputerInfo>("POST", "/api/computers", { kind: "vm", nodeId, name: `${agent.name}'s computer` }));
+      }
+      await api("PATCH", `/api/agents/${agent.id}`, { computerId: target.id });
+      await Promise.all([refreshAgents(), useStore.getState().refreshComputers()]);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const off = current?.kind === "vm" && current.status === "stopped";
+  return (
+    <div className="max-w-4xl flex flex-wrap gap-8 items-start">
+      <section className="w-full sm:w-96 space-y-2.5">
+        {current ? (
+          <>
+            {off ? (
+              <div className="aspect-[16/10] rounded-xl bg-neutral-800 grid place-items-center text-white/85">
+                <span className="flex flex-col items-center gap-2">
+                  <Power size={24} strokeWidth={1.6} />
+                  <span className="text-sm font-semibold">Off</span>
+                  <span className="text-xs text-white/60">Starts when {agent.name} needs it</span>
+                </span>
+              </div>
+            ) : (
+              <ScreenThumb computer={current} refreshMs={3000} />
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="primary" onClick={() => go({ view: "computers", computerId: current.id })}>
+                <Eye size={15} /> {off ? "Turn on and watch" : "Watch"}
+              </Button>
+              <Button onClick={() => go({ view: "computers", computerId: current.id, teach: agent.id })}>
+                <Video size={15} /> Teach a task
+              </Button>
+            </div>
+            <p className="text-xs text-muted">
+              {off ? `${current.activity ? `Last used ${timeAgo(current.activity.at)}. ` : ""}Files, sign-ins and apps are kept.` : <StateLabel computer={current} />}
+            </p>
+          </>
+        ) : (
+          <p className="rounded-xl border border-line px-4 py-3 text-sm text-muted">
+            {agent.settings.headless ? `@${agent.handle} works without a computer: no websites or apps.` : `@${agent.handle} gets a computer as soon as one of your devices can run it.`}
+          </p>
+        )}
+      </section>
+
+      <div className="flex-1 min-w-72 space-y-6">
+        {(current?.kind === "vm" || !current) && (
+          <section className="space-y-2.5" role="radiogroup" aria-label="Works on">
+            <h3 className="text-sm font-semibold">Works on</h3>
+            {isOwner && (
+              <Choice checked={onShared} busy={busy === "shared"} disabled={!!busy} onPick={() => move("shared")} title="The shared computer" body="Uses the same sign-ins and files as your other agents." />
+            )}
+            <Choice checked={!!current && !onShared} busy={busy === "own"} disabled={!!busy || (!current && !agent.nodeId)} onPick={() => move("own")} title="Its own computer" body="Its own sign-ins and files, kept apart. Uses more memory while on." />
+            {error && <p className="text-sm text-bad">{error}</p>}
+          </section>
+        )}
+        {current?.kind === "device" && (
+          <p className="text-sm text-muted">
+            @{agent.handle} works on {current.name}, {nodes.find((n) => n.id === current.nodeId)?.mine ? "your" : "a person's"} own screen.
+          </p>
+        )}
+        <UseMyComputers agent={agent} nodes={nodes} />
+      </div>
+    </div>
+  );
+}
+
+/** A radio row: one of the places an agent can work. */
+function Choice({ checked, title, body, onPick, busy, disabled }: { checked: boolean; title: string; body: string; onPick: () => void; busy?: boolean; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={checked}
+      disabled={disabled && !checked}
+      onClick={() => !checked && onPick()}
+      className={cx("w-full text-left rounded-xl p-3 flex gap-3 items-start transition-colors", checked ? "border-[1.5px] border-ink" : "border border-line hover:bg-hover", "disabled:opacity-50")}
+    >
+      <span className={cx("mt-0.5 size-4 shrink-0 rounded-full border grid place-items-center", checked ? "border-ink" : "border-control-line")}>
+        {busy ? <Loader2 size={11} className="animate-spin" /> : checked && <span className="size-2 rounded-full bg-ink" />}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">{title}</span>
+        <span className="block text-xs text-muted mt-0.5">{body}</span>
+      </span>
+    </button>
+  );
+}
+
+function StateLabel({ computer }: { computer: ComputerInfo }) {
+  return <>{useComputerState(computer).label}</>;
+}
+
+/**
+ * Use my computers: which of your own computers this agent may use, when a task needs your apps or
+ * sign-ins there. Off, Ask first (a card each task) or Allowed (it tells you after). Only your devices.
+ */
+function UseMyComputers({ agent, nodes }: { agent: Agent; nodes: DeviceInfo[] }) {
+  const refreshAgents = useStore((s) => s.refreshAgents);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const mine = nodes.filter((n) => n.mine);
+  const allowed = agent.settings.useDevices ?? {};
+  const on = mine.some((n) => allowed[n.id]);
+  const [open, setOpen] = useState(on);
+  useEffect(() => setOpen(on), [on]);
+  if (!mine.length) return null;
+  const screenOn = (n: DeviceInfo) => !!n.capabilities?.screen.ok && !n.capabilities.screen.off;
+
+  const save = async (next: Record<string, "ask" | "tell">) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api("PATCH", `/api/agents/${agent.id}`, { settings: { useDevices: next } });
+      await refreshAgents();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const set = (nodeId: string, how: "off" | "ask" | "tell") => {
+    const next = { ...allowed };
+    if (how === "off") delete next[nodeId];
+    else next[nodeId] = how;
+    void save(next);
+  };
+  const toggle = (value: boolean) => {
+    setOpen(value);
+    if (!value && on) {
+      const next = { ...allowed };
+      for (const n of mine) delete next[n.id];
+      void save(next);
+    }
+  };
+
+  return (
+    <section className="space-y-2.5 border-t border-line pt-5">
+      <div className="flex items-center gap-3">
+        <h3 className="text-sm font-semibold">Use my computers</h3>
+        <span className="ml-auto">
+          <Toggle label="Use my computers" on={open} disabled={busy} onChange={toggle} />
+        </span>
+      </div>
+      <p className="text-xs text-muted">Only when a task needs your own apps or sign-ins.</p>
+      {open && (
+        <>
+          {mine.map((n) =>
+            screenOn(n) ? (
+              <div key={n.id} className="flex items-center gap-3 rounded-xl border border-line px-3 py-2.5">
+                <Laptop size={17} className="shrink-0" />
+                <span className="text-sm font-medium truncate">{n.name}</span>
+                <div role="radiogroup" aria-label={n.name} className="ml-auto flex rounded-lg bg-chip p-0.5">
+                  {(
+                    [
+                      ["off", "Off"],
+                      ["ask", "Ask first"],
+                      ["tell", "Allowed"],
+                    ] as const
+                  ).map(([how, label]) => {
+                    const picked = (allowed[n.id] ?? "off") === how;
+                    return (
+                      <button key={how} role="radio" aria-checked={picked} disabled={busy} onClick={() => !picked && set(n.id, how)} className={cx("h-7 px-2.5 rounded-md text-xs", picked ? "bg-panel shadow-sm font-semibold" : "text-muted hover:text-ink")}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div key={n.id} className="flex items-center gap-3 rounded-xl border border-dashed border-line px-3 py-2.5 text-muted">
+                <Laptop size={17} className="shrink-0" />
+                <span className="text-sm truncate">{n.name}</span>
+                <span className="ml-auto text-xs">{n.capabilities?.screen.ok === false && !n.capabilities.screen.off ? "No screen to use" : "Screen is off at that computer"}</span>
+              </div>
+            ),
+          )}
+          {Object.values(allowed).includes("tell") && <p className="text-xs text-muted pl-0.5">Allowed: it tells you after, in chat.</p>}
+        </>
+      )}
+      {error && <p className="text-sm text-bad">{error}</p>}
+    </section>
+  );
+}
+
+/** Advanced: every choice of computer, and where its AI tool runs. */
+function AdvancedComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInfo[] }) {
   const computers = useStore((s) => s.computers);
   const agents = useStore((s) => s.agents);
   const refreshAgents = useStore((s) => s.refreshAgents);

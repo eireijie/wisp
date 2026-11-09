@@ -532,25 +532,16 @@ function applyReactions(s: State, messageId: string, reactions: Reaction[]): Par
   };
 }
 
-function applyEvent(r: LiveRun, ev: AgentEvent): LiveRun {
+/**
+ * A live run as its events arrive. Only the agent's own words go into the reply text; tool calls
+ * move the working line ("Searching memory") and the steps, and tool output, statuses, notices,
+ * errors and usage never land in the bubble (the posted message carries what's worth keeping).
+ * Exported for tests.
+ */
+export function applyEvent(r: LiveRun, ev: AgentEvent): LiveRun {
   if (ev.type === "text") return { ...r, text: r.text + ev.text };
   if (ev.type === "tool_call") return { ...r, tools: [...r.tools, ev.name], last: { name: ev.name, input: ev.input }, usedComputer: r.usedComputer || /computer_/.test(ev.name) };
-  // "started" only opens the live run (the working bubble shows it); it isn't a line of the reply
-  if (ev.type === "status" && ev.text === "started") return r;
-  // The existing streaming view renders text; give non-text events their own lines.
-  let text: string;
-  if (ev.type === "status" || ev.type === "notice") text = ev.text;
-  else if (ev.type === "error") text = `Error: ${ev.message}`;
-  else if (ev.type === "tool_result") {
-    // tool output can be a whole file; the live view only needs a glimpse
-    const out = typeof ev.output === "string" ? ev.output : (JSON.stringify(ev.output) ?? "");
-    text = `${ev.name}: ${out.length > 300 ? out.slice(0, 300) + "…" : out}`;
-  }
-  else if (ev.type === "usage") {
-    const { type: _, ...usage } = ev;
-    text = `Usage: ${Object.entries(usage).map(([key, value]) => `${key}: ${value}`).join(", ")}`;
-  } else return r;
-  return { ...r, text: r.text + (r.text && !r.text.endsWith("\n") ? "\n" : "") + text + "\n" };
+  return r;
 }
 
 function dedupe(list: Message[]): Message[] {
@@ -600,9 +591,8 @@ export function useChatsUnread(): number {
   return useStore((s) => s.channels.reduce((n, c) => n + (c.joined || c.kind === "dm" ? c.unread || 0 : 0), 0));
 }
 
-/** The Inbox badge: everything waiting on you plus unread messages in your channels and DMs. */
+/** The Inbox badge: what's waiting on you, the same count as "Needs you" on the page (unread replies have the Chats badge). */
 export function useInboxCount(): number {
   const waiting = useWaitingOnYou();
-  const unread = useChatsUnread();
-  return waiting.approvals.length + waiting.help.length + unread;
+  return waiting.approvals.length + waiting.help.length;
 }

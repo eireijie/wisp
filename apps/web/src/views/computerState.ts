@@ -15,7 +15,7 @@ export function computerState(c: ComputerInfo, meId: string | undefined, agents:
   const recent = c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000;
   const busy = agents.some((a) => c.agents.includes(a.id) && a.status === "busy");
   if (recent || (busy && c.activity)) return { label: "Working", tone: "info", working: true };
-  if (c.status === "stopped") return { label: "Stopped", tone: "neutral", working: false };
+  if (c.status === "stopped") return { label: "Off", tone: "neutral", working: false };
   return { label: "Ready", tone: "ok", working: false };
 }
 

@@ -13,6 +13,8 @@ import { patchAgent, prettyModel, tokens, useAgentContext, type AgentContext } f
 import { ModelLine, RunPanel } from "../components/RunPanel.tsx";
 import { DiscussionCard } from "../components/Discussion.tsx";
 import { ApprovalCard, ChangeCard, ChatCard, ComputerPart, RoutineChip } from "../components/AgentCards.tsx";
+import { downloadFile, FilePreview } from "../components/FilePreview.tsx";
+import { fileKind } from "../components/fileKind.ts";
 import { AgentAvatar, Menu, Modal, Pill, Popover, StatusDot, UserAvatar, clockTime, cx, harnessLabel } from "../components/ui.tsx";
 import { AgentPill } from "../components/AgentPill.tsx";
 import { CallScreen } from "../voice/CallScreen.tsx";
@@ -29,6 +31,7 @@ import { useFeature } from "../features.ts";
 import { useDevices } from "../devices.ts";
 import { chatName, isGrouped, needsStamp, snippetOf, stampLabel, startsChat, toolLine } from "../chatFormat.ts";
 import { openDm } from "../openDm.ts";
+import { HarnessSignInButton, SignInNeededBar } from "../components/HarnessSignInButton.tsx";
 import { CheckbackLabel, ClosedLine, LoopParts } from "../components/Loops.tsx";
 
 /** What's open in the pane beside the chat (a thread comes from the route instead). */
@@ -52,11 +55,14 @@ function RunFailedActions({ part, agentId }: { part: Extract<MessagePart, { type
       setBusy(false);
     }
   };
+  // the agent still can't answer for want of a sign-in: open that sign-in right here
+  const signIn = useStore((s) => (agentId && (part.fix === "signin" || part.fix === "computer") ? s.agents.find((a) => a.id === agentId)?.signIn : null));
   const to = part.fix === "computer" && agentId ? href({ view: "agents", agentId, tab: "computer" }) : part.fix === "connection" ? href({ view: "settings", page: "models" }) : part.fix === "signin" ? href({ view: "settings", page: "harnesses" }) : null;
   if (sent) return <div className="mt-1 px-1 text-xs text-muted">Trying again…</div>;
   return (
     <div className="mt-1.5 px-1 flex flex-wrap items-center gap-2">
-      {to && (
+      {signIn && <HarnessSignInButton signIn={signIn} agentId={agentId} />}
+      {to && !signIn && (
         <a href={to} className="h-8 px-3 rounded-full border border-control-line bg-control text-[13px] text-ink hover:bg-hover inline-flex items-center gap-1.5">
           <LogIn size={13} /> Sign in
         </a>
@@ -136,6 +142,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   if (!channel) return <div className="flex-1 grid place-items-center text-sm text-muted">{route.channelId ? "Team not found" : "No teams yet"}</div>;
 
   const dmAgent = dmAgentId ? names.agent(dmAgentId) : undefined;
+  const dmFull = useStore((s) => (dmAgentId ? s.agents.find((a) => a.id === dmAgentId) : undefined));
   const sideAgent = !route.threadId && side?.kind === "agent" ? names.agent(side.agentId) : undefined;
   const dmPanel = sideAgent && dmAgent && sideAgent.id === dmAgent.id ? (side as Extract<Side, { kind: "agent" }>).tab : null;
   const infoOpen = side?.kind === "info" && !route.threadId && channel.kind === "channel";
@@ -193,6 +200,11 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
         <SoloAgent.Provider value={dmAgent?.id ?? null}>
           <MessageList messageId={!route.threadId ? route.messageId : undefined} channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} onAddAgent={() => setSettings("team")} onMembers={() => openSide({ kind: "info", tab: "members" })} />
         </SoloAgent.Provider>
+        {!channel.archivedAt && dmFull?.signIn && (
+          <div className="px-3 sm:px-5">
+            <SignInNeededBar agent={dmFull} />
+          </div>
+        )}
         {channel.archivedAt ? <ArchivedBar channel={channel} /> : <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Ask ${dmAgent.name}` : `Message ${channel.name}`} onDetails={openAgent} onCall={dmAgent && voice && !calling ? () => setCalling(true) : undefined} />}
       </div>
       {route.threadId && <ThreadPanel key={route.threadId} messageId={route.messageId} channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}
@@ -335,7 +347,7 @@ function ArchivedBar({ channel }: { channel: ChannelInfo }) {
 const ACCESS: Record<AccessLevel, { label: string; body: string }> = {
   "read-only": { label: "Read only", body: "Reads files and answers; changes nothing." },
   edit: { label: "Can edit files", body: "Edits files in its own working folder." },
-  full: { label: "Full access", body: "No sandbox. Needs a device started with --allow-full-access." },
+  full: { label: "Full access", body: "Can change any file and run any command." },
 };
 
 /** What an agent may do on its computer: read only, edit files, or everything. */
@@ -1205,55 +1217,72 @@ function Remembered({ tools }: { tools: MessagePart[] }) {
   );
 }
 
+/**
+ * A file in a message. Text, images and PDFs open in a preview (with Download); anything else
+ * downloads, and the chip says so while it does.
+ */
 function FileChip({ id, name }: { id: string; name: string }) {
   const [url, setUrl] = useState<string | null>(null);
-  const isImage = /\.(png|jpe?g|gif|webp)$/i.test(name);
+  const [preview, setPreview] = useState(false);
+  const [saving, setSaving] = useState<"busy" | "done" | "failed" | null>(null);
+  const kind = fileKind(name);
   useEffect(() => {
-    if (!isImage) return;
+    if (kind !== "image") return;
     let u: string | null = null;
     fileUrl(id).then((x) => setUrl((u = x)), () => {});
     return () => {
       if (u) URL.revokeObjectURL(u);
     };
-  }, [id, isImage]);
+  }, [id, kind]);
+  useEffect(() => {
+    if (saving !== "done" && saving !== "failed") return;
+    const t = setTimeout(() => setSaving(null), 2500);
+    return () => clearTimeout(t);
+  }, [saving]);
   const open = async () => {
-    const u = url ?? (await fileUrl(id));
-    const a = document.createElement("a");
-    a.href = u;
-    a.download = name;
-    a.click();
+    if (kind !== "other") return setPreview(true);
+    if (saving === "busy") return;
+    setSaving("busy");
+    try {
+      await downloadFile(id, name);
+      setSaving("done");
+    } catch {
+      setSaving("failed");
+    }
   };
-  if (isImage && url) return <img src={url} alt={name} onClick={open} className="max-h-64 max-w-full rounded-3xl cursor-pointer" />;
+  const dialog = preview && <FilePreview id={id} name={name} onClose={() => setPreview(false)} />;
+  if (kind === "image" && url)
+    return (
+      <>
+        <img src={url} alt={name} onClick={() => setPreview(true)} className="max-h-64 max-w-full rounded-3xl cursor-pointer" />
+        {dialog}
+      </>
+    );
   return (
-    <button onClick={open} className="flex items-center gap-2.5 rounded-2xl bg-card px-3.5 py-2.5 text-sm hover:bg-hover">
-      <FileText size={16} className="text-muted" /> {name}
-    </button>
+    <>
+      <button onClick={() => void open()} aria-busy={saving === "busy"} className="flex items-center gap-2.5 rounded-2xl bg-card px-3.5 py-2.5 text-sm hover:bg-hover">
+        {saving === "busy" ? <Loader2 size={16} className="text-muted animate-spin" /> : saving === "done" ? <Check size={16} className="text-ok" /> : <FileText size={16} className="text-muted" />} {name}
+        {saving && saving !== "busy" && <span className="text-muted" role="status">{saving === "done" ? "· Downloaded" : "· Couldn't download"}</span>}
+      </button>
+      {dialog}
+    </>
   );
 }
 
-/** What a run is doing, short: "Reading main.ts", "Editing files", "Thinking…". */
-function workLine(run: LiveRun, agents: Agent[]): string {
-  const inp = (run.last?.input ?? {}) as Record<string, unknown>;
-  const path = [inp.file_path, inp.path, inp.filename, inp.file].find((v) => typeof v === "string") as string | undefined;
-  const base = path?.split("/").pop();
-  const kind = run.last ? workKind(run.last.name) : null;
-  if (base && kind === "read") return `Reading ${base}`;
-  if (base && kind === "edit") return `Writing ${base}`;
-  if (!run.last && !run.text) return "Thinking…";
-  const t = runActivity(run, agents);
-  return t.charAt(0).toUpperCase() + t.slice(1) + (/…$/.test(t) ? "" : "…");
-}
-
-/** An agent's reply as it streams in, before it's posted: its words so far, then three pulsing dots and what it's doing. */
+/**
+ * An agent's reply as it streams in, before it's posted: its words so far. What it's doing shows
+ * once, in the activity pill above the composer (with Stop), not again here.
+ */
 function StreamingItem({ run }: { run: LiveRun }) {
   const names = useNames();
-  const agents = useStore((s) => s.agents);
   const handles = useHandleNames();
   const colors = useHandleColors();
   const agent = names.agent(run.agentId);
   const html = useMemo(() => (run.text ? renderMarkdown(run.text, { handles, colors }) : ""), [run.text, handles, colors]);
   const computerId = agent?.computerId;
   const home = useContext(SoloAgent) === run.agentId;
+  const screen = run.usedComputer && !!computerId;
+  if (!html && !screen) return null;
   return (
     <div className="px-3 md:px-5 pt-1 pb-1.5 flex items-end gap-2">
       {!home && (
@@ -1264,15 +1293,7 @@ function StreamingItem({ run }: { run: LiveRun }) {
       <div className="min-w-0 flex flex-col items-start gap-[3px] max-w-[84%] md:max-w-[36rem]">
         {!home && <div className="px-3.5 pb-0.5 text-[12px] text-muted">{agent?.name ?? "Agent"}</div>}
         {html && <div className="bubble them text-[15px] md:text-[15px]"><div className="prose-w" dangerouslySetInnerHTML={{ __html: html }} /></div>}
-        <div role="status" aria-live="polite" aria-label={`${agent?.name ?? "Agent"} is working: ${workLine(run, agents)}`} className="m-work bubble them inline-flex items-center gap-2.5 !py-3">
-          <span className="work-dots" aria-hidden>
-            <i />
-            <i />
-            <i />
-          </span>
-          <span className="text-[15px] md:text-[14px] text-muted">{workLine(run, agents)}</span>
-        </div>
-        {run.usedComputer && computerId && <ComputerPart computerId={computerId} />}
+        {screen && <ComputerPart computerId={computerId} />}
       </div>
     </div>
   );
@@ -1926,7 +1947,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
             ref={ta}
             rows={1}
             value={text}
-            placeholder={replyTo ? `Reply to ${replyTo.name.split(" · ")[0]}` : channel?.kind === "dm" && !threadId ? `${placeholder}, or type / for commands` : placeholder}
+            placeholder={replyTo ? `Reply to ${replyTo.name.split(" · ")[0]}` : channel?.kind === "dm" && !threadId ? `${placeholder} or type /` : placeholder}
             aria-label={placeholder}
             onChange={(e) => {
               setText(e.target.value);
@@ -1958,7 +1979,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
                 send();
               }
             }}
-            className="block min-w-0 flex-1 resize-none bg-transparent py-[11px] md:py-[7px] text-[15px] md:text-[15px] outline-none placeholder:text-faint"
+            className="block min-w-0 flex-1 resize-none bg-transparent py-[11px] md:py-[7px] text-[15px] md:text-[15px] outline-none placeholder:text-faint placeholder:truncate"
           />
           {dmAgent && ctx && (
             <span className="self-center min-w-0 max-w-[45%] shrink pr-1.5 max-md:hidden">

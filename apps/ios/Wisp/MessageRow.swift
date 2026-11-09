@@ -347,9 +347,12 @@ private struct RunFailedActions: View {
     } else {
       VStack(alignment: .leading, spacing: 6) {
         HStack(spacing: 8) {
-          if fix == "signin" { NavigationLink { HarnessesView() } label: { Text("Sign in") }.buttonStyle(CardPill(tone: .soft)).accessibilityIdentifier("run-sign-in") }
+          // still not signed in: open that sign-in right here (on its device, or on its own computer)
+          if fix == "signin" || fix == "computer", let agent = agent.flatMap({ store.agent($0.id) }), let signIn = agent.signIn {
+            AgentSignInButton(agent: agent, signIn: signIn)
+          } else if fix == "signin" { NavigationLink { HarnessesView() } label: { Text("Sign in") }.buttonStyle(CardPill(tone: .soft)).accessibilityIdentifier("run-sign-in") }
           if fix == "connection" { NavigationLink { ModelsSettingsView() } label: { Text("Sign in") }.buttonStyle(CardPill(tone: .soft)).accessibilityIdentifier("run-sign-in") }
-          if fix == "computer", let agent { NavigationLink { AgentComputerView(agent: agent) } label: { Text("Sign in") }.buttonStyle(CardPill(tone: .soft)).accessibilityIdentifier("run-sign-in") }
+          if fix == "computer", let agent, store.agent(agent.id)?.signIn == nil { NavigationLink { AgentComputerView(agent: agent) } label: { Text("Sign in") }.buttonStyle(CardPill(tone: .soft)).accessibilityIdentifier("run-sign-in") }
           if retry {
             Button("Try again") { action.run { try await store.retryRun(runId); sent = true } }
               .buttonStyle(CardPill(tone: .soft)).disabled(action.busy).accessibilityIdentifier("run-retry")

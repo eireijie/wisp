@@ -38,11 +38,20 @@ describe("runStatusLabel", () => {
 });
 
 describe("accessScope", () => {
+  const at = (computer: "shared" | "own" | null, advanced = false) => ({ device: "Mac" as string | undefined, computer, handle: "nova", advanced });
   it("states what each level asks for, not a guarantee", () => {
-    expect(accessScope("read-only", "Nova", "nova", "Mac")).toBe("Nova asks before changing any file on Mac.");
-    expect(accessScope("edit", "Nova", "nova", "Mac")).toContain("~/.wisp/agents/nova");
-    expect(accessScope("edit", "Nova", "nova", "Mac")).toContain("can't enforce this strictly");
-    expect(accessScope("full", "Nova", "nova", "Mac")).toContain("if Mac allows full access");
-    expect(accessScope("full", "Nova", "nova", undefined)).toContain("no device yet");
+    expect(accessScope("read-only", "Nova", at(null))).toBe("Nova reads files and asks before changing any.");
+    expect(accessScope("edit", "Nova", at(null))).toContain("its own folder on Mac");
+    expect(accessScope("full", "Nova", at(null))).toContain("if Mac allows full access");
+    expect(accessScope("full", "Nova", { ...at(null), device: undefined })).toContain("no device yet");
+  });
+  it("says where an agent on a computer really works, with paths and caveats only in Advanced", () => {
+    const simple = accessScope("edit", "Nova", at("shared"));
+    expect(simple).toContain("its own folder on the shared computer");
+    expect(simple).not.toContain("~/");
+    expect(simple).not.toContain("strictly");
+    expect(accessScope("edit", "Nova", at("shared", true))).toContain("~/files/nova");
+    expect(accessScope("edit", "Nova", at("own"))).toContain("its computer's files");
+    expect(accessScope("edit", "Nova", at(null, true))).toContain("~/.wisp/agents/nova");
   });
 });

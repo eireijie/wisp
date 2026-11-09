@@ -775,3 +775,7 @@ body {
 @keyframes m-savebar { from { opacity: 0; transform: translateY(12px); } }
 .m-savebar { animation: m-savebar 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 @media (prefers-reduced-motion: reduce) { .m-savebar { animation: none; } }
+
+/* the "on" track of every switch: a clear green in every theme, since the accent is near-white in the mono themes */
+.m-switch-on { background-color: #2fb457; }
+:root[data-mode="dark"] .m-switch-on { background-color: #30d158; }

@@ -168,7 +168,7 @@ describe("wisp-mcp", () => {
     const local = path.join(dir, "report.txt");
     await fs.writeFile(local, "report body");
     const up = (await call("file_upload", { local_path: local })).text;
-    const fileId = up.match(/as (file_\S+)/)![1];
+    const fileId = up.match(/file id (file_[\w-]+)/)![1];
     const down = await call("file_download", { file_id: fileId, dest_dir: path.join(dir, "dl") });
     expect(await fs.readFile(path.join(dir, "dl", "report.txt"), "utf8")).toBe("report body");
     expect(down.text).toContain("Saved");

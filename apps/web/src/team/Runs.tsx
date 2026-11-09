@@ -92,7 +92,7 @@ export function FlowStrip({ channelId, threadId }: { channelId: string; threadId
         const inbox = lane.approvalId ?? Object.values(approvals).find((a) => a.flow?.flowId === flow.id && a.flow?.stepId === s.id && a.status === "pending")?.id;
         return (
           <div key={s.id} className="space-y-1.5 rounded-2xl bg-warn/10 px-3 py-2.5" aria-label={`${s.action || "A step"}, waiting`}>
-            <div className="text-[12px] font-medium">{s.action || "A step"}</div>
+            <div className="text-[12px] font-medium">{s.action || "A step"}{w.failed && <span className="ml-1.5 text-bad">Failed</span>}</div>
             {ask ? (
               <div className="flex items-center gap-1.5 text-[13px] font-medium text-warn">
                 <Hand size={14} aria-hidden /> Waiting for you
@@ -117,9 +117,11 @@ export function FlowStrip({ channelId, threadId }: { channelId: string; threadId
               </form>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" variant="primary" disabled={busy} onClick={() => void decide("approve", s.id)} className="h-8 text-xs">
-                  {ask ? "Approve" : "Approve anyway"}
-                </Button>
+                {!w.failed && (
+                  <Button type="button" variant="primary" disabled={busy} onClick={() => void decide("approve", s.id)} className="h-8 text-xs">
+                    {ask ? "Approve" : "Approve anyway"}
+                  </Button>
+                )}
                 {ask ? (
                   <>
                     {s.sendBackTo && (
@@ -132,9 +134,16 @@ export function FlowStrip({ channelId, threadId }: { channelId: string; threadId
                     </a>
                   </>
                 ) : (
-                  <Button type="button" disabled={busy} onClick={() => void decide("retry", s.id)} className="h-8 text-xs">
-                    {w.options === "rounds" ? "Another round" : "Try again"}
-                  </Button>
+                  <>
+                    <Button type="button" variant={w.failed ? "primary" : undefined} disabled={busy} onClick={() => void decide("retry", s.id)} className="h-8 text-xs">
+                      {w.options === "rounds" ? "Another round" : "Try again"}
+                    </Button>
+                    {w.failed && (
+                      <Button type="button" disabled={busy} onClick={() => void decide("approve", s.id)} className="h-8 text-xs">
+                        Skip this step
+                      </Button>
+                    )}
+                  </>
                 )}
                 <Button type="button" variant="ghost" disabled={busy} onClick={() => void decide("stop", s.id)} className="h-8 text-xs">
                   Stop
