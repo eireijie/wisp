@@ -115,7 +115,7 @@ describe("steps that run at the same time", () => {
     flow = await flowIn(ch.id);
     expect(flow.status).toBe("waiting");
     expect(flow.stepId).toBe("b");
-    expect(flow.waitingFor?.why).toMatch(/didn't finish: Out of disk/);
+    expect(flow.waitingFor?.why).toMatch(/couldn't finish .*: Out of disk\./);
     flow = (await decide(flow.id, "retry")).data;
     expect(flow.status).toBe("running");
     await finish("sol", openIn("sol", ch.id)!.id, "B done");
