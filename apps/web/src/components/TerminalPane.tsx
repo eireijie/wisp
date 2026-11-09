@@ -176,6 +176,8 @@ export function TerminalPane({
       sock.current = ws;
       let exited = false;
       let ready = false;
+      // a close reason holds ~120 bytes, so the hub sends the whole error as a frame first
+      let failure: string | undefined;
       ws.onmessage = (e) => {
         if (e.data instanceof ArrayBuffer) return term.current?.write(new Uint8Array(e.data));
         try {
@@ -189,20 +191,23 @@ export function TerminalPane({
             opened.current = true;
             setStatus({ state: "live" });
             if (focused) term.current?.focus();
-          } else if (msg.type === "closed") exited = !!msg.exited;
+          } else if (msg.type === "closed") {
+            exited = !!msg.exited;
+            if (typeof msg.error === "string" && msg.error) failure = msg.error;
+          }
         } catch {}
       };
       ws.onclose = (e) => {
         if (sock.current === ws) sock.current = null;
         if (gone) return;
-        if (exited) return setStatus({ state: "ended", text: e.reason && e.reason !== "closed" ? e.reason : "The shell ended." });
+        if (exited) return setStatus({ state: "ended", text: failure ?? (e.reason && e.reason !== "closed" ? e.reason : "The shell ended.") });
         if (e.code === 4403 || e.code === 4401 || e.code === 4400) return setStatus({ state: "lost", text: e.reason || "This terminal can't be opened.", retry: false });
         if (/code|PIN|password/i.test(e.reason) && target.code) {
           code.current = undefined;
           return setStatus({ state: "code", error: e.reason });
         }
         // dropped (the device or the hub went away): try again; the shell is still there
-        if (!ready && e.code === 4502) return setStatus({ state: "lost", text: e.reason || "The terminal couldn't start.", retry: false });
+        if (!ready && e.code === 4502) return setStatus({ state: "lost", text: failure ?? (e.reason || "The terminal couldn't start."), retry: false });
         setStatus({ state: "lost", text: e.code === 4503 ? `${target.name} is offline. Reconnecting…` : "Reconnecting…", retry: true });
         retry = setTimeout(connect, Math.min(30_000, 1000 * 2 ** tries++));
       };

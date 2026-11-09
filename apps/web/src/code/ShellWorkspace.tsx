@@ -160,7 +160,8 @@ function Shells({ lead, embedded = false, store }: { lead?: ReactNode; embedded?
   const fixesFor = (target: ShellTarget, launch: string) => {
     const name = harnessLabel(launch) ?? launch;
     const fixes: { label: string; onClick: () => void }[] = [];
-    const other = targets?.find((t) => t.id !== target.id && t.online && t.kind === "device" && /^this (mac|computer|pc)$/i.test(t.name));
+    const devices = targets?.filter((t) => t.id !== target.id && t.online && t.kind === "device") ?? [];
+    const other = devices.find((t) => /^this (mac|computer|pc)$/i.test(t.name)) ?? devices[0];
     if (other) fixes.push({ label: `Open ${name} on ${other.name}`, onClick: () => addPane(other, "row", launch) });
     fixes.push({ label: "Open a shell here to sign in", onClick: () => addPane(target, "row") });
     return fixes;
