@@ -215,6 +215,9 @@ describe("a stepped team when things go wrong", () => {
     const flow = await flowIn(ch.id);
     expect(flow.status).toBe("waiting");
     expect(flow.waitingFor?.why).toMatch(/didn't finish: Cancelled/);
+    // a run that failed offers Try again or Skip (the app hides Approve), never "approve anyway"
+    expect(flow.waitingFor?.failed).toBe(true);
+    expect(flow.waitingFor?.why).not.toMatch(/approve/i);
   });
 
   it("waits for a person when a role's agent is removed mid-step, then says the role needs someone", async () => {
@@ -232,6 +235,8 @@ describe("a stepped team when things go wrong", () => {
     flow = (await decide(flow.id, "retry")).data;
     expect(flow.status).toBe("waiting");
     expect(flow.waitingFor?.why).toMatch(/Lead has nobody/);
+    // not a run failure: no "failed" flag
+    expect(flow.waitingFor?.failed).toBeUndefined();
   });
 
   it("asks about a failed piece, and trying again hands it back to its builder", async () => {
@@ -242,6 +247,7 @@ describe("a stepped team when things go wrong", () => {
     expect(flow.status).toBe("waiting");
     expect(flow.waitingFor?.piece).toBe(p.id);
     expect(flow.waitingFor?.why).toMatch(/API\*\* didn't finish: Out of disk/);
+    expect(flow.waitingFor?.failed).toBe(true);
     flow = (await decide(flow.id, "retry")).data;
     expect(flow.status).toBe("running");
     const again = openIn("forge", ch.id);

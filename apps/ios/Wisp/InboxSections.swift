@@ -250,8 +250,7 @@ struct InboxSections: View {
               TeamGhosts(agents: teamChannel?.iconAgents(store.agents) ?? members, seed: t.name, size: 40, iconFileId: teamChannel?.settings?.iconFileId)
               VStack(alignment: .leading, spacing: 3) {
                 Text(t.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
-                Text(busy != nil || teamBusy ? "Working\(busy.map { " · \($0.name) is on it" } ?? "")" : "Quiet")
-                  .font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
+                TeamRunLine(channelId: t.channelId ?? "", busyName: busy?.name ?? (teamBusy ? "" : nil))
               }
               Spacer(minLength: 0)
             }
@@ -445,5 +444,23 @@ struct ReadinessSection: View {
     case .devices: Button("See devices") { open(.devices) }.buttonStyle(CardPill(tone: .primary))
     case nil: Button("Ask \(agent.name)") { open(.dm(agent)) }.buttonStyle(CardPill(tone: .primary))
     }
+  }
+}
+
+
+/** A team's Inbox status line: working, waiting, failed or quiet, from its newest request. */
+struct TeamRunLine: View {
+  @Environment(Store.self) private var store
+  var channelId: String
+  var busyName: String?
+  @State private var flows: [TeamFlow] = []
+
+  var body: some View {
+    let state = TeamFlow.runState(flows, busyName: busyName?.isEmpty == true ? nil : busyName)
+    Text(state.text == "Quiet" && busyName != nil ? "Working" : state.text)
+      .font(.system(size: 13)).foregroundStyle(state.bad ? Color.red : Palette.faint).lineLimit(1)
+      .task(id: "\(channelId) \(store.flowVersions[channelId] ?? 0)") {
+        if let all = try? await store.flows(in: channelId) { flows = Array(all.prefix(5)) }
+      }
   }
 }

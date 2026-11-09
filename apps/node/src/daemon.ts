@@ -534,7 +534,13 @@ export class NodeDaemon {
     // `wisp node pause` while this run waited its turn behind another: it doesn't start either
     if (this.local.paused) return this.send({ type: "run_failed", runId: run.runId, error: `${this.cfg.name} is paused; ask again once someone resumes it there` });
     if (this.stopped) return this.send({ type: "run_failed", runId: run.runId, error: `${this.cfg.name} was stopped before this run started` });
-    const agents = await this.api.request<Agent[]>("GET", "/api/node/agents").catch(() => [] as Agent[]);
+    let agents: Agent[];
+    try {
+      agents = await this.api.request<Agent[]>("GET", "/api/node/agents");
+    } catch (err) {
+      // the hub didn't answer: say so, instead of claiming the agent isn't assigned here
+      return this.send({ type: "run_failed", runId: run.runId, error: hubUnreachableMessage(this.cfg.name, this.cfg.hub, err) });
+    }
     const agent = agents.find((a) => a.id === run.agentId);
     if (!agent) return this.send({ type: "run_failed", runId: run.runId, error: "agent is not assigned to this node" });
     const adapter = this.registry[agent.harness];
@@ -1158,4 +1164,12 @@ function readJson<T>(file: string, fallback: T): T {
 
 function writeJson(file: string, value: unknown, mode?: number) {
   fs.writeFileSync(file, JSON.stringify(value, null, 2), mode ? { mode } : undefined);
+}
+
+/** Plain words for why a device couldn't ask the hub which agents it hosts. */
+export function hubUnreachableMessage(device: string, hub: string, err: unknown): string {
+  const status = (err as { status?: number })?.status;
+  if (status === 401 || status === 403) return `${device} isn't signed in to Wisp any more (${hub} turned it away). Pair it again from Computers, then ask again.`;
+  if (typeof status === "number") return `${device} reached Wisp but it answered with an error (${status}: ${(err as Error).message}). Try again in a moment.`;
+  return `${device} couldn't reach Wisp at ${hub}. Check that it's online and the Wisp hub is running, then try again.`;
 }

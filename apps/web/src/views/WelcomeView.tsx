@@ -213,6 +213,22 @@ export async function makeFirstAgent(device: DeviceInfo, harness: string, name: 
   return api<Agent>("POST", "/api/agents", { ...common, useDefaults: true, settings: look });
 }
 
+export type SkipResult = { kept: Agent } | { kept: null; reason: "nothing-to-keep" } | { kept: null; reason: "failed"; message: string };
+
+/**
+ * "Skip for now" on the agent step must not lose the agent the person just named: make it now
+ * (without waiting for a sign-in; the Inbox says what it still needs) and only then move on.
+ * With no computer or no name there is nothing to make; a failure is reported, never swallowed.
+ */
+export async function skipKeepingAgent(o: { device: DeviceInfo | undefined; harness: string; name: string; agents: Agent[]; computers: ComputerInfo[]; look: GhostAppearance; make?: typeof makeFirstAgent }): Promise<SkipResult> {
+  if (!o.device || !o.name.trim()) return { kept: null, reason: "nothing-to-keep" };
+  try {
+    return { kept: await (o.make ?? makeFirstAgent)(o.device, o.harness, o.name.trim(), o.agents, o.computers, o.look) };
+  } catch (e) {
+    return { kept: null, reason: "failed", message: (e as Error).message || "something went wrong" };
+  }
+}
+
 /** The AI that powers your first agent, signing in to it, and making the agent. */
 function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostAppearance; setLook: (l: GhostAppearance) => void; devices: DeviceInfo[] | null; onScene: (s: StageScene) => void; onNext: () => void }) {
   const agents = useStore((s) => s.agents);
@@ -287,6 +303,23 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
     } finally {
       setBusy(false);
     }
+  };
+  const [skipArmed, setSkipArmed] = useState(false);
+  const skip = async () => {
+    if (skipArmed) return onNext();
+    setBusy(true);
+    const r = await skipKeepingAgent({ device, harness: selected, name, agents, computers, look });
+    setBusy(false);
+    if (r.kept) {
+      await Promise.allSettled([useStore.getState().refreshAgents(), useStore.getState().refreshComputers()]);
+      return onNext();
+    }
+    if (r.reason === "failed") {
+      setError(`Couldn't set up ${name.trim()} yet: ${r.message}. Press Skip for now again to go on without it; you can make it later from Agents.`);
+      setSkipArmed(true);
+      return;
+    }
+    onNext();
   };
   const displayName = name.trim() || "Atlas";
   const tag = created?.handle ?? freeHandle(displayName, agents.map((a) => a.handle));
@@ -413,7 +446,7 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
             It's already signed in
           </AuthLink>
         )}
-        <AuthLink onClick={onNext} disabled={busy} className="self-center">
+        <AuthLink onClick={() => void skip()} disabled={busy} className="self-center">
           Skip for now
         </AuthLink>
       </Actions>
