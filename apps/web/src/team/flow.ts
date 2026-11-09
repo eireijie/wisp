@@ -487,15 +487,15 @@ export function keepReviewersApart<T extends { id: string; kind: string; next?: 
   return out;
 }
 
-/** Roles a split-the-work step hands pieces to: the reviewer isn't the builder, when there's someone else. */
+/** Pieces are checked by someone who didn't build them: the reviewer role keeps its agent and the builders take the others (the same one twice when only one is left). */
 function sepRoles<R extends { id: string; agentId?: string | null }>(roles: R[], _steps: unknown, agents: Pick<Agent, "id">[]): R[] {
   if (agents.length < 2) return roles;
-  const builders = new Set(roles.filter((r) => r.id !== "reviewer").map((r) => r.agentId).filter(Boolean));
-  return roles.map((r) => {
-    if (r.id !== "reviewer" || !r.agentId || builders.size !== 1 || !builders.has(r.agentId)) return r;
-    const other = agents.find((a) => a.id !== r.agentId);
-    return other ? { ...r, agentId: other.id } : r;
-  });
+  const reviewer = roles.find((r) => r.id === "reviewer");
+  if (!reviewer?.agentId) return roles;
+  const others = agents.filter((a) => a.id !== reviewer.agentId);
+  if (!others.length) return roles;
+  let i = 0;
+  return roles.map((r) => (r.id === "reviewer" || (r.agentId && r.agentId !== reviewer.agentId) ? r : { ...r, agentId: others[i++ % others.length].id }));
 }
 
 /** Steps an agent drew, as a team: normalized and laid out. */

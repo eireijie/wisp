@@ -567,7 +567,7 @@ export class TeamFlows {
           const h = [...f.history].reverse().find((x) => x.taskId === task.id);
           if (task.status === "failed") {
             if (h) h.verdict = "failed";
-            this.failLane(f, lane, `${stepLabel(step, team.roles ?? [], this.agentFor(team, step)?.name)} didn't finish: ${(task.result ?? "no reason given").slice(0, 300)}`);
+            this.failLane(f, lane, `${this.agentFor(team, step)?.name ?? "The agent"} couldn't finish ${this.title(team, step)}: ${failureReason(task.result)}`);
             return false;
           }
           if (step.kind === "review") {
@@ -604,7 +604,7 @@ export class TeamFlows {
           if (piece.status === "approved" || piece.lastTaskId === task.id) return false;
           piece.lastTaskId = task.id;
           if (task.status === "failed") {
-            this.pieceNeedsPerson(piece, `**${piece.title}** didn't finish: ${(task.result ?? "no reason given").slice(0, 300)}. Try again to hand it back to its builder, or skip it.`, "retry", "build", true);
+            this.pieceNeedsPerson(piece, `**${piece.title}** didn't finish: ${failureReason(task.result)} Try again to hand it back to its builder, or skip it.`, "retry", "build", true);
             this.afterPiece(f, lane, step);
             return false;
           }
@@ -617,7 +617,7 @@ export class TeamFlows {
           piece.lastReviewId = task.id;
           const reviewerRole = (step.reviewBy && team.roles?.find((r) => r.id === step.reviewBy)?.name) || "The reviewer";
           if (task.status === "failed") {
-            this.pieceNeedsPerson(piece, `The review of **${piece.title}** didn't finish: ${(task.result ?? "no reason given").slice(0, 300)}. Try again to ask for it again, or skip it.`, "retry", "review", true);
+            this.pieceNeedsPerson(piece, `The review of **${piece.title}** didn't finish: ${failureReason(task.result)} Try again to ask for it again, or skip it.`, "retry", "review", true);
           } else if (verdict === "approved") {
             piece.status = "approved";
           } else if (!verdict) {
@@ -938,4 +938,10 @@ export class TeamFlows {
     f.status = "running";
     this.complete(f, lane, result, wasRounds && step.kind === "branch");
   }
+}
+
+/** A failed task's reason without the "Bea's run failed:" lead-in the run adds, ending in a full stop. */
+export function failureReason(result: string | null | undefined): string {
+  const r = (result ?? "").replace(/^[^:]{0,60}'s run failed:\s*/i, "").trim().slice(0, 300) || "no reason given";
+  return /[.!?]$/.test(r) ? r : `${r}.`;
 }

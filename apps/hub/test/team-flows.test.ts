@@ -214,7 +214,7 @@ describe("a stepped team when things go wrong", () => {
     await api("POST", `/api/tasks/${openIn("atlas", ch.id).id}/cancel`);
     const flow = await flowIn(ch.id);
     expect(flow.status).toBe("waiting");
-    expect(flow.waitingFor?.why).toMatch(/didn't finish: Cancelled/);
+    expect(flow.waitingFor?.why).toMatch(/couldn't finish .*: Cancelled\./);
     // a run that failed offers Try again or Skip (the app hides Approve), never "approve anyway"
     expect(flow.waitingFor?.failed).toBe(true);
     expect(flow.waitingFor?.why).not.toMatch(/approve/i);
@@ -304,6 +304,12 @@ describe("a stepped team when things go wrong", () => {
     const flow = await flowIn(ch.id);
     expect(flow.pieces[p.id].status).toBe("failed");
     expect(flow.waitingFor?.why).toMatch(/built by Forge, who is also the Reviewer/);
+  });
+
+  it("says a failed step once, without the run's own lead-in", async () => {
+    const { failureReason } = await import("../src/team-flows.ts");
+    expect(failureReason("Bea's run failed: Claude Code on This Mac isn't signed in")).toBe("Claude Code on This Mac isn't signed in.");
+    expect(failureReason(null)).toBe("no reason given.");
   });
 
   it("doesn't let an agent review its own step", async () => {

@@ -137,6 +137,13 @@ describe("editing a team's flow", () => {
     }
   });
 
+  it("never has a piece checked by the agent who built it, with two agents", () => {
+    const two = [{ id: "atlas", harness: "claude-code" }, { id: "bea", harness: "claude-code" }] as never[];
+    const team = fillTemplate(TEAM_TEMPLATES.find((x) => x.id === "plan-challenge")!, two);
+    const reviewer = team.roles!.find((r) => r.id === "reviewer")!.agentId;
+    for (const r of team.roles!.filter((r) => r.id !== "reviewer")) expect(r.agentId).not.toBe(reviewer);
+  });
+
   it("keeps dragged steps where they are when the chart is laid out again", () => {
     let t = sample();
     const first = t.steps![0].id;
