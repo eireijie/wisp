@@ -147,6 +147,18 @@ describe("who can open one", () => {
     expect(r.data.error).toMatch(/Only Owner can open a terminal on owner-vm/);
   });
 
+  it("an agent's CLI in a pane gets the person's own model sign-in, never someone else's", async () => {
+    const ownerId = (await api("GET", "/api/me")).data.user.id;
+    const memberId = (await api("GET", "/api/me", undefined, member)).data.user.id;
+    const ws = device.workspaceId;
+    hub.models.create({ workspaceId: ws, userId: memberId, provider: "openai", kind: "key", label: "theirs", secret: { key: "sk-member-0000" } });
+    expect(hub.terminalCredential(device, ownerId, "codex")).toBeNull();
+    const mine = hub.models.create({ workspaceId: ws, userId: ownerId, provider: "openai", kind: "key", label: "mine", secret: { key: "sk-owner-0000" } });
+    expect(hub.terminalCredential(device, ownerId, "codex")).toMatchObject({ connectionId: mine, provider: "openai", kind: "key" });
+    // one the harness can't use isn't handed to it
+    expect(hub.terminalCredential(device, ownerId, "gemini")).toBeNull();
+  });
+
   it("a link works once", async () => {
     const r = await api<{ url: string }>("POST", `/api/computers/${device.id}/terminal`, {});
     const codes: number[] = [];

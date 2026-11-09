@@ -66,6 +66,16 @@ describe("terminals on a device", () => {
     expect(f.made[0].size).toEqual([100, 30]);
   });
 
+  it("says once when a shell is gone, so a sign-in its CLI renewed can go back", async () => {
+    const f = fakes();
+    const t = new Terminals(f.spawn, 60_000);
+    let ended = 0;
+    const a = viewer();
+    await t.attach("k", "term_a", { cols: 80, rows: 24 }, async () => ({ file: "sh", args: [], ended: () => void ended++ }), a.send, a.close);
+    t.detach("term_a", true);
+    expect(ended).toBe(1);
+  });
+
   it("lets the newest viewer have it, like tmux", async () => {
     const f = fakes();
     const t = new Terminals(f.spawn);
