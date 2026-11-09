@@ -1890,6 +1890,48 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return { ok: true, output: r.output, task: store.task(task.id) };
   });
 
+  /**
+   * Code's review side for a task branch, read on the device of the agent that built it: what it
+   * changed, its files, one file. People who can see the task can read these; checks run code on
+   * that device, so only its owner can start them.
+   */
+  const reviewTarget = (req: FastifyRequest, reply: FastifyReply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return null;
+    if (c.viewer.role === "guest") return void reply.code(403).send({ error: "guests can't review code" }), null;
+    let task = store.task((req.params as { id: string }).id);
+    if (!task || task.workspaceId !== c.workspaceId || (task.channelId && !channelVisible(c, task.channelId))) return void reply.code(404).send({ error: "task not found" }), null;
+    if (task.reviewOf) task = store.task(task.reviewOf) ?? task;
+    const team = task.teamId ? store.team(task.teamId) : undefined;
+    if (!task.branch || !team?.repo) return void reply.code(400).send({ error: "this task has no branch" }), null;
+    const via = task.toAgentId ?? team.leadId;
+    if (!via) return void reply.code(409).send({ error: "nobody's device has this repo anymore: the agent that did the work was removed" }), null;
+    return { c, task, w: { repo: team.repo, branch: task.branch, base: team.baseBranch }, via };
+  };
+  const answerReview = (reply: FastifyReply, r: { ok: boolean; output: string }) => (r.ok ? reply.type("application/json").send(r.output) : reply.code(409).send({ error: r.output }));
+
+  app.get("/api/tasks/:id/review/diff", async (req, reply) => {
+    const t = reviewTarget(req, reply);
+    if (t) return answerReview(reply, await hub.requestReview(t.via, "diff", t.w));
+  });
+  app.get("/api/tasks/:id/review/files", async (req, reply) => {
+    const t = reviewTarget(req, reply);
+    if (t) return answerReview(reply, await hub.requestReview(t.via, "files", t.w));
+  });
+  app.get("/api/tasks/:id/review/file", async (req, reply) => {
+    const t = reviewTarget(req, reply);
+    const file = String((req.query as { path?: string }).path ?? "");
+    if (!file) return reply.code(400).send({ error: "which file?" });
+    if (t) return answerReview(reply, await hub.requestReview(t.via, "file", { ...t.w, file }));
+  });
+  app.post("/api/tasks/:id/review/checks", async (req, reply) => {
+    const t = reviewTarget(req, reply);
+    if (!t) return;
+    const node = store.agent(t.via)?.nodeId ? store.node(store.agent(t.via)!.nodeId!) : undefined;
+    if (!node || node.ownerId !== t.c.actor.id) return reply.code(403).send({ error: "checks run on the device the agent works on, so only that device's owner can start them" });
+    return answerReview(reply, await hub.requestReview(t.via, "checks", t.w));
+  });
+
   // --- stepped teams ---------------------------------------------------------------
 
   /** A channel's requests going through its team's steps, newest first. */

@@ -10,6 +10,7 @@ import { useStore } from "../store.ts";
 import { AgentPane, GhostIcon, STATE_COLOR } from "../code/AgentPane.tsx";
 import { NewTaskSheet } from "../code/NewTaskSheet.tsx";
 import { Palette, type PaletteItem } from "../code/Palette.tsx";
+import { ReviewPanel, branchesOf, type ReviewTab } from "../code/ReviewPanel.tsx";
 import { groupTasks, paneState, repoName, useCodeTasks, type CodeTask } from "../code/data.ts";
 
 /**
@@ -78,6 +79,13 @@ export function CodeView() {
   const [sheet, setSheet] = useState(false);
   const [palette, setPalette] = useState(false);
   const [picker, setPicker] = useState(0);
+  const [review, setReview] = useState(false);
+  const [reviewTab, setReviewTab] = useState<ReviewTab>("changes");
+  const tasksVersion = useStore((s) => s.tasksVersion);
+  // on a smaller screen the task list makes way for Review, so the panes keep their room
+  useEffect(() => {
+    if (review && window.innerWidth < 1280) setListOpen(false);
+  }, [review]);
 
   useEffect(() => {
     const r = () => setNarrow(window.innerWidth < 768);
@@ -198,6 +206,18 @@ export function CodeView() {
         }
       }
       if (mod && e.shiftKey && e.key.toLowerCase() === "d") return take(split);
+      if (mod && e.shiftKey && task) {
+        const n = ["Digit1", "Digit2", "Digit3"].indexOf(e.code);
+        if (n >= 0) return take(() => (setReview(true), setReviewTab((["changes", "files", "checks"] as const)[n])));
+        const act = e.key.toLowerCase() === "b" ? "back" : e.key.toLowerCase() === "m" ? "merge" : null;
+        if (act)
+          return take(() => {
+            setReview(true);
+            setReviewTab("changes");
+            // the panel may be opening: let it mount before it hears what to do
+            setTimeout(() => window.dispatchEvent(new CustomEvent("wisp-code-review", { detail: act })), 50);
+          });
+      }
       if (e.altKey && !mod && !inShell && !typing && (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown")) {
         const i = paneIds.indexOf(focused ?? "");
         const d = e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 1;
@@ -282,7 +302,7 @@ export function CodeView() {
           />
         </main>
       ) : (
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex h-12 shrink-0 items-center gap-2.5 border-b border-white/[.06] pl-3 pr-3">
           <button type="button" onClick={() => setListOpen((v) => !v)} aria-label={showList ? "Hide the task list" : "Show the task list"} title={`Tasks  ${MOD}B`} className="grid h-8 w-8 place-items-center rounded-lg text-[#a1a1aa] transition-colors hover:bg-white/[.06] hover:text-[#f2f2f4]">
             <PanelLeft size={16} strokeWidth={1.8} />
@@ -304,6 +324,11 @@ export function CodeView() {
                 </button>
               ))}
             </div>
+          )}
+          {task && branchesOf(task).length > 0 && (
+            <button type="button" onClick={() => setReview((v) => !v)} aria-pressed={review} title={`Review  ${MOD}⇧1`} className={cx("inline-flex h-7 items-center gap-1.5 rounded-[7px] border px-2.5 text-[12.5px] transition-[background-color,border-color,transform] active:scale-[.96]", review ? "border-white/[.18] bg-[#2a2a2f]" : "border-white/[.09] bg-[#1d1d21] hover:bg-[#26262b]")}>
+              Review
+            </button>
           )}
           {targets && targets.length > 0 && (myShells.length < MAX_SHELLS) && (
             <ShellMenu key={picker} open={picker > 0} targets={targets} onPick={(t) => addShell(t, task?.root.title)} label={task ? "Shell" : "New shell"} />
@@ -368,6 +393,7 @@ export function CodeView() {
         )}
       </main>
       )}
+      {review && task && <ReviewPanel key={task.root.id} task={task} tab={reviewTab} setTab={setReviewTab} version={tasksVersion} />}
       {sheet && <NewTaskSheet onClose={() => setSheet(false)} onStarted={(id) => (setSheet(false), id && setSelected(id))} />}
       {palette && <Palette items={paletteItems} onClose={() => setPalette(false)} />}
     </div>

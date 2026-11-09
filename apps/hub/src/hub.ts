@@ -1473,6 +1473,26 @@ export class Hub {
     });
   }
 
+  /**
+   * Code's review side, read on the device the task's agent works on: a branch's diff, files or
+   * one file, or its checks (which run there, so they get longer than a merge).
+   */
+  requestReview(agentId: string, what: "diff" | "files" | "file" | "checks", w: { repo: string; branch: string; base: string; file?: string }): Promise<{ ok: boolean; output: string }> {
+    const agent = this.store.agent(agentId);
+    const conn = agent?.nodeId ? this.nodes.get(agent.nodeId) : undefined;
+    if (!agent || !conn) return Promise.resolve({ ok: false, output: `${agent ? `@${agent.handle}'s device` : "the device"} is offline` });
+    const requestId = id("git");
+    const wait = what === "checks" ? 45 * 60_000 : 60_000;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingGit.delete(requestId);
+        resolve({ ok: false, output: `the device didn't answer within ${what === "checks" ? "45 minutes" : "a minute"}` });
+      }, wait);
+      this.pendingGit.set(requestId, { resolve, timer });
+      this.send(conn, { type: "review", requestId, what, ...w });
+    });
+  }
+
   /** Where an agent is working right now (its running run), or its DM with an owner. */
   whereIs(agentId: string): { channelId: string; threadId: string | null } | null {
     const run = this.currentRun(agentId);
