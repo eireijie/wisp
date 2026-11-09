@@ -4,6 +4,7 @@ import { inQuietHours, SLOW_DOWN_AT } from "./background.ts";
 import { isPublicUrl } from "./connector-auth.ts";
 import { featureOn } from "./features.ts";
 import type { Hub } from "./hub.ts";
+import { addedLines, lineKey, readPage } from "./page-diff.ts";
 import { WatchError, watcherFor, WATCHERS, type FoundEvent } from "./watchers/index.ts";
 
 /** A check waits this long after the last change, so a burst of edits is one check. */
@@ -26,6 +27,28 @@ const ANSWER_WINDOW_MS = 3 * 24 * 60 * 60_000;
 const MENTIONS_SHOWN_MS = 30 * 24 * 60 * 60_000;
 export const BROWSER_EVERY_MINUTES = 6 * 60;
 export const BROWSER_MIN_MINUTES = 2 * 60;
+/** A page Wisp could read that fails this many looks in a row is handed to the agent's browser. */
+const PAGE_FAILS_BEFORE_AGENT = 3;
+/** Quiet looks in a row that keep doubling a signed-in site's wait (capped at a day). */
+const MAX_QUIET_LOOKS = 4;
+/** New lines from the page, at most, passed to the agent. */
+const MAX_NEW_LINES = 15;
+/** In a browser check's preview: what to look for, then this, then the lines Wisp saw added. */
+const NEW_ON_PAGE = "\n[new on the page]\n";
+
+/**
+ * Where a website watch stands. `page`: Wisp reads it itself and keeps a key per line (no text), and the
+ * agent is woken only when lines were added. Otherwise the agent looks in its own browser, and `quiet`
+ * counts its looks in a row that found nothing to say.
+ */
+type SiteState = { page?: string[]; fails?: number; quiet?: number };
+const siteState = (cursor: string | null): SiteState => {
+  try {
+    return cursor ? (JSON.parse(cursor) as SiteState) : {};
+  } catch {
+    return {};
+  }
+};
 
 type WatchRow = {
   id: string;
@@ -171,9 +194,29 @@ export class Watches {
     return rows.map((r) => this.view(r));
   }
 
-  /** Whether an agent is on a watch that's running: something to look at even without connectors. */
-  hasActive(agentId: string) {
-    return !!this.db.prepare("SELECT 1 FROM watches w JOIN watch_agents a ON a.watch_id = w.id WHERE a.agent_id = ? AND w.paused = 0 LIMIT 1").get(agentId);
+  /** The running watches an agent is on for one person (they wake it themselves when something changes). */
+  active(agentId: string, userId: string): { service: WatchService; connectorId: string | null }[] {
+    return (this.db.prepare("SELECT w.service, w.connector_id AS connectorId FROM watches w JOIN watch_agents a ON a.watch_id = w.id WHERE a.agent_id = ? AND w.user_id = ? AND w.paused = 0").all(agentId, userId) as { service: WatchService; connectorId: string | null }[]);
+  }
+
+  /** Whether Wisp reads this website watch's page itself (so the agent is only woken when it changes). */
+  readsPage(watchId: string) {
+    return !!siteState(this.row(watchId)?.cursor ?? null).page;
+  }
+
+  /**
+   * The person changed how often an agent checks for them: its website watches follow, so "checks every
+   * 3 hours" means the same thing for both. Only watches this agent alone is on.
+   */
+  followPace(agentId: string, userId: string, everyMinutes: number) {
+    const every = Math.min(24 * 60, Math.max(BROWSER_MIN_MINUTES, Math.round(everyMinutes)));
+    const rows = this.db.prepare("SELECT w.* FROM watches w JOIN watch_agents a ON a.watch_id = w.id WHERE a.agent_id = ? AND w.user_id = ? AND w.service = 'browser' AND (SELECT COUNT(*) FROM watch_agents x WHERE x.watch_id = w.id) = 1").all(agentId, userId) as WatchRow[];
+    for (const r of rows) {
+      if (r.every_minutes === every) continue;
+      const from = r.last_polled_at ? new Date(r.last_polled_at).getTime() : Date.now();
+      this.db.prepare("UPDATE watches SET every_minutes = ?, next_poll_at = ? WHERE id = ?").run(every, new Date(from + every * 60_000).toISOString(), r.id);
+    }
+    if (rows.length) this.changed(this.hub.store.agent(agentId)?.workspaceId ?? "", [agentId]);
   }
 
   /** The values a watch signs in with: its own key over its connector's. */
@@ -210,7 +253,12 @@ export class Watches {
       if (!/^https?:\/\/[^\s]+$/i.test(url)) return { error: "a browser watch needs the site's address (config.url)" };
       if (!String(config.lookFor ?? "").trim()) return { error: "say what to look for on the site (config.lookFor)" };
       label ||= `${new URL(url).hostname.replace(/^www\./, "")} (browser)`;
-      every = Math.min(24 * 60, Math.max(BROWSER_MIN_MINUTES, Math.round(input.everyMinutes ?? BROWSER_EVERY_MINUTES)));
+      // unless it's told otherwise, it looks as often as the agent checks in for this person, so the two never disagree
+      const pace = agentIds.length === 1 ? this.hub.store.background(agentIds[0], input.userId)?.everyMinutes : undefined;
+      every = Math.min(24 * 60, Math.max(BROWSER_MIN_MINUTES, Math.round(input.everyMinutes ?? pace ?? BROWSER_EVERY_MINUTES)));
+      // a page Wisp can read itself is compared from now on, at no cost; the agent already saw it while setting this up
+      const read = await readPage(this.fetch, url);
+      if (read.ok) cursor = JSON.stringify({ page: read.lines.map(lineKey) } satisfies SiteState);
     } else {
       const w = watcherFor(service)!;
       const why = w.unavailable?.();
@@ -239,11 +287,12 @@ export class Watches {
       if (why) return { error: why };
     }
     const wid = id("watch");
-    // a browser watch's first check is now: the agent learns what the page looks like today
-    const nextPoll = service === "browser" ? at : new Date(at.getTime() + every * 60_000);
+    // a site only the agent can see is looked at now, so it learns what the page looks like today
+    const agentLooks = service === "browser" && !cursor;
+    const nextPoll = agentLooks ? at : new Date(at.getTime() + every * 60_000);
     this.db
       .prepare("INSERT INTO watches (id, workspace_id, user_id, service, label, connector_id, secret_json, config_json, cursor, every_minutes, paused, last_polled_at, next_poll_at, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)")
-      .run(wid, input.workspaceId, input.userId, service, label, connectorId, JSON.stringify(secrets), JSON.stringify(config), cursor, every, service === "browser" ? null : at.toISOString(), nextPoll.toISOString(), input.createdBy, now());
+      .run(wid, input.workspaceId, input.userId, service, label, connectorId, JSON.stringify(secrets), JSON.stringify(config), cursor, every, agentLooks ? null : at.toISOString(), nextPoll.toISOString(), input.createdBy, now());
     for (const a of agentIds) this.db.prepare("INSERT OR IGNORE INTO watch_agents (watch_id, agent_id) VALUES (?, ?)").run(wid, a);
     this.changed(input.workspaceId, agentIds);
     return this.get(wid)!;
@@ -320,12 +369,7 @@ export class Watches {
 
   private async look(r: WatchRow, at: Date) {
     const after = (minutes: number) => new Date(at.getTime() + minutes * 60_000).toISOString();
-    if (r.service === "browser") {
-      const c = JSON.parse(r.config_json) as Record<string, string>;
-      this.record(r, [{ kind: "browser_check", itemId: `browser:${r.id}`, title: r.label, url: c.url ?? null, actor: null, preview: String(c.lookFor ?? "").slice(0, 300), happenedAt: at.toISOString() }], at);
-      this.db.prepare("UPDATE watches SET last_polled_at = ?, next_poll_at = ?, last_error = NULL WHERE id = ?").run(at.toISOString(), after(r.every_minutes), r.id);
-      return;
-    }
+    if (r.service === "browser") return this.lookAtSite(r, at);
     const w = watcherFor(r.service);
     if (!w) return;
     try {
@@ -341,6 +385,53 @@ export class Watches {
     }
   }
 
+  /**
+   * A website watch's look. Wisp reads the page itself when it can (no sign-in needed, the text is in the
+   * page) and wakes the agent only with lines that are new. Otherwise the agent looks in its browser.
+   */
+  private async lookAtSite(r: WatchRow, at: Date) {
+    const after = (minutes: number) => new Date(at.getTime() + minutes * 60_000).toISOString();
+    const c = JSON.parse(r.config_json) as Record<string, string>;
+    const state = siteState(r.cursor);
+    const lookFor = String(c.lookFor ?? "").slice(0, 300);
+    const check = (preview: string) => this.record(r, [{ kind: "browser_check", itemId: `browser:${r.id}`, title: r.label, url: c.url ?? null, actor: null, preview, happenedAt: at.toISOString() }], at);
+    const read = await readPage(this.fetch, c.url ?? "");
+    if (read.ok) {
+      const added = state.page ? addedLines(state.page, read.lines) : [];
+      if (added.length) check(lookFor + NEW_ON_PAGE + added.slice(0, MAX_NEW_LINES).map((l) => l.slice(0, 200)).join("\n"));
+      this.db.prepare("UPDATE watches SET cursor = ?, last_polled_at = ?, next_poll_at = ?, last_error = NULL WHERE id = ?").run(JSON.stringify({ page: read.lines.map(lineKey) } satisfies SiteState), at.toISOString(), after(r.every_minutes), r.id);
+      return;
+    }
+    // it could read the page before: try again a few times before paying for the agent to look
+    if (state.page && (state.fails ?? 0) + 1 < PAGE_FAILS_BEFORE_AGENT) {
+      this.db.prepare("UPDATE watches SET cursor = ?, last_error = ?, next_poll_at = ? WHERE id = ?").run(JSON.stringify({ ...state, fails: (state.fails ?? 0) + 1 } satisfies SiteState), `Couldn't read the page: ${read.why}`.slice(0, 300), after(Math.min(60, r.every_minutes)), r.id);
+      return;
+    }
+    check(lookFor);
+    this.db.prepare("UPDATE watches SET cursor = ?, last_polled_at = ?, next_poll_at = ?, last_error = NULL WHERE id = ?").run(JSON.stringify({ quiet: state.quiet ?? 0 } satisfies SiteState), at.toISOString(), after(r.every_minutes), r.id);
+  }
+
+  /**
+   * A check that looked at sites in the agent's browser ended. Looks that found nothing to tell the person
+   * stretch that site's wait, doubling from the second in a row up to a day; anything else starts over.
+   */
+  checked(runId: string, quiet: boolean) {
+    const ids = (this.db.prepare("SELECT DISTINCT watch_id AS id FROM app_events WHERE run_id = ? AND kind = 'browser_check'").all(runId) as { id: string }[]).map((x) => x.id);
+    for (const wid of ids) {
+      const r = this.row(wid);
+      if (!r) continue;
+      const state = siteState(r.cursor);
+      if (state.page) continue;
+      const streak = quiet ? Math.min(MAX_QUIET_LOOKS, (state.quiet ?? 0) + 1) : 0;
+      let next = r.next_poll_at;
+      if (streak > 1 && r.last_polled_at) {
+        const later = new Date(new Date(r.last_polled_at).getTime() + Math.min(24 * 60, r.every_minutes * 2 ** (streak - 1)) * 60_000).toISOString();
+        if (!next || later > next) next = later;
+      }
+      this.db.prepare("UPDATE watches SET cursor = ?, next_poll_at = ? WHERE id = ?").run(JSON.stringify({ ...state, quiet: streak } satisfies SiteState), next, wid);
+    }
+  }
+
   /** One row per change for each agent that may see it. Repeats (same thing, same time) are dropped. */
   private record(r: WatchRow, events: FoundEvent[], at: Date) {
     if (!events.length) return;
@@ -349,7 +440,7 @@ export class Watches {
     const t = at.toISOString();
     this.db.transaction(() => {
       for (const e of events)
-        for (const a of agents) insert.run(id("evt"), r.id, a, r.user_id, r.service, e.kind.slice(0, 40), e.itemId.slice(0, 300), e.title.slice(0, 200), e.url?.slice(0, 1000) ?? null, e.actor?.slice(0, 120) ?? null, e.preview?.slice(0, 300) ?? null, new Date(e.happenedAt).toISOString(), t);
+        for (const a of agents) insert.run(id("evt"), r.id, a, r.user_id, r.service, e.kind.slice(0, 40), e.itemId.slice(0, 300), e.title.slice(0, 200), e.url?.slice(0, 1000) ?? null, e.actor?.slice(0, 120) ?? null, e.preview?.slice(0, e.kind === "browser_check" ? 4000 : 300) ?? null, new Date(e.happenedAt).toISOString(), t);
     })();
   }
 
@@ -456,10 +547,17 @@ export class Watches {
         `Open what matters with your connectors if you need more than this. If it looks like ${name} is working on something you could help with, you may offer once ("I see you're working on <thing>, want a hand?"). Most changes need nothing from you.`,
       );
     }
-    for (const s of sites)
+    for (const s of sites) {
+      const [lookFor, added] = (s.preview ?? "").split(NEW_ON_PAGE);
       out.push(
-        `\nTime to look at ${s.title}: open ${s.url} in your computer's browser (if it asks you to sign in, use login_fill or ask ${name}), and look for: ${s.preview}. Compare with your watch notes and write down what you saw. Only tell ${name} what's new and matters.`,
+        added
+          ? `\n${s.title} changed. Wisp read ${s.url} and these lines are new since it last looked:\n${added.split("\n").map((l) => `  ${l}`).join("\n")}\nYou're watching it for: ${lookFor}. If these lines answer that, you don't need to open the site; open it only to see more. Most changes need nothing from you. Only tell ${name} what's new and matters.`
+          : `\nTime to look at ${s.title}: open ${s.url} in your computer's browser (if it asks you to sign in, use login_fill or ask ${name}), and look for: ${lookFor}. Compare with your watch notes and write down what you saw. Only tell ${name} what's new and matters.`,
       );
+    }
+    const watchedSites = watches.filter((w) => w.service === "browser" && !w.paused);
+    if (watchedSites.length && !sites.length)
+      out.push(`\nWisp watches ${watchedSites.map((w) => w.config.url ?? w.label).join(", ")} for you and wakes you when ${watchedSites.length === 1 ? "it changes" : "they change"}, so don't open ${watchedSites.length === 1 ? "it" : "them"} on this check.`);
     if (events.length || mentions.length)
       out.push(
         `\nSay each thing once. When you message ${name} about something, pass \`about\` to message_person with its key (the [about: …] above, or your own short one like "essay-due-friday"). If they don't answer, it's dropped for good: Wisp won't let you raise the same key again unless they wrote back.`,
@@ -475,8 +573,8 @@ export class Watches {
   }
 
   /** What a watch may cost, against the person's allowance. */
-  estimate(workspaceId: string, userId: string, service: WatchService, everyMinutes?: number) {
+  estimate(workspaceId: string, userId: string, service: WatchService, everyMinutes?: number, watchId?: string) {
     const every = everyMinutes ?? (service === "browser" ? BROWSER_EVERY_MINUTES : watcherFor(service)?.everyMinutes ?? 5);
-    return watchEstimate(service, every, this.hub.background.dailyTokens(workspaceId, userId));
+    return watchEstimate(service, every, this.hub.background.dailyTokens(workspaceId, userId), !!watchId && this.readsPage(watchId));
   }
 }

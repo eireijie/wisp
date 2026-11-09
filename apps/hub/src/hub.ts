@@ -742,6 +742,7 @@ export class Hub {
       // a memory pass posts nothing: what it saved is in Memory's history
       store.setRunStatus(run.id, "finalText" in result ? "done" : "failed", "error" in result ? result.error : undefined);
       this.autoMemory.finished(run.id);
+      if (agent && run.requestedBy) this.background.warnIfClimbing(agent.workspaceId, run.requestedBy);
     } else if (run.kind === "background") {
       store.setRunStatus(run.id, "finalText" in result ? "done" : "failed", "error" in result ? result.error : undefined);
       this.background.finished(run, "finalText" in result ? result.finalText.trim() || live.text.trim() : `The check failed: ${result.error}`);
