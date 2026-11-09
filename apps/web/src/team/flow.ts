@@ -468,7 +468,34 @@ export function fillTemplate(t: Pick<TeamTemplate, "roles" | "steps">, agents: P
     if (pick) used.add(pick.id);
     return pick?.id ?? null;
   });
-  return withChart({ ...(base ?? emptyTeam()), nodes: [], edges: [], roles, steps });
+  return withChart({ ...(base ?? emptyTeam()), nodes: [], edges: [], roles: sepRoles(roles, steps, agents), steps: keepReviewersApart(steps, agents) });
+}
+
+/** A review or challenge step never goes to the agent whose work it reviews, when another agent exists. */
+export function keepReviewersApart<T extends { id: string; kind: string; next?: string | null; sendBackTo?: string | null; agentId?: string | null }>(steps: T[], agents: Pick<Agent, "id">[]): T[] {
+  if (agents.length < 2) return steps;
+  const out = steps.map((s) => ({ ...s }));
+  for (const s of out) {
+    if (s.kind !== "review") continue;
+    const reviewed = out.find((x) => x.next === s.id) ?? out.find((x) => x.id === s.sendBackTo);
+    if (!reviewed?.agentId || s.agentId !== reviewed.agentId) continue;
+    // someone who isn't the author, preferring the one doing the least so far
+    const load = (id: string) => out.filter((x) => x.agentId === id).length;
+    const other = agents.filter((a) => a.id !== reviewed.agentId).sort((a, b) => load(a.id) - load(b.id))[0];
+    if (other) s.agentId = other.id;
+  }
+  return out;
+}
+
+/** Roles a split-the-work step hands pieces to: the reviewer isn't the builder, when there's someone else. */
+function sepRoles<R extends { id: string; agentId?: string | null }>(roles: R[], _steps: unknown, agents: Pick<Agent, "id">[]): R[] {
+  if (agents.length < 2) return roles;
+  const builders = new Set(roles.filter((r) => r.id !== "reviewer").map((r) => r.agentId).filter(Boolean));
+  return roles.map((r) => {
+    if (r.id !== "reviewer" || !r.agentId || builders.size !== 1 || !builders.has(r.agentId)) return r;
+    const other = agents.find((a) => a.id !== r.agentId);
+    return other ? { ...r, agentId: other.id } : r;
+  });
 }
 
 /** Steps an agent drew, as a team: normalized and laid out. */

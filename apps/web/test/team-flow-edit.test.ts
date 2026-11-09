@@ -125,6 +125,18 @@ describe("editing a team's flow", () => {
     expect(describeFlow(team, (id) => id ?? "Someone").length).toBe(team.steps!.length);
   });
 
+  it("never gives the challenge step to the agent whose plan it challenges, with two agents on one harness", () => {
+    const two = [{ id: "atlas", harness: "claude-code" }, { id: "bea", harness: "claude-code" }] as never[];
+    for (const t of TEAM_TEMPLATES) {
+      const team = fillTemplate(t, two);
+      for (const s of team.steps!) {
+        if (s.kind !== "review") continue;
+        const reviewed = team.steps!.find((x) => x.next === s.id) ?? team.steps!.find((x) => x.id === s.sendBackTo);
+        expect(s.agentId, `${t.id}: ${s.id}`).not.toBe(reviewed?.agentId);
+      }
+    }
+  });
+
   it("keeps dragged steps where they are when the chart is laid out again", () => {
     let t = sample();
     const first = t.steps![0].id;
