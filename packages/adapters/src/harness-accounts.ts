@@ -132,6 +132,8 @@ export class HarnessAccounts {
   async listChecked(harness: string, binary?: string, probe: SignInProbe = askHarness): Promise<HarnessAccount[]> {
     return Promise.all(
       this.list(harness).map(async (a) => {
+        // a run here was just turned away for this sign-in: the harness's own status would still say yes
+        if (this.failed(harness, a.id)) return { ...a, signedIn: false };
         if (a.signedIn === true || !SIGN_IN_STATUS[harness]) return a;
         const key = `${harness}\n${a.id}`;
         const known = this.probed.get(key);
@@ -146,8 +148,77 @@ export class HarnessAccounts {
   }
 
   /** A sign-in finished: ask again next time instead of repeating the old answer. */
-  forgetChecks() {
+  forgetChecks(harness?: string) {
     this.probed.clear();
+    if (harness) this.writeFailed(Object.fromEntries(Object.entries(this.readFailed()).filter(([k]) => !k.startsWith(`${harness}\n`))));
+  }
+
+  private get failedFile() {
+    return path.join(this.wispDir, "harness-signin-failed.json");
+  }
+
+  private readFailed(): Record<string, string> {
+    try {
+      return JSON.parse(fs.readFileSync(this.failedFile, "utf8")) ?? {};
+    } catch {
+      return {};
+    }
+  }
+
+  private writeFailed(v: Record<string, string>) {
+    if (!Object.keys(v).length) return void fs.rmSync(this.failedFile, { force: true });
+    fs.mkdirSync(this.wispDir, { recursive: true });
+    fs.writeFileSync(this.failedFile, JSON.stringify(v, null, 2), { mode: 0o600 });
+  }
+
+  /**
+   * A run was turned away because its sign-in expired or was revoked ("OAuth session expired and
+   * could not be refreshed"), which the harness's status command still calls signed in. Count the
+   * account as signed out until it signs in again: a sign-in through Wisp, its login files changing,
+   * or a run that works. Not for a run on a Models connection, whose sign-in isn't this account's.
+   */
+  markSignedOut(harness: string, account: string) {
+    if (!harnessDir(harness, this.h)) return;
+    this.writeFailed({ ...this.readFailed(), [`${harness}\n${account}`]: this.stamp(harness, account) });
+  }
+
+  /** A run worked: whatever turned the account away before is fixed. True when that changed something. */
+  markWorked(harness: string, account: string): boolean {
+    const all = this.readFailed();
+    const key = `${harness}\n${account}`;
+    if (!(key in all)) return false;
+    delete all[key];
+    this.writeFailed(all);
+    return true;
+  }
+
+  /** Was the account's last run turned away for its sign-in, with nothing signed in since? */
+  private failed(harness: string, account: string): boolean {
+    const all = this.readFailed();
+    const key = `${harness}\n${account}`;
+    if (!(key in all)) return false;
+    if (all[key] === this.stamp(harness, account)) return true;
+    // someone signed in again (here, in a terminal): ask the harness again
+    delete all[key];
+    this.writeFailed(all);
+    return false;
+  }
+
+  /** When the account's login files last changed, to tell a new sign-in from the one that failed. */
+  private stamp(harness: string, account: string): string {
+    let dir: string;
+    try {
+      dir = this.dir(harness, account);
+    } catch {
+      return "";
+    }
+    return LOGIN_FILES.map((f) => {
+      try {
+        return `${f}:${fs.statSync(path.join(dir, f)).mtimeMs}`;
+      } catch {
+        return "";
+      }
+    }).join("|");
   }
 
   /** The account an agent uses (the default one unless it was given another). */
@@ -292,6 +363,19 @@ export function setupTokenFrom(output: string): string | null {
   return /sk-ant-oat\d*-[A-Za-z0-9_-]{20,}/.exec(output.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, ""))?.[0] ?? null;
 }
 
+/** The files in an account's folder that a sign-in writes, for every harness. */
+const LOGIN_FILES = [".credentials.json", ".credentials", "auth.json", ".env", "oauth_creds.json", "credentials/kimi-code.json"];
+
+/** Claude Code's file login, if it's one that can't work any more: expired with nothing to renew it. */
+function claudeLoginDead(file: string): boolean {
+  try {
+    const o = JSON.parse(fs.readFileSync(file, "utf8")).claudeAiOauth;
+    return !!o && typeof o.expiresAt === "number" && o.expiresAt < Date.now() && !o.refreshToken;
+  } catch {
+    return false;
+  }
+}
+
 /** Whether an account's folder holds a login, from the files harnesses keep it in (null: can't tell). */
 function signedIn(harness: string, dir: string): { signedIn: boolean | null } {
   if (harness === "codex") return { signedIn: fs.existsSync(path.join(dir, "auth.json")) };
@@ -311,7 +395,7 @@ function signedIn(harness: string, dir: string): { signedIn: boolean | null } {
   }
   if (harness === "claude-code") {
     // Linux and Windows keep it in a file; macOS keeps it in the Keychain, which only Claude Code reads
-    if (fs.existsSync(path.join(dir, ".credentials.json"))) return { signedIn: true };
+    if (fs.existsSync(path.join(dir, ".credentials.json"))) return { signedIn: !claudeLoginDead(path.join(dir, ".credentials.json")) };
     return { signedIn: process.platform === "darwin" ? null : false };
   }
   if (harness === "kimi") return { signedIn: fs.existsSync(path.join(dir, "credentials", "kimi-code.json")) };

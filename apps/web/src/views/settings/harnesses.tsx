@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useComputerMode } from "../../computerMode.ts";
 import { ArrowUp, ChevronLeft, Copy, ExternalLink, Loader2, Plus, Share2, UserPen, LogIn, UserMinus, FileCog } from "lucide-react";
 import { harnessLabel, type Connector, type HarnessCatalog, type HarnessLogin, type HarnessSettings, type HarnessSettingsChange, type HarnessSettingItem } from "@wisp/core";
 import { api } from "../../api.ts";
@@ -45,6 +46,10 @@ const HarnessTile = ({ harness, size = 40 }: { harness: string; size?: number })
  */
 export function HarnessesPage() {
   const { computers, error, reload } = useHarnessComputers();
+  // which device hosts a computer is for Advanced; Simple names it plainly
+  const { advanced, sharedComputerId } = useComputerMode();
+  const kindLabel = (c: { id: string; kind: string }, host: string | null | undefined) =>
+    c.kind !== "vm" ? "Device" : advanced ? `VM${host ? ` on ${host}` : ""}` : c.id === sharedComputerId ? "" : "Its own computer";
   const devices = useDevices(10_000);
   const agents = useStore((s) => s.agents);
   const mine = useMemo(() => (devices ?? []).filter((d) => d.mine), [devices]);
@@ -92,8 +97,7 @@ export function HarnessesPage() {
                 <div className="mb-1.5 flex items-baseline justify-between gap-3 px-1">
                   <h3 className="truncate text-[14px] font-semibold">{c.name}</h3>
                   <span className="shrink-0 text-[12px] text-faint">
-                    {c.kind === "vm" ? `VM${host ? ` on ${host}` : ""}` : "Device"}
-                    {c.online ? "" : " · offline"}
+                    {[kindLabel(c, host), c.online ? "" : "offline"].filter(Boolean).join(" · ")}
                   </span>
                 </div>
                 <div className="overflow-hidden rounded-xl border border-line bg-card divide-y divide-line">

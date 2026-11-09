@@ -71,7 +71,9 @@ struct FlowStrip: View {
         Text(waiting.why).font(.footnote).foregroundStyle(.orange)
         HStack(spacing: 8) {
           // the app tint is the text color, so a filled button's label is the background's (as in primaryButton)
-          if waiting.failed == true {
+          if let own = waiting.selfReview {
+            Button("Let \(own.agent) review its own work") { decide("allow", stepId: s.id) }.foregroundStyle(Color(.systemBackground)).buttonStyle(.borderedProminent)
+          } else if waiting.failed == true {
             Button("Try again") { decide("retry", stepId: s.id) }.foregroundStyle(Color(.systemBackground)).buttonStyle(.borderedProminent)
             Button("Skip this step") { decide("approve", stepId: s.id) }.buttonStyle(.bordered)
           } else {
