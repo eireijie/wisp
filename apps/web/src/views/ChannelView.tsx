@@ -13,6 +13,8 @@ import { patchAgent, prettyModel, tokens, useAgentContext, type AgentContext } f
 import { ModelLine, RunPanel } from "../components/RunPanel.tsx";
 import { DiscussionCard } from "../components/Discussion.tsx";
 import { ApprovalCard, ChangeCard, ChatCard, ComputerPart, RoutineChip } from "../components/AgentCards.tsx";
+import { downloadFile, FilePreview } from "../components/FilePreview.tsx";
+import { fileKind } from "../components/fileKind.ts";
 import { AgentAvatar, Menu, Modal, Pill, Popover, StatusDot, UserAvatar, clockTime, cx, harnessLabel } from "../components/ui.tsx";
 import { AgentPill } from "../components/AgentPill.tsx";
 import { CallScreen } from "../voice/CallScreen.tsx";
@@ -1205,55 +1207,72 @@ function Remembered({ tools }: { tools: MessagePart[] }) {
   );
 }
 
+/**
+ * A file in a message. Text, images and PDFs open in a preview (with Download); anything else
+ * downloads, and the chip says so while it does.
+ */
 function FileChip({ id, name }: { id: string; name: string }) {
   const [url, setUrl] = useState<string | null>(null);
-  const isImage = /\.(png|jpe?g|gif|webp)$/i.test(name);
+  const [preview, setPreview] = useState(false);
+  const [saving, setSaving] = useState<"busy" | "done" | "failed" | null>(null);
+  const kind = fileKind(name);
   useEffect(() => {
-    if (!isImage) return;
+    if (kind !== "image") return;
     let u: string | null = null;
     fileUrl(id).then((x) => setUrl((u = x)), () => {});
     return () => {
       if (u) URL.revokeObjectURL(u);
     };
-  }, [id, isImage]);
+  }, [id, kind]);
+  useEffect(() => {
+    if (saving !== "done" && saving !== "failed") return;
+    const t = setTimeout(() => setSaving(null), 2500);
+    return () => clearTimeout(t);
+  }, [saving]);
   const open = async () => {
-    const u = url ?? (await fileUrl(id));
-    const a = document.createElement("a");
-    a.href = u;
-    a.download = name;
-    a.click();
+    if (kind !== "other") return setPreview(true);
+    if (saving === "busy") return;
+    setSaving("busy");
+    try {
+      await downloadFile(id, name);
+      setSaving("done");
+    } catch {
+      setSaving("failed");
+    }
   };
-  if (isImage && url) return <img src={url} alt={name} onClick={open} className="max-h-64 max-w-full rounded-3xl cursor-pointer" />;
+  const dialog = preview && <FilePreview id={id} name={name} onClose={() => setPreview(false)} />;
+  if (kind === "image" && url)
+    return (
+      <>
+        <img src={url} alt={name} onClick={() => setPreview(true)} className="max-h-64 max-w-full rounded-3xl cursor-pointer" />
+        {dialog}
+      </>
+    );
   return (
-    <button onClick={open} className="flex items-center gap-2.5 rounded-2xl bg-card px-3.5 py-2.5 text-sm hover:bg-hover">
-      <FileText size={16} className="text-muted" /> {name}
-    </button>
+    <>
+      <button onClick={() => void open()} aria-busy={saving === "busy"} className="flex items-center gap-2.5 rounded-2xl bg-card px-3.5 py-2.5 text-sm hover:bg-hover">
+        {saving === "busy" ? <Loader2 size={16} className="text-muted animate-spin" /> : saving === "done" ? <Check size={16} className="text-ok" /> : <FileText size={16} className="text-muted" />} {name}
+        {saving && saving !== "busy" && <span className="text-muted" role="status">{saving === "done" ? "· Downloaded" : "· Couldn't download"}</span>}
+      </button>
+      {dialog}
+    </>
   );
 }
 
-/** What a run is doing, short: "Reading main.ts", "Editing files", "Thinking…". */
-function workLine(run: LiveRun, agents: Agent[]): string {
-  const inp = (run.last?.input ?? {}) as Record<string, unknown>;
-  const path = [inp.file_path, inp.path, inp.filename, inp.file].find((v) => typeof v === "string") as string | undefined;
-  const base = path?.split("/").pop();
-  const kind = run.last ? workKind(run.last.name) : null;
-  if (base && kind === "read") return `Reading ${base}`;
-  if (base && kind === "edit") return `Writing ${base}`;
-  if (!run.last && !run.text) return "Thinking…";
-  const t = runActivity(run, agents);
-  return t.charAt(0).toUpperCase() + t.slice(1) + (/…$/.test(t) ? "" : "…");
-}
-
-/** An agent's reply as it streams in, before it's posted: its words so far, then three pulsing dots and what it's doing. */
+/**
+ * An agent's reply as it streams in, before it's posted: its words so far. What it's doing shows
+ * once, in the activity pill above the composer (with Stop), not again here.
+ */
 function StreamingItem({ run }: { run: LiveRun }) {
   const names = useNames();
-  const agents = useStore((s) => s.agents);
   const handles = useHandleNames();
   const colors = useHandleColors();
   const agent = names.agent(run.agentId);
   const html = useMemo(() => (run.text ? renderMarkdown(run.text, { handles, colors }) : ""), [run.text, handles, colors]);
   const computerId = agent?.computerId;
   const home = useContext(SoloAgent) === run.agentId;
+  const screen = run.usedComputer && !!computerId;
+  if (!html && !screen) return null;
   return (
     <div className="px-3 md:px-5 pt-1 pb-1.5 flex items-end gap-2">
       {!home && (
@@ -1264,15 +1283,7 @@ function StreamingItem({ run }: { run: LiveRun }) {
       <div className="min-w-0 flex flex-col items-start gap-[3px] max-w-[84%] md:max-w-[36rem]">
         {!home && <div className="px-3.5 pb-0.5 text-[12px] text-muted">{agent?.name ?? "Agent"}</div>}
         {html && <div className="bubble them text-[15px] md:text-[15px]"><div className="prose-w" dangerouslySetInnerHTML={{ __html: html }} /></div>}
-        <div role="status" aria-live="polite" aria-label={`${agent?.name ?? "Agent"} is working: ${workLine(run, agents)}`} className="m-work bubble them inline-flex items-center gap-2.5 !py-3">
-          <span className="work-dots" aria-hidden>
-            <i />
-            <i />
-            <i />
-          </span>
-          <span className="text-[15px] md:text-[14px] text-muted">{workLine(run, agents)}</span>
-        </div>
-        {run.usedComputer && computerId && <ComputerPart computerId={computerId} />}
+        {screen && <ComputerPart computerId={computerId} />}
       </div>
     </div>
   );

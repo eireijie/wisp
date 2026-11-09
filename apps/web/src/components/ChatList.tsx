@@ -9,7 +9,7 @@ import { openDm } from "../openDm.ts";
 import { AgentAvatar, Menu, cx, clockTime } from "./ui.tsx";
 import { useSheetBackdrop } from "../motion.ts";
 import { ChannelSettings, SectionDialog, leaveChannel, setChannelPrefs } from "./Channels.tsx";
-import { activityPhrase } from "./agentActivity.ts";
+import { workingLine } from "./agentActivity.ts";
 import { cleanPreview } from "./CommandPalette.tsx";
 import { loopLine } from "./Loops.tsx";
 import { UserAvatarButton } from "./Rail.tsx";
@@ -134,7 +134,7 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
     const run = c.channel ? Object.values(live).find((r) => r.channelId === c.channel!.id && (c.kind === "team" || r.agentId === c.agent?.id)) : undefined;
     if (run) {
       const who = c.kind === "team" ? `${agents.find((a) => a.id === run.agentId)?.name ?? "An agent"} · ` : "";
-      return { text: `${who}Working · ${activityPhrase(run.last?.name, !!run.text)}`, working: true };
+      return { text: `${who}${workingLine(run.last?.name, !!run.text)}`, working: true };
     }
     if (!c.agent?.status || c.kind === "team") {
       /* fall through to the message */

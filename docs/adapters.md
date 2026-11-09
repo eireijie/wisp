@@ -23,7 +23,8 @@ Any harness that supports MCP servers can add `wisp-mcp` with an agent token (Ag
 | `teams_list`, `discussion_start` | See the teams, and talk something through with other agents before doing it |
 | `team_setup` | Set up a team's roles and steps from what a person described |
 | `branch_merge` | Merge a reviewed coding task's branch into the team's base branch |
-| `file_upload`, `file_download`, `file_view` | Move files between devices; look at an image or text file |
+| `file_upload` | Send a file the agent made: read where it runs, or from its computer when only the computer has it, and attached to the agent's reply in that chat (up to 100 MB) |
+| `file_download`, `file_view` | Save a Wisp file where the agent runs; look at an image or text file |
 | `computer_screenshot`, `computer_click`, `computer_type`, `computer_key`, `computer_scroll`, `computer_drag`, `computer_move`, `computer_open`, `computer_wait`, `computer_run`, `computer_ask_human` | Use the agent's computer, and ask a person for help on it (only when the agent has a computer; see [Computers](computers.md)) |
 | `approval_request` | Ask a person's OK before doing something sensitive |
 | `routine_save`, `routine_list` | Keep and list routines: tasks the agent can do again, some on a schedule |
