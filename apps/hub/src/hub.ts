@@ -394,6 +394,22 @@ export class Hub {
     return this.harnessesWhere(agent).find((h) => h.harness === agent.harness);
   }
 
+  /**
+   * The model sign-in a harness's CLI in a terminal on `c` uses: the one that agent runs there use
+   * (then any agent's with that harness), when it's this person's own; else their own first
+   * connection the harness can use. Never someone else's: the terminal could read it.
+   */
+  terminalCredential(c: Computer, userId: string, harness: string): RunCredential | null {
+    const own = (cid: string | null | undefined) => {
+      const r = cid ? this.models.row(cid) : undefined;
+      return r && r.workspace_id === c.workspaceId && r.user_id === userId && credentialSupport(harness, r.provider, r.kind) ? r : undefined;
+    };
+    const agents = this.store.agents(c.workspaceId).filter((a) => a.harness === harness);
+    const here = agents.filter((a) => (c.kind === "vm" ? a.computerId === c.id && this.runsInComputer(a) : a.nodeId === c.nodeId && !this.runsInComputer(a)));
+    const r = [...here, ...agents].map((a) => own(a.settings.connectionId)).find(Boolean) ?? this.models.mine(c.workspaceId, userId).find((m) => own(m.id));
+    return r ? this.models.credentialFor(r.id) : null;
+  }
+
   /** The connection a run carries: the agent's, when its harness can use it. */
   credentialFor(agent: Pick<Agent, "workspaceId" | "harness" | "settings">): RunCredential | null {
     const cid = agent.settings.connectionId;
@@ -636,7 +652,8 @@ export class Hub {
       case "credential_refreshed": {
         // only for a run of this device's on this connection, while it runs or shortly after, and
         // only for sign-ins that rotate (a key or a long-lived token is never "renewed")
-        if (!msg.runId || !this.mayRenew(conn, msg.runId, msg.connectionId)) return;
+        const ok = msg.terminal ? this.terminals.handedOut.has(`${conn.nodeId}:${msg.connectionId}`) : !!msg.runId && this.mayRenew(conn, msg.runId, msg.connectionId);
+        if (!ok) return;
         if (!this.models.rotates(msg.connectionId)) return;
         if (this.models.saveRenewed(msg.connectionId, msg.secret)) {
           this.connectionsChanged(msg.connectionId);

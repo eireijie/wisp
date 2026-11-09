@@ -305,7 +305,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!body) return;
     try {
       const session = sessionName(body.session);
-      return { session, url: `/ws/terminals/${comp.id}?ticket=${hub.terminals.ticket(comp, c.actor.id, session, body.code, undefined, body.launch)}` };
+      return { session, url: `/ws/terminals/${comp.id}?ticket=${hub.terminals.ticket(comp, c.actor.id, session, body.code, undefined, body.launch, body.launch ? hub.terminalCredential(comp, c.actor.id, body.launch) : null)}` };
     } catch (err) {
       return fail(reply, err);
     }

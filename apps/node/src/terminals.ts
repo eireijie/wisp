@@ -28,6 +28,8 @@ export interface ShellCommand {
   stop?: () => void;
   /** it's tmux, which redraws the whole screen for a viewer that comes back, so nothing is replayed */
   redraws?: boolean;
+  /** called once when the shell is gone (exited or closed) */
+  ended?: () => void;
 }
 
 export interface Pty {
@@ -45,6 +47,7 @@ interface Shell {
   pty: Pty;
   stop?: () => void;
   redraws?: boolean;
+  ended?: () => void;
   /** the size its viewer asked for last */
   size?: { cols: number; rows: number };
   replay: Buffer[];
@@ -59,6 +62,7 @@ export function sessionName(raw: string): string {
 }
 
 /** A word that's safe inside single quotes in sh. */
+export const shellQuote = (s: string) => sq(s);
 const sq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 /**
@@ -100,7 +104,7 @@ export function vmShell(vm: { bin: string; name: string; user: string; home: str
     '  if [ -n "$L" ]; then exec tmux new-session -A -s "wisp-$1" "$L; exec bash -l" \\; set-option -t "wisp-$1" status off; fi',
     '  exec tmux new-session -A -s "wisp-$1" \\; set-option -t "wisp-$1" status off',
     "fi",
-    '[ -n "$L" ] && $L',
+    '[ -n "$L" ] && sh -c "$L"',
     "exec bash -l",
   ].join("\n");
   return {
@@ -180,7 +184,7 @@ export class Terminals {
         pty.kill();
         shell = raced;
       } else {
-        const s: Shell = { key, pty, stop: cmd.stop, redraws: cmd.redraws, replay: [], replayBytes: 0, viewer: null, timer: null };
+        const s: Shell = { key, pty, stop: cmd.stop, redraws: cmd.redraws, ended: cmd.ended, replay: [], replayBytes: 0, viewer: null, timer: null };
         shell = s;
         this.shells.set(key, s);
         pty.onData((text) => {
@@ -194,6 +198,7 @@ export class Terminals {
           if (this.shells.get(key) !== s) return;
           this.shells.delete(key);
           if (s.timer) clearTimeout(s.timer);
+          s.ended?.();
           const v = s.viewer;
           s.viewer = null;
           if (v) {
@@ -293,6 +298,7 @@ export class Terminals {
     try {
       s.stop?.();
     } catch {}
+    s.ended?.();
   }
 }
 

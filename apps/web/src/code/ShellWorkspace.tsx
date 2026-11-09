@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Poin
 import { Columns2, Maximize2, Minimize2, Play, Plus, Rows2, SquareTerminal, X } from "lucide-react";
 import { HARNESSES } from "@wisp/core";
 import { api } from "../api.ts";
+import { useStore } from "../store.ts";
 import { href } from "../router.ts";
 import { Menu, cx } from "../components/ui.tsx";
 import { TerminalPane, type ShellTarget } from "../components/TerminalPane.tsx";
@@ -16,6 +17,7 @@ import { MAX_PANES, MAX_TABS, allLeaves, layout, leaves, neighbor, newSession, r
  * dropped connection or another tab picks up the same shells.
  */
 
+/** the layout, one per Wisp workspace (its computers are that workspace's) */
 const STORE = "wisp.code.workspace";
 /** before tabs: a flat list of panes */
 const OLD_STORE = "wisp.code.panes";
@@ -31,6 +33,10 @@ function read(key: string): unknown {
 const harnessLabel = (id?: string) => HARNESSES.find((h) => h.id === id)?.label;
 
 type Move = "left" | "right" | "up" | "down";
+
+/** narrower or shorter than this, a shell's prompt wraps: a split that would make one goes to a new tab */
+const MIN_W = 240;
+const MIN_H = 110;
 
 /** what a shifted key types on a US keyboard, for events that report the unshifted key */
 const SHIFTED: Record<string, string> = { "'": '"', "5": "%", "7": "&", "\\": "|" };
@@ -48,12 +54,21 @@ const KEYS: [string, string][] = [
 ];
 
 /** `lead`: what the header starts with. `embedded`: inside a page that already keeps clear of the phone's tab bar. */
-export function ShellWorkspace({ lead, embedded = false }: { lead?: ReactNode; embedded?: boolean }) {
+export function ShellWorkspace(props: { lead?: ReactNode; embedded?: boolean }) {
+  const workspaceId = useStore((s) => s.me?.workspace.id) ?? "none";
+  // a workspace of its own each, started afresh when you switch
+  return <Shells key={workspaceId} store={`${STORE}:${workspaceId}`} {...props} />;
+}
+
+function Shells({ lead, embedded = false, store }: { lead?: ReactNode; embedded?: boolean; store: string }) {
   const on = useFeatures().code;
   const [targets, setTargets] = useState<ShellTarget[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [ws, setWs] = useState<Workspace>(() => restore(read(STORE), read(OLD_STORE), () => crypto.randomUUID()));
+  // the layout saved before layouts were kept per workspace is taken once, by the first one opened
+  const [ws, setWs] = useState<Workspace>(() => restore(read(store) ?? read(STORE), read(OLD_STORE), () => crypto.randomUUID()));
   const [armed, setArmed] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const pruned = useRef(false);
   const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
   const layers = useRef(new Map<string, HTMLDivElement>());
 
@@ -61,7 +76,20 @@ export function ShellWorkspace({ lead, embedded = false }: { lead?: ReactNode; e
     let gone = false;
     const refresh = () =>
       api<ShellTarget[]>("GET", "/api/terminals").then(
-        (t) => !gone && (setTargets(t), setError(null)),
+        (t) => {
+          if (gone) return;
+          setTargets(t);
+          setError(null);
+          // panes on computers that aren't yours to open any more (removed, another workspace's) go, once on load
+          if (pruned.current) return;
+          pruned.current = true;
+          const ids = new Set(t.map((x) => x.id));
+          setWs((w) => {
+            let next = w;
+            for (const l of allLeaves(w)) if (!ids.has(l.computerId)) next = dropPane(next, l.key);
+            return next;
+          });
+        },
         (err) => !gone && setError((err as Error).message),
       );
     void refresh();
@@ -80,10 +108,17 @@ export function ShellWorkspace({ lead, embedded = false }: { lead?: ReactNode; e
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORE, JSON.stringify(ws));
+      localStorage.setItem(store, JSON.stringify(ws));
+      localStorage.removeItem(STORE);
       localStorage.removeItem(OLD_STORE);
     } catch {}
-  }, [ws]);
+  }, [ws, store]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   const tab = ws.tabs.find((t) => t.id === ws.active) ?? ws.tabs[0];
   const changeTab = useCallback((id: string, fn: (t: Tab) => Tab) => setWs((w) => ({ ...w, tabs: w.tabs.map((t) => (t.id === id ? fn(t) : t)) })), []);
@@ -102,8 +137,21 @@ export function ShellWorkspace({ lead, embedded = false }: { lead?: ReactNode; e
     ...(launch ? { launch } : {}),
   });
 
+  /** would splitting the focused pane leave both halves big enough for a prompt? */
+  const roomFor = (dir: "row" | "col") => {
+    const box = layers.current.get(tab.id)?.getBoundingClientRect();
+    const r = layout(tab.root).panes.find((p) => p.leaf.key === tab.focus)?.rect;
+    if (narrow || !box || !r || !box.width) return true;
+    return dir === "row" ? (r.w * box.width) / 2 >= MIN_W : (r.h * box.height) / 2 >= MIN_H;
+  };
+
   const addPane = (target: ShellTarget | undefined, dir: "row" | "col" = "row", launch?: string) => {
-    if (!target || leaves(tab.root).length >= MAX_PANES) return;
+    if (!target) return;
+    if (tab.root && (leaves(tab.root).length >= MAX_PANES || !roomFor(dir))) {
+      if (ws.tabs.length >= MAX_TABS) return setNotice("No room for another pane. Close one first.");
+      setNotice("No room for another pane here, so it opened in a new tab.");
+      return newTab(target, launch);
+    }
     const leaf = leafFor(target, launch);
     changeTab(tab.id, (t) => ({ ...t, root: splitPane(t.root, t.focus ?? "", dir, leaf), focus: leaf.key, zoom: false }));
   };
@@ -115,21 +163,7 @@ export function ShellWorkspace({ lead, embedded = false }: { lead?: ReactNode; e
     setWs((w) => ({ tabs: [...w.tabs, t], active: t.id }));
   };
 
-  const closePane = (key: string) =>
-    setWs((w) => {
-      const owner = w.tabs.find((t) => leaves(t.root).some((l) => l.key === key));
-      if (!owner) return w;
-      const root = removePane(owner.root, key);
-      // an emptied tab goes, unless it's the last one
-      if (!root && w.tabs.length > 1) {
-        const tabs = w.tabs.filter((t) => t.id !== owner.id);
-        const i = w.tabs.indexOf(owner);
-        return { tabs, active: w.active === owner.id ? tabs[Math.max(0, i - 1)].id : w.active };
-      }
-      const keys = leaves(root).map((l) => l.key);
-      const focus = owner.focus && keys.includes(owner.focus) ? owner.focus : (keys.at(-1) ?? null);
-      return { ...w, tabs: w.tabs.map((t) => (t.id === owner.id ? { ...t, root, focus, zoom: t.zoom && keys.length > 1 } : t)) };
-    });
+  const closePane = (key: string) => setWs((w) => dropPane(w, key));
 
   const closeTab = (id: string) =>
     setWs((w) => {
@@ -243,7 +277,7 @@ export function ShellWorkspace({ lead, embedded = false }: { lead?: ReactNode; e
     return l ? (harnessLabel(l.launch) ?? l.session) : "empty";
   };
 
-  const full = leaves(tab.root).length >= MAX_PANES;
+  const full = leaves(tab.root).length >= MAX_PANES && ws.tabs.length >= MAX_TABS;
   const btn = "inline-flex h-7 items-center gap-1.5 rounded-[7px] border px-2.5 text-[12.5px] transition-[background-color,transform] active:scale-[.96] disabled:opacity-40";
   const iconBtn = "grid h-7 w-7 place-items-center rounded-[7px] text-[#a1a1aa] transition-[background-color,color,transform] hover:bg-white/[.06] hover:text-[#f2f2f4] active:scale-[.94] disabled:opacity-40";
 
@@ -252,7 +286,7 @@ export function ShellWorkspace({ lead, embedded = false }: { lead?: ReactNode; e
       <Menu
         align="right"
         trigger={(_, toggle) => (
-          <button type="button" onClick={toggle} disabled={full} title={full ? `Up to ${MAX_PANES} panes in a tab` : "A shell on one of your computers"} className={cx(btn, primary ? "border-[#f2f2f4] bg-[#f2f2f4] font-semibold text-[#0c0c0e] hover:bg-white" : "border-white/[.09] bg-[#1d1d21] text-[#f2f2f4] hover:bg-[#26262b]")}>
+          <button type="button" onClick={toggle} disabled={full} title={full ? "No room for another pane" : "A shell on one of your computers"} className={cx(btn, primary ? "border-[#f2f2f4] bg-[#f2f2f4] font-semibold text-[#0c0c0e] hover:bg-white" : "border-white/[.09] bg-[#1d1d21] text-[#f2f2f4] hover:bg-[#26262b]")}>
             <Plus size={14} strokeWidth={2} />
             {label}
           </button>
@@ -402,7 +436,7 @@ export function ShellWorkspace({ lead, embedded = false }: { lead?: ReactNode; e
               <button type="button" onClick={() => setWs((w) => ({ ...w, active: t.id }))} className="truncate px-2" title={`Tab ${i + 1} (⌃B ${i + 1})`}>
                 {i + 1}:{tabName(t)}
               </button>
-              <button type="button" onClick={() => closeTab(t.id)} aria-label={`Close tab ${i + 1}`} title="Close tab (⌃B &)" className="-ml-1 mr-0.5 hidden h-4 w-4 place-items-center rounded text-[#8e8e96] hover:text-[#f2f2f4] group-hover:grid">
+              <button type="button" onClick={() => closeTab(t.id)} aria-label={`Close tab ${i + 1}`} title="Close tab (⌃B &)" className={cx("-ml-1 mr-0.5 h-4 w-4 place-items-center rounded text-[#8e8e96] hover:text-[#f2f2f4] focus-visible:grid group-hover:grid", t.id === tab.id ? "grid" : "hidden")}>
                 <X size={11} strokeWidth={2.2} />
               </button>
             </span>
@@ -422,7 +456,11 @@ export function ShellWorkspace({ lead, embedded = false }: { lead?: ReactNode; e
               </button>
             </span>
           )}
-          {!narrow &&
+          {notice ? (
+            <span role="status" className="m-fade-in truncate text-[#a1a1aa]">
+              {notice}
+            </span>
+          ) : !narrow &&
             (armed ? (
               <span className="m-fade-in flex items-center gap-3 truncate text-[#a1a1aa]">
                 <kbd className="rounded-[4px] bg-[#6aa2ff] px-1.5 text-[#0c0c0e]">⌃B</kbd>
@@ -455,4 +493,19 @@ function Gone({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
+}
+
+/** The workspace without the pane `key`: its sibling takes the room, and an emptied tab goes unless it's the last. */
+function dropPane(w: Workspace, key: string): Workspace {
+  const owner = w.tabs.find((t) => leaves(t.root).some((l) => l.key === key));
+  if (!owner) return w;
+  const root = removePane(owner.root, key);
+  if (!root && w.tabs.length > 1) {
+    const tabs = w.tabs.filter((t) => t.id !== owner.id);
+    const i = w.tabs.indexOf(owner);
+    return { tabs, active: w.active === owner.id ? tabs[Math.max(0, i - 1)].id : w.active };
+  }
+  const keys = leaves(root).map((l) => l.key);
+  const focus = owner.focus && keys.includes(owner.focus) ? owner.focus : (keys.at(-1) ?? null);
+  return { ...w, tabs: w.tabs.map((t) => (t.id === owner.id ? { ...t, root, focus, zoom: t.zoom && keys.length > 1 } : t)) };
 }

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { WebSocket } from "ws";
-import { TERM_PREFIX, tunnelFrame, type Computer } from "@wisp/core";
+import { TERM_PREFIX, tunnelFrame, type Computer, type RunCredential } from "@wisp/core";
 import { ComputerError } from "./computers.ts";
 import { featureOn } from "./features.ts";
 import type { Hub } from "./hub.ts";
@@ -25,6 +25,8 @@ interface Ticket {
   takeover?: Takeover;
   /** a harness's CLI to start in it (an id from HARNESSES) */
   launch?: string;
+  /** the model sign-in that CLI uses: the one agent runs on that computer use */
+  credential?: RunCredential;
 }
 
 /** The owner took an agent's keyboard: its harness session for this thread. */
@@ -58,6 +60,9 @@ function send(socket: WebSocket, msg: unknown) {
 }
 
 export class Terminals {
+  /** device:connection pairs a terminal's CLI was given, so a sign-in it renews is taken back */
+  readonly handedOut = new Set<string>();
+
   private tickets = new Map<string, Ticket>();
   private open = new Map<string, Open>();
 
@@ -76,7 +81,7 @@ export class Terminals {
   }
 
   /** A one-time link to open the terminal named `session` on a computer, good for a minute. */
-  ticket(c: Computer, userId: string, session: string, code?: string, takeover?: Takeover, launch?: string): string {
+  ticket(c: Computer, userId: string, session: string, code?: string, takeover?: Takeover, launch?: string, credential?: RunCredential | null): string {
     const no = this.refusal(c, userId);
     if (no) throw new ComputerError(no.error, no.status);
     const kind = this.hub.computers.codeKind(c);
@@ -84,7 +89,7 @@ export class Terminals {
     if (!this.hub.computers.online(c)) throw new ComputerError(`${c.name} is offline: its device isn't connected`, 503);
     this.sweep();
     const t = crypto.randomBytes(24).toString("base64url");
-    this.tickets.set(t, { computerId: c.id, workspaceId: c.workspaceId, userId, session: sessionName(session), code: c.kind === "device" ? code : undefined, expires: Date.now() + TICKET_MS, takeover, launch });
+    this.tickets.set(t, { computerId: c.id, workspaceId: c.workspaceId, userId, session: sessionName(session), code: c.kind === "device" ? code : undefined, expires: Date.now() + TICKET_MS, takeover, launch, ...(launch && credential ? { credential } : {}) });
     return t;
   }
 
@@ -120,10 +125,12 @@ export class Terminals {
     });
     const cols = Math.max(2, Math.min(1000, Math.floor(size.cols) || 80));
     const rows = Math.max(1, Math.min(500, Math.floor(size.rows) || 24));
-    if (!this.hub.sendToNode(c.nodeId, { type: "term_open", termId, computer: this.hub.computers.spec(c), session: t.session, cols, rows, code: t.code, ...(t.takeover ? { takeover: t.takeover } : {}), ...(t.launch ? { launch: t.launch } : {}) })) {
+    if (!this.hub.sendToNode(c.nodeId, { type: "term_open", termId, computer: this.hub.computers.spec(c), session: t.session, cols, rows, code: t.code, ...(t.takeover ? { takeover: t.takeover } : {}), ...(t.launch ? { launch: t.launch } : {}), ...(t.credential ? { credential: t.credential } : {}) })) {
       this.open.delete(termId);
       return socket.close(4503, "device offline");
     }
+    // the CLI may renew a rotating sign-in; the device sends the new one back, and it's kept
+    if (t.credential) this.handedOut.add(`${c.nodeId}:${t.credential.connectionId}`);
     this.hub.computers.log(c, { kind: "user", id: t.userId }, t.takeover ? `Took the keyboard from @${this.hub.store.agent(t.takeover.agentId)?.handle ?? "an agent"}` : `Opened a terminal (${t.session})`);
   }
 
