@@ -79,7 +79,7 @@ export class ComputerHost {
         detail: image.state === "ready" ? `${ENGINE_LABEL[engine.kind]} is running and the VM image is ready` : image.state === "preparing" ? image.detail || "Getting the VM image ready…" : image.state === "failed" ? `Couldn't get the VM image ready: ${image.detail}` : `${ENGINE_LABEL[engine.kind]} is running; the first VM gets its image (a few minutes)`,
       };
     }
-    return { platform: process.platform, arch: process.arch, screen: await screenSupport(), vm };
+    return { platform: process.platform, arch: process.arch, memoryGb: Math.round((os.totalmem() / 2 ** 30) * 10) / 10, screen: await screenSupport(), vm };
   }
 
   /**

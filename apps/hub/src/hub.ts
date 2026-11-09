@@ -33,6 +33,8 @@ import { foldTeams } from "./fold-teams.ts";
 import { TeamFlows } from "./team-flows.ts";
 import type { RunKind, Store } from "./store.ts";
 import { guestEvent } from "./guest-computers.ts";
+import { adoptShared } from "./shared-computer.ts";
+import { DeviceUse } from "./device-use.ts";
 
 const CONTEXT_MESSAGES = 20;
 /** How long after a run ends its device may still send back the sign-in it renewed. */
@@ -81,6 +83,7 @@ export class Hub {
   /** stepped teams: requests going through a channel team's roles and steps */
   readonly flows: TeamFlows;
   readonly computers: Computers;
+  readonly deviceUse: DeviceUse;
   /** logins agents fill from the person's password manager */
   readonly logins: Logins;
   /** files on the person's own storage (the Storage mod) */
@@ -137,6 +140,7 @@ export class Hub {
     this.discussions = new Discussions(this);
     this.flows = new TeamFlows(this);
     this.computers = new Computers(this);
+    this.deviceUse = new DeviceUse(this);
     this.logins = new Logins(this);
     this.storage = new Storage(this);
     this.routines = new Routines(this);
@@ -562,7 +566,10 @@ export class Hub {
         return;
       }
       case "capabilities": {
+        const couldRunVms = !!store.nodeCapabilities(conn.nodeId)?.vm.ok;
         store.setNodeCapabilities(conn.nodeId, msg.capabilities);
+        // a device that can now run computers: agents still waiting for the shared one get it
+        if (!couldRunVms && msg.capabilities.vm.ok) adoptShared(this, conn.workspaceId);
         const was = this.pausedNodes.has(conn.nodeId);
         if (msg.capabilities.paused) this.pausedNodes.add(conn.nodeId);
         else this.pausedNodes.delete(conn.nodeId);
@@ -661,7 +668,9 @@ export class Hub {
             this.connectionsChanged(cid);
           }
         }
-        const live = this.live.get(run.id) ?? { parts: [], text: "" };
+        // a person's own computer it used on "tell me after": it says so now, after the reply
+    queueMicrotask(() => this.deviceUse.runEnded(run));
+    const live = this.live.get(run.id) ?? { parts: [], text: "" };
         collect(live, msg.event);
         this.live.set(run.id, live);
         // a background check works quietly: nothing shows in the DM unless it messages the person

@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
+import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest, type VmConfig } from "@wisp/core";
 import { HARNESS_SPECS, HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
 import { WispClient, WispError } from "@wisp/sdk";
 import { runUpdate, version } from "@wisp/update";
@@ -575,7 +575,9 @@ export class NodeDaemon {
     }
 
     // an agent with a VM here works in the folder it shares with the VM, so files go both ways
-    let cwd = (run.computer && this.computers.vmFiles(run.computer)) || path.join(this.cfg.dir, "agents", agentFolder(this.cfg.dir, agent));
+    // on the shared computer each agent has its own working folder in the shared files, which the others can still open
+    const vmFiles = run.computer ? this.computers.vmFiles(run.computer) : null;
+    let cwd = vmFiles ? ((run.computer!.config as VmConfig).shared ? path.join(vmFiles, agentFolder(this.cfg.dir, agent)) : vmFiles) : path.join(this.cfg.dir, "agents", agentFolder(this.cfg.dir, agent));
     fs.mkdirSync(cwd, { recursive: true });
     // coding tasks run in their own checkout of the team repo, on the task's branch
     if (run.workspace) {

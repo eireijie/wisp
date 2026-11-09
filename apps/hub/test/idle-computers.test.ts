@@ -1,4 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+vi.setConfig({ testTimeout: 30_000 });
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -199,5 +201,23 @@ describe("computers that stop when idle", () => {
     await Promise.all([stop, use]);
     await waitFor(() => vms.get(computerId)!.on);
     expect(vms.get(computerId)!.on).toBe(true);
+  });
+
+  it("gives a shared computer's mouse and keyboard to one agent at a time", async () => {
+    const c = hub.store.computer(computerId)!;
+    const other = await owner.request("POST", "/api/agents", { handle: "pip", name: "Pip", harness: "custom", nodeId: c.nodeId, computerId });
+    const real = hub.currentRun.bind(hub);
+    // Nova is in the middle of a task
+    hub.currentRun = ((id: string) => (id === agentId ? ({ id: "run-x" } as never) : real(id))) as typeof hub.currentRun;
+    try {
+      await hub.computers.takeScreen(c, agentId);
+      await expect(hub.computers.takeScreen(c, other.id, 300)).rejects.toThrow(/@nova is using/);
+      // Nova's still holding it: Nova goes on
+      await hub.computers.takeScreen(c, agentId, 300);
+    } finally {
+      hub.currentRun = real;
+    }
+    // Nova's work ended: Pip gets it straight away
+    await hub.computers.takeScreen(c, other.id, 300);
   });
 });

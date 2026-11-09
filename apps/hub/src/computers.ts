@@ -24,6 +24,12 @@ const LOG_COALESCE_MS = 60_000;
 export const IDLE_STOP_MS = Number(envVar("COMPUTER_IDLE_MS")) || 15 * 60_000;
 /** An agent waiting longer than this for its computer to come up hears "Starting the computer…" in chat. */
 const STARTING_NOTE_MS = 2000;
+/** What takes a shared computer's mouse and keyboard: one agent at a time. */
+const SCREEN_ACTIONS = new Set(["click", "move", "mouse", "drag", "scroll", "type", "key", "open"]);
+/** An agent that hasn't touched the screen for this long, or whose work ended, lets the next one have it. */
+const SCREEN_HOLD_MS = 20_000;
+/** The longest an agent waits for another to finish with the screen before it's told to try later. */
+const SCREEN_WAIT_MS = 120_000;
 
 export class ComputerError extends Error {
   constructor(
@@ -94,6 +100,8 @@ export class Computers {
   /** when each computer was last used, and how many actions on it are under way, for stopping idle VMs */
   private lastUse = new Map<string, number>();
   private inFlight = new Map<string, number>();
+  /** which agent has a computer's mouse and keyboard, and when it last used them */
+  private screenHolder = new Map<string, { agentId: string; touched: number }>();
   private sweeper: ReturnType<typeof setInterval>;
 
   constructor(private hub: Hub) {
@@ -294,12 +302,13 @@ export class Computers {
    * only once they've taken control.
    */
   /** `requester`: the person an agent is working for (see the API's requesterOf); by default, whoever asked for its current run. */
-  async act(c: Computer, action: ComputerAction, by: Actor, opts: { timeoutMs?: number; requester?: string | null } = {}): Promise<unknown> {
+  /** `borrowed`: an agent using a person's own computer they allowed it ("Use my computers", device-use.ts), already checked. */
+  async act(c: Computer, action: ComputerAction, by: Actor, opts: { timeoutMs?: number; requester?: string | null; borrowed?: boolean } = {}): Promise<unknown> {
     const ctl = this.control.get(c.id);
     const transfer = (TRANSFER_ACTIONS as readonly string[]).includes(action.action);
     // moving files and clipboard text doesn't need control: it doesn't touch the screen
     const input = !transfer && !["screenshot", "status", "start", "stop", "destroy", "harness_status", "signin", "inspect"].includes(action.action);
-    if (c.kind === "device") this.checkScreenUse(c, by, opts.requester !== undefined ? opts.requester : by.kind === "agent" ? (this.hub.currentRun(by.id)?.requestedBy ?? null) : null, action);
+    if (c.kind === "device") this.checkScreenUse(c, by, opts.requester !== undefined ? opts.requester : by.kind === "agent" ? (this.hub.currentRun(by.id)?.requestedBy ?? null) : null, action, !!opts.borrowed);
     if (by.kind === "user" && by.id !== "system" && (input || transfer) && !this.canUse(c, by.id)) throw new ComputerError(this.notYours(c), 403);
     if (this.hub.isNodePaused(c.nodeId)) throw new ComputerError(`${c.name} is paused at its device. Someone there has to run \`wisp node resume\` first.`, 423);
     if (by.kind === "agent" && ctl && input) {
@@ -314,6 +323,7 @@ export class Computers {
       }
     }
     if (by.kind === "agent" && input) this.dropHelp(c.id, by.id);
+    if (by.kind === "agent" && SCREEN_ACTIONS.has(action.action)) await this.takeScreen(c, by.id);
     if (by.kind === "user" && input) {
       if (!ctl || ctl.id !== by.id) throw new ComputerError("take control of the computer first", 409);
       ctl.touched = Date.now();
@@ -333,6 +343,31 @@ export class Computers {
       if (note) clearTimeout(note);
       if (use) this.used(c.id, -1);
     }
+  }
+
+  /**
+   * Agents sharing a computer take its mouse and keyboard in turns: one still using them keeps them
+   * (each in its own browser tabs and folder, the rest goes on side by side), and the next waits,
+   * told so in chat, until it's done or has let them be for a moment.
+   */
+  async takeScreen(c: Computer, agentId: string, waitMs = SCREEN_WAIT_MS): Promise<void> {
+    const free = () => {
+      const h = this.screenHolder.get(c.id);
+      return !h || h.agentId === agentId || Date.now() - h.touched >= SCREEN_HOLD_MS || !this.hub.currentRun(h.agentId);
+    };
+    const end = Date.now() + waitMs;
+    let told = false;
+    while (!free()) {
+      const holder = this.hub.store.agent(this.screenHolder.get(c.id)!.agentId);
+      if (Date.now() >= end) throw new ComputerError(`@${holder?.handle ?? "another agent"} is using ${c.name}'s screen. Do something else for now (your browser tabs and files don't need it), then try again.`, 409);
+      if (!told) {
+        told = true;
+        const run = this.hub.currentRun(agentId);
+        if (run) this.hub.runStatus(run.id, `Waiting for the screen (${holder?.name ?? "another agent"} is using it)…`);
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    this.screenHolder.set(c.id, { agentId, touched: Date.now() });
   }
 
   /** Mark a computer used now; `delta` counts an action starting (+1) or ending (-1). */
@@ -416,7 +451,7 @@ export class Computers {
    * (their harness is there, with the screen as their computer) and only in work the owner asked
    * for. Agents anywhere else can't reach it: to have an agent use a computer, run it on that computer.
    */
-  private checkScreenUse(c: Computer, by: Actor, requester: string | null, action: ComputerAction) {
+  private checkScreenUse(c: Computer, by: Actor, requester: string | null, action: ComputerAction, borrowed = false) {
     const owner = this.ownerOf(c);
     const name = owner ? (this.hub.store.user(owner)?.name ?? "its owner") : "its owner";
     if (by.kind === "user") {
@@ -425,7 +460,8 @@ export class Computers {
     }
     // its files and clipboard go through the agent's own folder on the device, not Wisp's file transfer
     if ((TRANSFER_ACTIONS as readonly string[]).includes(action.action)) throw new ComputerError(`${c.name} is ${name}'s own screen; its files and clipboard stay with ${name}. Use the screen, or ask ${name} in chat for a file.`, 403);
-    const why = this.whyNotOnDevice(c, by.id);
+    // an agent running elsewhere uses it only when its owner allowed that (Use my computers)
+    const why = borrowed ? null : this.whyNotOnDevice(c, by.id);
     if (why) throw new ComputerError(why, 403);
     if (!owner || requester !== owner) throw new ComputerError(`${c.name} is ${name}'s own screen, so you can only use it for things ${name} asked for. Use a VM for this instead.`, 403);
   }
@@ -436,7 +472,7 @@ export class Computers {
     const agent = agentId ? this.hub.store.agent(agentId) : undefined;
     const runsOn = nodeId !== undefined ? nodeId : agent?.nodeId;
     if (runsOn && runsOn === c.nodeId) return null;
-    return `${c.name} is a person's own computer. Only agents that run on it can use its screen; to have an agent work there, run the agent on ${c.name}.`;
+    return `${c.name} is a person's own computer. Only agents that run on it can use its screen; to have an agent work there, run the agent on ${c.name}, or let it use ${c.name} (Use my computers, on its Computer page).`;
   }
 
   /** Add a line to the computer's activity, folding repeats of the same thing into one. */
