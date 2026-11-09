@@ -90,7 +90,24 @@ struct Agent: Codable, Identifiable, Hashable {
   var groups: [String]?
   var settings: Settings?
   var status: Status
+  /** set by the hub while its harness is known not to be signed in where it runs, so it can't answer yet */
+  var signIn: AgentSignIn?
   var instructions: String?
+
+  /** online, but it can't answer until someone signs its harness in where it runs */
+  var needsSignIn: Bool { status == .online && signIn != nil }
+}
+
+/** Where an agent's harness needs signing in: its device, or its own computer (a VM) when it runs in there. */
+struct AgentSignIn: Codable, Hashable {
+  var harness: String
+  /** the device or computer's name */
+  var where_: String
+  var nodeId: String
+  /** set when it runs inside its own computer: the sign-in happens on that computer's screen */
+  var computerId: String?
+  var account: String?
+  enum CodingKeys: String, CodingKey { case harness, where_ = "where", nodeId, computerId, account }
 }
 
 struct Channel: Codable, Identifiable, Hashable {

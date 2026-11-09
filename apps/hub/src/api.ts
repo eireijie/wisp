@@ -343,7 +343,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   // the setup answers are between the agent and the person it asked, so they stay on the hub
   const agentView = (a: NonNullable<ReturnType<typeof store.agent>>) => {
     const { setup: _setup, ...settings } = a.settings;
-    return { ...a, settings, status: hub.agentStatus(a) };
+    return { ...a, settings, status: hub.agentStatus(a), signIn: hub.signInNeeded(a) };
   };
   const messageView = <T extends Parameters<typeof guestMessage>[0]>(c: Caller, m: T): T => c.viewer.role === "guest" ? guestMessage(m) : m;
 

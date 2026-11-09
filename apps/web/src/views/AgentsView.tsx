@@ -49,6 +49,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
     const run = Object.values(live).find((r) => r.agentId === a.id);
     if (run) return { text: `Working · ${activityPhrase(run.last?.name, !!run.text)}`, working: true };
     if (a.status === "busy") return { text: "Working", working: true };
+    if (a.status !== "offline" && a.signIn) return { text: `Needs sign-in · ${harnessLabel(a.harness)} on ${a.signIn.where}`, working: false };
     return { text: a.status === "offline" ? "Offline" : "Idle", working: false };
   };
   const line = (a: (typeof agents)[number]) => [harnessLabel(a.harness), a.model ? prettyModel(a.model) : "Automatic", a.settings.effort ? effortName(a.settings.effort) : null].filter(Boolean).join(" · ");
@@ -96,7 +97,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
                       <span className="block text-body font-medium truncate">{a.name}</span>
                       <span className="block text-sm text-muted truncate">{line(a)}</span>
                       <span className={cx("flex items-center gap-1.5 text-sm", st.working ? "text-st-working" : "text-faint")}>
-                        <span aria-hidden className={cx("size-1.5 shrink-0 rounded-full", st.working && "animate-pulse")} style={{ background: st.working ? "var(--st-working)" : a.status === "offline" ? "var(--status-idle)" : "var(--st-online)" }} />
+                        <span aria-hidden className={cx("size-1.5 shrink-0 rounded-full", st.working && "animate-pulse")} style={{ background: st.working ? "var(--st-working)" : a.status === "offline" ? "var(--status-idle)" : a.signIn ? "var(--warn)" : "var(--st-online)" }} />
                         <span className="truncate">{st.text}</span>
                       </span>
                       {!readiness.ready && (

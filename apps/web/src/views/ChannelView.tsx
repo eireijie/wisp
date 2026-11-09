@@ -29,6 +29,7 @@ import { useFeature } from "../features.ts";
 import { useDevices } from "../devices.ts";
 import { chatName, isGrouped, needsStamp, snippetOf, stampLabel, startsChat, toolLine } from "../chatFormat.ts";
 import { openDm } from "../openDm.ts";
+import { HarnessSignInButton, SignInNeededBar } from "../components/HarnessSignInButton.tsx";
 import { CheckbackLabel, ClosedLine, LoopParts } from "../components/Loops.tsx";
 
 /** What's open in the pane beside the chat (a thread comes from the route instead). */
@@ -52,11 +53,14 @@ function RunFailedActions({ part, agentId }: { part: Extract<MessagePart, { type
       setBusy(false);
     }
   };
+  // the agent still can't answer for want of a sign-in: open that sign-in right here
+  const signIn = useStore((s) => (agentId && (part.fix === "signin" || part.fix === "computer") ? s.agents.find((a) => a.id === agentId)?.signIn : null));
   const to = part.fix === "computer" && agentId ? href({ view: "agents", agentId, tab: "computer" }) : part.fix === "connection" ? href({ view: "settings", page: "models" }) : part.fix === "signin" ? href({ view: "settings", page: "harnesses" }) : null;
   if (sent) return <div className="mt-1 px-1 text-xs text-muted">Trying again…</div>;
   return (
     <div className="mt-1.5 px-1 flex flex-wrap items-center gap-2">
-      {to && (
+      {signIn && <HarnessSignInButton signIn={signIn} agentId={agentId} />}
+      {to && !signIn && (
         <a href={to} className="h-8 px-3 rounded-full border border-control-line bg-control text-[13px] text-ink hover:bg-hover inline-flex items-center gap-1.5">
           <LogIn size={13} /> Sign in
         </a>
@@ -136,6 +140,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   if (!channel) return <div className="flex-1 grid place-items-center text-sm text-muted">{route.channelId ? "Team not found" : "No teams yet"}</div>;
 
   const dmAgent = dmAgentId ? names.agent(dmAgentId) : undefined;
+  const dmFull = useStore((s) => (dmAgentId ? s.agents.find((a) => a.id === dmAgentId) : undefined));
   const sideAgent = !route.threadId && side?.kind === "agent" ? names.agent(side.agentId) : undefined;
   const dmPanel = sideAgent && dmAgent && sideAgent.id === dmAgent.id ? (side as Extract<Side, { kind: "agent" }>).tab : null;
   const infoOpen = side?.kind === "info" && !route.threadId && channel.kind === "channel";
@@ -193,6 +198,11 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
         <SoloAgent.Provider value={dmAgent?.id ?? null}>
           <MessageList messageId={!route.threadId ? route.messageId : undefined} channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} onAddAgent={() => setSettings("team")} onMembers={() => openSide({ kind: "info", tab: "members" })} />
         </SoloAgent.Provider>
+        {!channel.archivedAt && dmFull?.signIn && (
+          <div className="px-3 sm:px-5">
+            <SignInNeededBar agent={dmFull} />
+          </div>
+        )}
         {channel.archivedAt ? <ArchivedBar channel={channel} /> : <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Ask ${dmAgent.name}` : `Message ${channel.name}`} onDetails={openAgent} onCall={dmAgent && voice && !calling ? () => setCalling(true) : undefined} />}
       </div>
       {route.threadId && <ThreadPanel key={route.threadId} messageId={route.messageId} channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}

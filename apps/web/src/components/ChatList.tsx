@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { BellOff, Check, ChevronDown, FolderPlus, Ghost, MessageSquarePlus, Pin, Plus, Search, Users, X } from "lucide-react";
-import { teamIconAgentIds, type Agent, type Section } from "@wisp/core";
+import { harnessLabel, teamIconAgentIds, type Agent, type Section } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, usePrefs, type ChannelInfo } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
@@ -139,6 +139,7 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
     if (!c.agent?.status || c.kind === "team") {
       /* fall through to the message */
     } else if (c.agent.status === "busy") return { text: "Working", working: true };
+    else if (c.agent.status === "online" && c.agent.signIn) return { text: `Needs sign-in · ${harnessLabel(c.agent.harness)} on ${c.agent.signIn.where}`, working: false, needs: true };
     const ask = c.channel ? Object.values(approvals).find((a) => a.status === "pending" && a.channelId === c.channel!.id) : undefined;
     if (ask) return { text: `Needs approval · ${cleanPreview(ask.summary, 70)}`, working: false, needs: true };
     // waiting on you, or when its agent will be back with something

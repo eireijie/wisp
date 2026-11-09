@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from "react";
 import { Bot, Check, Copy, ExternalLink, Loader2, Monitor, Shuffle } from "lucide-react";
-import { HARNESSES, harnessLabel, runsInVm, type Agent, type HarnessLogin, type HarnessSettings } from "@wisp/core";
+import { HARNESSES, harnessLabel, preferSignedIn, runsInVm, type Agent, type HarnessLogin, type HarnessSettings } from "@wisp/core";
 import { api } from "../api.ts";
 import { awayEnabled, enableTailscale } from "../components/Access.tsx";
 import { onPublicAddress, skipAccess, useAccess, useAccessStore, type AccessInfo } from "../access.ts";
@@ -258,8 +258,18 @@ function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostApp
     };
   }, [device?.id]);
   const installed = device?.harnesses ?? [];
-  const selected = harness || installed[0]?.id || "kimi";
   const account = (s: HarnessSettings) => s.accounts.find((a) => a.isDefault) ?? s.accounts[0];
+  // one that's signed in first: a harness that would fail its first reply is never preselected over one that works
+  const selected =
+    harness ||
+    preferSignedIn(
+      installed.map((h) => h.id),
+      (id) => {
+        const s = settings.find((x) => x.harness === id);
+        return s ? account(s)?.signedIn : undefined;
+      },
+    ) ||
+    "kimi";
   const pick = (id: string) => {
     setHarness(id);
     setUnknownOk(false);

@@ -129,6 +129,14 @@ struct AgentTile: View {
         Text(["Working", doing.flatMap { $0 == "started" ? nil : $0 }].compactMap { $0 }.joined(separator: " · "))
           .font(.system(size: 13)).foregroundStyle(Palette.statusWorkingText).lineLimit(2).multilineTextAlignment(.center)
       }
+    } else if agent.needsSignIn {
+      HStack(spacing: 6) {
+        Circle().fill(Palette.statusNeeds).frame(width: 7, height: 7)
+        Text("Needs sign-in").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.statusNeedsText)
+      }
+      .padding(.horizontal, 10).frame(height: 24)
+      .background(Capsule().fill(Palette.statusNeeds.tint16))
+      .accessibilityElement(children: .combine)
     } else {
       HStack(spacing: 6) {
         Circle().fill(agent.status == .online ? Palette.statusOnline : Palette.statusOffline).frame(width: 7, height: 7)
