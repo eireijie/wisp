@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, TERM_PREFIX, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
+import { CONNECTOR_CATALOG, HARNESSES, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, TERM_PREFIX, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
 import { HARNESS_SPECS, HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
 import { WispClient, WispError } from "@wisp/sdk";
 import { runUpdate, version } from "@wisp/update";
@@ -224,11 +224,14 @@ export class NodeDaemon {
     const session = sessionName(msg.session);
     const key = `${computer.kind === "vm" ? "vm" : "dev"}:${computer.id}:${session}`;
     const command = async () => {
-      if (computer.kind === "device") return deviceShell(session);
+      // a harness's CLI in the pane: only ones from Wisp's own list, by name
+      const launch = msg.launch ? HARNESSES.find((h) => h.id === msg.launch)?.binary : undefined;
+      if (msg.launch && !launch) throw new Error(`${msg.launch} isn't a harness Wisp knows`);
+      if (computer.kind === "device") return deviceShell(session, { launch });
       const vm = await this.computers.vm(computer);
       if (!vm) throw new Error("this VM isn't on this device");
       await vm.ready();
-      return vmShell({ bin: vm.engine.bin, name: vm.name, user: vm.user, home: vm.home }, session);
+      return vmShell({ bin: vm.engine.bin, name: vm.name, user: vm.user, home: vm.home }, session, launch);
     };
     const opening: { end?: boolean; gone?: boolean } = {};
     this.openingTerms.set(termId, opening);

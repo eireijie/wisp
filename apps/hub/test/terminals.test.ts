@@ -106,9 +106,12 @@ describe.skipIf(!hasPty)("a terminal on the owner's device", () => {
     expect(p.control[0]).toEqual({ type: "ready", resumed: true });
     await waitFor(() => p.out.includes("wisp-42"));
     p.ws.send(JSON.stringify({ type: "resize", cols: 120, rows: 40 }));
-    p.ws.send(Buffer.from("stty size\r"), { binary: true });
-    // inside tmux (where the computer has it) its status bar takes a row
-    await waitFor(() => /\b(40|39) 120\b/.test(p.out));
+    // tmux applies a new size a moment later, so ask until it has
+    let asked = 0;
+    await waitFor(() => {
+      if (/\b40 120\b/.test(p.out)) return true;
+      if (asked++ % 20 === 0) p.ws.send(Buffer.from("stty size\r"), { binary: true });
+    });
     // closing the pane for good stops the shell
     p.ws.send(JSON.stringify({ type: "end" }));
     await waitFor(() => p.closed);

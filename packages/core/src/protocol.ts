@@ -247,7 +247,7 @@ export const HubToNode = z.discriminatedUnion("type", [
    * named `session` there; keys and screen bytes travel as binary frames with `termId` (see tunnelFrame).
    * A device's own screen asks for its code, as live view does.
    */
-  z.object({ type: z.literal("term_open"), termId: z.string(), computer: ComputerSpec, session: z.string().max(60), cols: z.number().int().min(2).max(1000), rows: z.number().int().min(1).max(500), code: z.string().max(200).optional() }),
+  z.object({ type: z.literal("term_open"), termId: z.string(), computer: ComputerSpec, session: z.string().max(60), cols: z.number().int().min(2).max(1000), rows: z.number().int().min(1).max(500), code: z.string().max(200).optional(), launch: z.string().max(40).optional() }),
   z.object({ type: z.literal("term_resize"), termId: z.string(), cols: z.number().int().min(2).max(1000), rows: z.number().int().min(1).max(500) }),
   /** stop showing it; `end`: the pane was closed, so the shell stops too */
   z.object({ type: z.literal("term_close"), termId: z.string(), end: z.boolean().optional() }),

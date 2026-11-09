@@ -47,6 +47,25 @@ describe("terminals on a device", () => {
     expect(f.made).toHaveLength(1);
   });
 
+  it("lets tmux draw the screen afresh for a viewer that comes back, instead of old output", async () => {
+    const f = fakes();
+    const t = new Terminals(f.spawn, 60_000);
+    const tmux = async (): Promise<ShellCommand> => ({ file: "tmux", args: [], redraws: true });
+    const a = viewer();
+    await t.attach("dev:c:t", "term_a", { cols: 80, rows: 24 }, tmux, a.send, a.close);
+    f.made[0].print("drawn at 80 columns\r\n");
+    t.detach("term_a");
+    const b = viewer();
+    const again = await t.attach("dev:c:t", "term_b", { cols: 120, rows: 40 }, tmux, b.send, b.close);
+    again.replay();
+    expect(b.out).toBe("");
+    expect(f.made[0].size).toEqual([120, 39]);
+    // the page resized meanwhile: that size wins
+    t.resize("term_b", 100, 30);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(f.made[0].size).toEqual([100, 30]);
+  });
+
   it("lets the newest viewer have it, like tmux", async () => {
     const f = fakes();
     const t = new Terminals(f.spawn);
@@ -123,6 +142,9 @@ describe("which shell opens", () => {
     expect(deviceShell("main", { platform: "linux", env, has: () => true })).toMatchObject({ file: "tmux", args: ["new-session", "-A", "-s", "wisp-main", ";", "set-option", "-t", "wisp-main", "status", "off"] });
     expect(deviceShell("main", { platform: "linux", env, has: () => false })).toMatchObject({ file: "/bin/sh", args: ["-l"] });
     expect(deviceShell("main", { platform: "win32", env, has: () => false }).file).toBe("powershell.exe");
+    // an agent's CLI in the pane, through a login shell so it's on PATH, then a shell when it quits
+    expect(deviceShell("codex-1", { platform: "linux", env, has: () => true, launch: "codex" }).args).toEqual(["new-session", "-A", "-s", "wisp-codex-1", "'/bin/sh' -lc 'codex; exec '\\''/bin/sh'\\'' -l'", ";", "set-option", "-t", "wisp-codex-1", "status", "off"]);
+    expect(deviceShell("codex-1", { platform: "linux", env, has: () => false, launch: "codex" })).toMatchObject({ file: "/bin/sh", args: ["-lc", "codex; exec '/bin/sh' -l"] });
   });
 
   it("opens a VM's shell as the agent's user, with a terminal", () => {
@@ -130,7 +152,9 @@ describe("which shell opens", () => {
     expect(c.file).toBe("docker");
     expect(c.args.slice(0, 7)).toEqual(["exec", "-i", "-t", "-u", "wisp", "-w", "/home/wisp"]);
     // the session name goes in as an argument, never into the script
-    expect(c.args.at(-1)).toBe("main");
+    expect(c.args.slice(-2)).toEqual(["main", ""]);
     expect(c.args.join(" ")).toContain("wisp-c1");
+    // an agent's CLI goes in as an argument too
+    expect(vmShell({ bin: "docker", name: "wisp-c1", user: "wisp", home: "/home/wisp" }, "codex-1", "codex").args.slice(-2)).toEqual(["codex-1", "codex"]);
   });
 });
