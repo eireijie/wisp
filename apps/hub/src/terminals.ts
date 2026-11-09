@@ -22,6 +22,8 @@ interface Ticket {
   session: string;
   code?: string;
   expires: number;
+  /** a harness's CLI to start in it (an id from HARNESSES) */
+  launch?: string;
 }
 
 interface Open {
@@ -65,7 +67,7 @@ export class Terminals {
   }
 
   /** A one-time link to open the terminal named `session` on a computer, good for a minute. */
-  ticket(c: Computer, userId: string, session: string, code?: string): string {
+  ticket(c: Computer, userId: string, session: string, code?: string, launch?: string): string {
     const no = this.refusal(c, userId);
     if (no) throw new ComputerError(no.error, no.status);
     const kind = this.hub.computers.codeKind(c);
@@ -73,7 +75,7 @@ export class Terminals {
     if (!this.hub.computers.online(c)) throw new ComputerError(`${c.name} is offline: its device isn't connected`, 503);
     this.sweep();
     const t = crypto.randomBytes(24).toString("base64url");
-    this.tickets.set(t, { computerId: c.id, workspaceId: c.workspaceId, userId, session: sessionName(session), code: c.kind === "device" ? code : undefined, expires: Date.now() + TICKET_MS });
+    this.tickets.set(t, { computerId: c.id, workspaceId: c.workspaceId, userId, session: sessionName(session), code: c.kind === "device" ? code : undefined, expires: Date.now() + TICKET_MS, launch });
     return t;
   }
 
@@ -102,7 +104,7 @@ export class Terminals {
     });
     const cols = Math.max(2, Math.min(1000, Math.floor(size.cols) || 80));
     const rows = Math.max(1, Math.min(500, Math.floor(size.rows) || 24));
-    if (!this.hub.sendToNode(c.nodeId, { type: "term_open", termId, computer: this.hub.computers.spec(c), session: t.session, cols, rows, code: t.code })) {
+    if (!this.hub.sendToNode(c.nodeId, { type: "term_open", termId, computer: this.hub.computers.spec(c), session: t.session, cols, rows, code: t.code, ...(t.launch ? { launch: t.launch } : {}) })) {
       this.open.delete(termId);
       return socket.close(4503, "device offline");
     }
