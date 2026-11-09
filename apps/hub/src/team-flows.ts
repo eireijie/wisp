@@ -265,8 +265,12 @@ export class TeamFlows {
       // nobody approves their own work
       const reviewed = team.steps.find((s) => s.id === step.sendBackTo);
       const built = [...f.history].reverse().find((h) => h.stepId === step.sendBackTo);
-      if (reviewed && built && this.hub.store.task(built.taskId)?.toAgentId === agent.id)
-        return this.waitLane(f, lane, `${agent.name} did ${this.title(team, reviewed)} and would be reviewing its own work as ${step.roleId ? `the ${this.who(team, step)}` : `“${this.title(team, step)}”`}. Pick a different agent, then try again, or approve it anyway.`, "retry");
+      if (reviewed && built && this.hub.store.task(built.taskId)?.toAgentId === agent.id && !f.selfReviewOk?.includes(step.id)) {
+        this.waitLane(f, lane, `${agent.name} did ${this.title(team, reviewed)} and would be reviewing its own work as ${step.roleId ? `the ${this.who(team, step)}` : `“${this.title(team, step)}”`}. Pick a different agent for this step, or let ${agent.name} review its own work.`, "retry");
+        lane.waitingFor!.selfReview = { agent: agent.name };
+        this.save(f);
+        return;
+      }
     }
     const order = workSteps(team.steps);
     const n = order.findIndex((s) => s.id === step.id) + 1;
@@ -563,7 +567,7 @@ export class TeamFlows {
           const h = [...f.history].reverse().find((x) => x.taskId === task.id);
           if (task.status === "failed") {
             if (h) h.verdict = "failed";
-            this.failLane(f, lane, `${stepLabel(step, team.roles ?? [], this.agentFor(team, step)?.name)} didn't finish: ${(task.result ?? "no reason given").slice(0, 300)}`);
+            this.failLane(f, lane, `${this.agentFor(team, step)?.name ?? "The agent"} couldn't finish ${this.title(team, step)}: ${failureReason(task.result)}`);
             return false;
           }
           if (step.kind === "review") {
@@ -600,7 +604,7 @@ export class TeamFlows {
           if (piece.status === "approved" || piece.lastTaskId === task.id) return false;
           piece.lastTaskId = task.id;
           if (task.status === "failed") {
-            this.pieceNeedsPerson(piece, `**${piece.title}** didn't finish: ${(task.result ?? "no reason given").slice(0, 300)}. Try again to hand it back to its builder, or skip it.`, "retry", "build", true);
+            this.pieceNeedsPerson(piece, `**${piece.title}** didn't finish: ${failureReason(task.result)} Try again to hand it back to its builder, or skip it.`, "retry", "build", true);
             this.afterPiece(f, lane, step);
             return false;
           }
@@ -613,7 +617,7 @@ export class TeamFlows {
           piece.lastReviewId = task.id;
           const reviewerRole = (step.reviewBy && team.roles?.find((r) => r.id === step.reviewBy)?.name) || "The reviewer";
           if (task.status === "failed") {
-            this.pieceNeedsPerson(piece, `The review of **${piece.title}** didn't finish: ${(task.result ?? "no reason given").slice(0, 300)}. Try again to ask for it again, or skip it.`, "retry", "review", true);
+            this.pieceNeedsPerson(piece, `The review of **${piece.title}** didn't finish: ${failureReason(task.result)} Try again to ask for it again, or skip it.`, "retry", "review", true);
           } else if (verdict === "approved") {
             piece.status = "approved";
           } else if (!verdict) {
@@ -804,7 +808,7 @@ export class TeamFlows {
    * round), "stop" ends it, "changes" (an ask-me step) sends the work back with a note. Stop also
    * ends a running one. Whatever is still open is cancelled. `stepId` picks the step when several wait.
    */
-  decide(flowId: string, action: "approve" | "retry" | "stop" | "changes", opts: { stepId?: string; note?: string; by?: string } = {}): TeamFlow | undefined {
+  decide(flowId: string, action: "approve" | "retry" | "stop" | "changes" | "allow", opts: { stepId?: string; note?: string; by?: string } = {}): TeamFlow | undefined {
     const f = this.flow(flowId);
     if (!f || (f.status !== "waiting" && f.status !== "running")) return f;
     if (action === "stop") {
@@ -815,6 +819,13 @@ export class TeamFlows {
     const lanes = Object.values(f.lanes ?? {}).filter((l) => l.status === "waiting");
     const lane = opts.stepId ? f.lanes?.[opts.stepId] : lanes[0];
     if (!lane || lane.status !== "waiting") return f;
+    if (action === "allow") {
+      // "let it review its own work": remember that for this step, then run it
+      if (!lane.waitingFor?.selfReview) return f;
+      f.selfReviewOk = [...new Set([...(f.selfReviewOk ?? []), lane.stepId])];
+      this.decideLane(f, lane, "retry", "", opts.by ?? "");
+      return this.flow(flowId);
+    }
     this.decideLane(f, lane, action, opts.note ?? "", opts.by ?? "");
     return this.flow(flowId);
   }
@@ -927,4 +938,10 @@ export class TeamFlows {
     f.status = "running";
     this.complete(f, lane, result, wasRounds && step.kind === "branch");
   }
+}
+
+/** A failed task's reason without the "Bea's run failed:" lead-in the run adds, ending in a full stop. */
+export function failureReason(result: string | null | undefined): string {
+  const r = (result ?? "").replace(/^[^:]{0,60}'s run failed:\s*/i, "").trim().slice(0, 300) || "no reason given";
+  return /[.!?]$/.test(r) ? r : `${r}.`;
 }

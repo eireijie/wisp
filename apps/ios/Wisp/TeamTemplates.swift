@@ -89,7 +89,8 @@ struct TeamTemplate: Codable, Hashable, Identifiable {
 /** One request going through a stepped team (TeamFlow in packages/core): what the strip needs. */
 struct TeamFlow: Decodable, Identifiable, Hashable {
   struct Done: Decodable, Hashable { var stepId: String; var verdict: String? }
-  struct Waiting: Decodable, Hashable { var why: String; var options: String; var piece: String?; var failed: Bool? }
+  struct Waiting: Decodable, Hashable { var why: String; var options: String; var piece: String?; var failed: Bool?; var selfReview: SelfReview? }
+  struct SelfReview: Decodable, Hashable { var agent: String }
   /** One step's run in a request: steps that run together each have their own. */
   struct Lane: Decodable, Hashable {
     var stepId: String

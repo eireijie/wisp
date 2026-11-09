@@ -385,7 +385,7 @@ export class DockerVm implements Driver {
 
   private async bringUp(state: boolean | null) {
     if (state === false) {
-      this.onStatus("Starting the VM…");
+      this.onStatus("Starting the computer…");
       await must(this.bin, ["start", this.name], { timeoutMs: 120_000 });
     } else {
       const custom = (this.spec.config as VmConfig).image;
@@ -401,7 +401,7 @@ export class DockerVm implements Driver {
       if (this.engine.kind === "apple" && (await exec(this.bin, ["volume", "inspect", this.volume], { timeoutMs: 15_000 })).code !== 0) {
         await must(this.bin, ["volume", "create", this.volume], { timeoutMs: 60_000 });
       }
-      this.onStatus("Creating the VM…");
+      this.onStatus("Setting up the computer…");
       await must(this.bin, runArgs(this.spec, { name: this.name, volume: this.volume, files: this.filesDir, image, kind: this.engine.kind }), { timeoutMs: 300_000 });
     }
     // wait for the desktop to come up

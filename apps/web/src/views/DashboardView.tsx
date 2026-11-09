@@ -3,6 +3,7 @@ import { ChevronRight, Circle, CircleCheck, CircleX, Plus } from "lucide-react";
 import { teamRunState, type Actor, type Agent, type Approval, type TeamFlow } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, useTeams, useWaitingOnYou, usePrefs, type LiveRun } from "../store.ts";
+import { TeamNeedCard, waitingOnYou } from "../team/Runs.tsx";
 import { useFeatures } from "../features.ts";
 import { allowanceText, useAllowance } from "../changes.ts";
 import { go, href } from "../router.ts";
@@ -89,7 +90,8 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
   const pending = waiting.approvals;
   // "Not now" on a help request hides it here (it stays in the chat and on Computers)
   const helpNeeded = waiting.help.filter((c) => !helpSeen.includes(helpKey(c)));
-  const needsCount = pending.length + helpNeeded.length;
+  const teamNeeds = teams.flatMap((t) => waitingOnYou(teamFlows[t.channelId] ?? []));
+  const needsCount = pending.length + helpNeeded.length + teamNeeds.length;
   const working = (tasks ?? []).filter((t) => t.status === "in_progress");
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? "Agent";
   const channelLabel = (id: string | null) => {
@@ -233,6 +235,9 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                   <SectionHead title="Needs you" right={needsCount} needs />
                   {helpNeeded.map((c) => (
                     <HelpNeedCard key={c.id} computer={c} />
+                  ))}
+                  {teamNeeds.map((n) => (
+                    <TeamNeedCard key={`${n.flow.id}-${n.lane.stepId}`} flow={n.flow} lane={n.lane} />
                   ))}
                   {pending.map((p) => (p.login ? <LoginNeedCard key={p.id} approval={p} /> : p.storage ? <StorageNeedCard key={p.id} approval={p} /> : <ApprovalNeedCard key={p.id} approval={p} />))}
                 </>
