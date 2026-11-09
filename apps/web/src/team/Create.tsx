@@ -230,7 +230,7 @@ export function NewTeamFlow({ onClose, sectionId = null, onBrowse, SectionPick, 
     );
 
   if (page === "builder")
-    return <TeamBuilder team={team} onChange={setTeam} name={id} doneLabel="Done" saving={false} onBack={() => setPage(from)} onDone={() => setPage("review")} />;
+    return <TeamBuilder team={team} onChange={setTeam} name={id} doneLabel="Next" saving={false} onBack={() => setPage(from)} onDone={() => setPage("review")} />;
 
   if (page === "review") return <Review slug={id} topic={topic} team={team} busy={busy} error={error} onBack={() => setPage("builder")} onCreate={createStepped} />;
 

@@ -196,7 +196,7 @@ function teamWith(fill: Record<string, string>, maxRounds?: number) {
 const tasksIn = (handle: string, channelId: string) => hub.store.tasks(agents[handle].workspaceId, { agentId: agents[handle].id }).filter((t) => t.toAgentId === agents[handle].id && t.channelId === channelId);
 const openIn = (handle: string, channelId: string) => tasksIn(handle, channelId).filter((t) => t.status === "open").sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1)!;
 const flowIn = async (channelId: string) => (await flowsOf(channelId))[0];
-const decide = (flowId: string, action: "approve" | "retry" | "stop") => api<TeamFlow>("POST", `/api/flows/${flowId}/decide`, { action });
+const decide = (flowId: string, action: "approve" | "retry" | "stop" | "allow") => api<TeamFlow>("POST", `/api/flows/${flowId}/decide`, { action });
 /** A new channel for the team, with a request already planned and approved: the hand-out is open. */
 async function atHandOut(name: string, team: ReturnType<typeof planTeam>) {
   const ch = (await api("POST", "/api/channels", { name, settings: { team } })).data;
@@ -214,7 +214,7 @@ describe("a stepped team when things go wrong", () => {
     await api("POST", `/api/tasks/${openIn("atlas", ch.id).id}/cancel`);
     const flow = await flowIn(ch.id);
     expect(flow.status).toBe("waiting");
-    expect(flow.waitingFor?.why).toMatch(/didn't finish: Cancelled/);
+    expect(flow.waitingFor?.why).toMatch(/couldn't finish .*: Cancelled/);
     // a run that failed offers Try again or Skip (the app hides Approve), never "approve anyway"
     expect(flow.waitingFor?.failed).toBe(true);
     expect(flow.waitingFor?.why).not.toMatch(/approve/i);
@@ -306,6 +306,12 @@ describe("a stepped team when things go wrong", () => {
     expect(flow.waitingFor?.why).toMatch(/built by Forge, who is also the Reviewer/);
   });
 
+  it("says a failed step once, without the run's own lead-in", async () => {
+    const { failureReason } = await import("../src/team-flows.ts");
+    expect(failureReason("Bea's run failed: Claude Code on This Mac isn't signed in")).toBe("Claude Code on This Mac isn't signed in.");
+    expect(failureReason(null)).toBe("no reason given.");
+  });
+
   it("doesn't let an agent review its own step", async () => {
     const ch = (await api("POST", "/api/channels", { name: "own-step", settings: { team: teamWith({ challenger: "atlas" }) } })).data;
     await api("POST", `/api/channels/${ch.id}/messages`, { body: "Plan a thing" });
@@ -313,6 +319,12 @@ describe("a stepped team when things go wrong", () => {
     const flow = await flowIn(ch.id);
     expect(flow).toMatchObject({ status: "waiting", stepId: "challenge" });
     expect(flow.waitingFor?.why).toMatch(/reviewing its own work/);
+    // plain choices, not "approve anyway": pick another agent, or let Atlas do it
+    expect(flow.waitingFor?.selfReview).toEqual({ agent: "Atlas" });
+    expect(flow.waitingFor?.why).not.toMatch(/approve/i);
+    const after = (await decide(flow.id, "allow")).data;
+    expect(after.status).toBe("running");
+    expect(openIn("atlas", ch.id).title).toMatch(/challenge/i);
   });
 
   it("asks a person when a review says neither approved nor changes", async () => {

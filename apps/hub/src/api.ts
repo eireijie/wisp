@@ -1908,7 +1908,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (c.actor.kind !== "user") return reply.code(403).send({ error: "a person decides this" });
     const f = hub.flows.flow((req.params as { id: string }).id);
     if (!f || f.workspaceId !== c.workspaceId || !channelVisible(c, f.channelId)) return reply.code(404).send({ error: "not found" });
-    const body = parse(z.object({ action: z.enum(["approve", "retry", "stop", "changes"]), stepId: z.string().optional(), note: z.string().max(4000).optional() }), req.body, reply);
+    const body = parse(z.object({ action: z.enum(["approve", "retry", "stop", "changes", "allow"]), stepId: z.string().optional(), note: z.string().max(4000).optional() }), req.body, reply);
     if (!body) return;
     if (f.status !== "waiting" && f.status !== "running") return reply.code(409).send({ error: `it's already ${f.status === "done" ? "done" : "stopped"}` });
     const lane = body.stepId ? f.lanes?.[body.stepId] : Object.values(f.lanes ?? {}).find((l) => l.status === "waiting");
