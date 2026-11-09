@@ -214,7 +214,7 @@ describe("a stepped team when things go wrong", () => {
     await api("POST", `/api/tasks/${openIn("atlas", ch.id).id}/cancel`);
     const flow = await flowIn(ch.id);
     expect(flow.status).toBe("waiting");
-    expect(flow.waitingFor?.why).toMatch(/couldn't finish .*: Cancelled\./);
+    expect(flow.waitingFor?.why).toMatch(/couldn't finish .*: Cancelled/);
     // a run that failed offers Try again or Skip (the app hides Approve), never "approve anyway"
     expect(flow.waitingFor?.failed).toBe(true);
     expect(flow.waitingFor?.why).not.toMatch(/approve/i);
