@@ -58,6 +58,12 @@ export interface AgentSettings {
   soulLocked?: boolean;
   /** use the model's faster (pricier) tier where the harness offers one */
   fast?: boolean;
+  /**
+   * Let its harness load the person's own plugins, MCP servers and computer-use helpers from their
+   * own install on the device. Off unless set: they can work the screen and reach apps outside
+   * Wisp's screen switch and approval cards.
+   */
+  ownPlugins?: boolean;
   /** how its ghost looks; unset = a default derived from its handle */
   appearance?: import("./appearance.ts").GhostAppearance;
   /** Voice IDs per speech engine; unset voices are derived from the agent handle. */

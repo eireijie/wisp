@@ -656,6 +656,8 @@ export class NodeDaemon {
           model: run.model ?? agent.model ?? (credential ? run.credential?.model : undefined) ?? null,
           effort: run.effort ?? (run.model ? null : (agent.settings?.effort ?? null)),
           fast: run.model ? false : (agent.settings?.fast ?? false),
+          // off unless the device owner turned it on: the person's own plugins skip Wisp's screen switch and approvals
+          ownPlugins: agent.settings?.ownPlugins === true,
           access,
           sessionId,
           mcp,
