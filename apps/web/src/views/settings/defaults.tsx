@@ -5,13 +5,14 @@ import { useStore } from "../../store.ts";
 import { usableDevices, useDevices } from "../../devices.ts";
 import { Button, Input } from "../../components/ui.tsx";
 import { MemoryRules } from "./workspace.tsx";
+import { useComputerMode } from "../../computerMode.ts";
 import { Card, OwnersOnly, PageHeader, Row, SavedNote, Section, Segmented, Select, useSavedFlash } from "./parts.tsx";
 
 /** GET/PUT /api/settings/agent-defaults: what "Use my defaults" fills in for a new agent. */
 export interface AgentDefaults {
   harness: string | null;
   model: string | null;
-  computer: "own-vm" | "none";
+  computer: "shared" | "own-vm" | "none";
   nodeId: string | null;
   /** a default model for each AI tool (harness id to model id) */
   models: Record<string, string>;
@@ -24,6 +25,7 @@ const CHOICES = HARNESSES.filter((h) => h.protocol !== "mcp");
 export function AgentDefaultsPage() {
   const isOwner = useStore((s) => s.me?.role) === "owner";
   const devices = useDevices(15_000);
+  const mode = useComputerMode();
   const [saved, setSaved] = useState<AgentDefaults | null>(null);
   const [form, setForm] = useState<AgentDefaults | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +106,8 @@ export function AgentDefaultsPage() {
           ))}
         </Card>
       </Section>
+      {/* where new agents work is Wisp's pick, unless an owner chose to decide (Settings → Devices) */}
+      {mode.advanced && (
       <Section title="Computer">
         <Card>
           <Row label="New agents get" hint={form.computer === "own-vm" && devices && !vmDevices.length ? "None of your devices can run a computer for an agent yet." : undefined}>
@@ -113,6 +117,7 @@ export function AgentDefaultsPage() {
               disabled={!isOwner}
               onChange={(v) => setForm({ ...form, computer: v })}
               options={[
+                ["shared", "The shared computer"],
                 ["own-vm", "Their own computer"],
                 ["none", "No computer"],
               ]}
@@ -132,6 +137,7 @@ export function AgentDefaultsPage() {
           </Row>
         </Card>
       </Section>
+      )}
       {isOwner && (
         <div className="flex items-center gap-3 mb-10">
           <Button variant="primary" disabled={!dirty || busy} onClick={save}>

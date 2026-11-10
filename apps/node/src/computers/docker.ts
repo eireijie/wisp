@@ -191,20 +191,47 @@ function relay(bindHost: string, port: number): Promise<number> {
   return p;
 }
 
+/** The name a VM goes by inside (prompt, tmux): "shared" for the shared computer, else its name as a slug. */
+export function vmHostname(spec: Pick<ComputerSpec, "name" | "config">): string {
+  if ((spec.config as VmConfig).shared) return "shared";
+  return (
+    spec.name
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "wisp"
+  );
+}
+
+/**
+ * Run as root in the VM each time it comes up, with its name as $1: that name in the shell prompt
+ * and tmux bar. Apple's container can't set a hostname, so they'd show the container's id
+ * ("wisp-cmp_…"). The prompt is fixed up just before it's shown (after ~/.bashrc set it).
+ */
+export const NAME_INSIDE_SCRIPT = [
+  "printf '%s\\n' \"$1\" > /etc/wisp-hostname",
+  "if ! grep -q wisp-hostname /etc/bash.bashrc 2>/dev/null; then",
+  "cat >> /etc/bash.bashrc <<'WISPNAME'",
+  "",
+  "# this computer's name in the prompt, not the container's id (wisp-hostname)",
+  "__wisp_name() { [ -r /etc/wisp-hostname ] && PS1=\"${PS1//\\\\h/$(cat /etc/wisp-hostname)}\"; }",
+  "PROMPT_COMMAND=\"__wisp_name${PROMPT_COMMAND:+;$PROMPT_COMMAND}\"",
+  "WISPNAME",
+  "fi",
+  "grep -q wisp-hostname /etc/tmux.conf 2>/dev/null || printf '%s\\n' \"set -g status-right '\\\"#(cat /etc/wisp-hostname)\\\" %H:%M %d-%b-%y' # wisp-hostname\" >> /etc/tmux.conf",
+  "",
+].join("\n");
+
 /** Arguments that create a VM's container. Exported for tests. */
 export function runArgs(spec: ComputerSpec, o: { name: string; volume: string; files: string; image: string; kind?: EngineKind }): string[] {
   const cfg = spec.config as VmConfig;
   const kind = o.kind ?? "docker";
   const resolution = /^\d{3,5}x\d{3,5}$/.test(cfg.resolution ?? "") ? cfg.resolution! : "1280x800";
-  const hostname =
-    spec.name
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "wisp";
+  const hostname = vmHostname(spec);
   const args = ["run", "-d", "--name", o.name, "--label", `wisp.computer=${spec.id}`, "--shm-size", "1g"];
   // Apple's container has no hostname or restart policy; Wisp starts a stopped VM when it's next used
-  if (kind !== "apple") args.push("--hostname", hostname, "--restart", "unless-stopped");
+  // stopped when idle and started when next needed, so it never comes back on its own (after a reboot, say)
+  if (kind !== "apple") args.push("--hostname", hostname, "--restart", "no");
   // the hub, when it runs on this same device (Docker Engine on Linux needs to be told the name)
   if (kind === "docker") args.push("--add-host", "host.docker.internal:host-gateway");
   // no published ports: VNC listens inside the container and the device reaches it with exec
@@ -262,6 +289,8 @@ export class DockerVm implements Driver {
   readonly label = "Linux VM";
   private desktop: X11Driver;
   private starting: Promise<void> | null = null;
+  /** an idle stop under way: a use that arrives meanwhile waits for it, then starts the VM again */
+  private stopping: Promise<void> | null = null;
   name: string;
   user = "wisp";
   home = VM_HOME;
@@ -275,7 +304,7 @@ export class DockerVm implements Driver {
     nodeDir: string,
     readonly engine: Engine,
     /** how starting it goes: each step, then up or not, whatever asked for it */
-    private report: (status: "starting" | "ready" | "error", text: string) => void = () => {},
+    private report: (status: "starting" | "ready" | "stopped" | "error", text: string) => void = () => {},
   ) {
     const safe = spec.id.replace(/[^a-zA-Z0-9_.-]/g, "-");
     this.name = `wisp-${safe}`;
@@ -324,10 +353,18 @@ export class DockerVm implements Driver {
     }
   }
 
-  /** Make sure the VM exists and is running, getting the image the first time. */
+  /** Make sure the VM exists and is running, getting the image the first time. A stop under way finishes first. */
   ready(): Promise<void> {
-    this.starting ??= this.boot().finally(() => (this.starting = null));
+    this.starting ??= (async () => {
+      await this.stopping?.catch(() => {});
+      await this.boot();
+    })().finally(() => (this.starting = null));
     return this.starting;
+  }
+
+  /** Where it lives (its container's name and user), known without starting it. */
+  identityReady(): Promise<void> {
+    return this.resolveIdentity();
   }
 
   private async boot() {
@@ -348,7 +385,7 @@ export class DockerVm implements Driver {
 
   private async bringUp(state: boolean | null) {
     if (state === false) {
-      this.onStatus("Starting the VM…");
+      this.onStatus("Starting the computer…");
       await must(this.bin, ["start", this.name], { timeoutMs: 120_000 });
     } else {
       const custom = (this.spec.config as VmConfig).image;
@@ -364,13 +401,16 @@ export class DockerVm implements Driver {
       if (this.engine.kind === "apple" && (await exec(this.bin, ["volume", "inspect", this.volume], { timeoutMs: 15_000 })).code !== 0) {
         await must(this.bin, ["volume", "create", this.volume], { timeoutMs: 60_000 });
       }
-      this.onStatus("Creating the VM…");
+      this.onStatus("Setting up the computer…");
       await must(this.bin, runArgs(this.spec, { name: this.name, volume: this.volume, files: this.filesDir, image, kind: this.engine.kind }), { timeoutMs: 300_000 });
     }
     // wait for the desktop to come up
     for (let i = 0; i < 90; i++) {
       const r = await exec(this.bin, ["exec", "-u", this.user, "-e", `DISPLAY=${DISPLAY}`, this.name, "xdotool", "getdisplaygeometry"], { timeoutMs: 10_000 });
-      if (r.code === 0) return;
+      if (r.code === 0) {
+        await exec(this.bin, ["exec", "-i", "-u", "root", this.name, "sh", "-s", "--", vmHostname(this.spec)], { input: NAME_INSIDE_SCRIPT, timeoutMs: 15_000 }).catch(() => {});
+        return;
+      }
       await new Promise((res) => setTimeout(res, 1000));
     }
     throw new ActionError("the VM started but its desktop didn't come up within a minute and a half");
@@ -399,8 +439,20 @@ export class DockerVm implements Driver {
     await this.ready();
   }
 
-  async stop() {
-    if (await this.running()) await must(this.bin, this.engine.kind === "apple" ? ["stop", "--time", "10", this.name] : ["stop", "-t", "10", this.name], { timeoutMs: 60_000 });
+  /**
+   * Stop it, keeping its files, sign-ins and apps. A start under way finishes first, and a use
+   * that arrives during the stop waits for it and then starts the VM again.
+   */
+  stop(): Promise<void> {
+    this.stopping ??= (async () => {
+      await this.starting?.catch(() => {});
+      if (!(await this.running())) return;
+      // made before VMs stopped when idle: don't let the engine bring it back on its own
+      if (this.engine.kind !== "apple") await exec(this.bin, ["update", "--restart", "no", this.name], { timeoutMs: 15_000 }).catch(() => {});
+      await must(this.bin, this.engine.kind === "apple" ? ["stop", "--time", "10", this.name] : ["stop", "-t", "10", this.name], { timeoutMs: 60_000 });
+      this.report("stopped", "");
+    })().finally(() => (this.stopping = null));
+    return this.stopping;
   }
 
   async destroy() {

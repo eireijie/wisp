@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, signInProblem, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
+import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, signInProblem, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest, type VmConfig } from "@wisp/core";
 import { HARNESS_SPECS, HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
 import { WispClient, WispError } from "@wisp/sdk";
 import { runUpdate, version } from "@wisp/update";
@@ -16,7 +16,7 @@ import { detectRemoteApps } from "./remote-apps.ts";
 import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
 import { HarnessLogins } from "./harness-login.ts";
 import { ModelLogins } from "./model-login.ts";
-import { type DockerVm } from "./computers/docker.ts";
+import { recipeTag, type DockerVm } from "./computers/docker.ts";
 import { mcpBundle } from "./vm-tools.ts";
 import { NO_NODE, findNpmDir, withDir } from "./npm.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
@@ -26,6 +26,7 @@ import { bringBack, mergeBranch, prepareCheckout, prepareClone } from "./git.ts"
 /** How often a device looks again at whether its harnesses are signed in (someone may do it in a terminal). */
 const SIGN_IN_CHECK_MS = 20_000;
 const MCP_BIN = fileURLToPath(new URL("../../../bin/wisp-mcp.mjs", import.meta.url));
+const BROWSER_BIN = fileURLToPath(new URL("../../../bin/wisp-browser.mjs", import.meta.url));
 
 export interface NodeConfig {
   hub: string;
@@ -549,12 +550,13 @@ export class NodeDaemon {
     const adapter = this.registry[agent.harness];
     if (!adapter) return this.send({ type: "run_failed", runId: run.runId, error: `no headless adapter for ${agent.harness} yet; connect it with wisp-mcp instead` });
 
-    // its VM, when it has one here: it runs inside it, or at least gets its browser
+    // its VM, when it has one here: it runs inside it (started now), or gets its browser (the VM starts on first use)
     let vm: DockerVm | null = null;
     if (run.computer?.kind === "vm") {
       try {
         vm = await this.computers.vm(run.computer);
-        await vm?.ready();
+        if (run.inComputer) await vm?.ready();
+        else await vm?.identityReady();
       } catch (err) {
         if (run.inComputer) return this.send({ type: "run_failed", runId: run.runId, error: `couldn't start ${run.computer.name}: ${(err as Error).message}` });
         vm = null;
@@ -583,7 +585,9 @@ export class NodeDaemon {
     }
 
     // an agent with a VM here works in the folder it shares with the VM, so files go both ways
-    let cwd = (run.computer && this.computers.vmFiles(run.computer)) || path.join(this.cfg.dir, "agents", agentFolder(this.cfg.dir, agent));
+    // on the shared computer each agent has its own working folder in the shared files, which the others can still open
+    const vmFiles = run.computer ? this.computers.vmFiles(run.computer) : null;
+    let cwd = vmFiles ? ((run.computer!.config as VmConfig).shared ? path.join(vmFiles, agentFolder(this.cfg.dir, agent)) : vmFiles) : path.join(this.cfg.dir, "agents", agentFolder(this.cfg.dir, agent));
     fs.mkdirSync(cwd, { recursive: true });
     // coding tasks run in their own checkout of the team repo, on the task's branch
     if (run.workspace) {
@@ -627,7 +631,7 @@ export class NodeDaemon {
       // the VM's Chrome as page-element tools, run inside the VM either way
       if (vm) {
         const browserBin = vm.user === "warren" ? "warren-browser-mcp" : "wisp-browser-mcp";
-        browser = inside ? { command: browserBin, args: [], env: {} } : { command: vm.engine.bin, args: ["exec", "-i", "-u", vm.user, vm.name, browserBin], env: {} };
+        browser = inside ? { command: browserBin, args: [], env: {} } : await this.lazyBrowser(agent.id, run.runId, vm, browserBin);
       }
     } catch (err) {
       this.aborts.delete(run.runId);
@@ -1078,6 +1082,26 @@ export class NodeDaemon {
       this.vmTools.set(vm.name, bundle.hash);
     }
     return { command: "node", args: [file], env: { WISP_URL: await vm.hubUrl(this.cfg.hub), WISP_TOKEN: token, WISP_RUN: runId } };
+  }
+
+  /**
+   * The VM's browser tools for a harness outside it, standing in until first used so a chat reply
+   * doesn't start the computer (see browser-proxy.ts). Without a token of its own (an older hub) it
+   * runs them in the VM straight away.
+   */
+  private async lazyBrowser(agentId: string, runId: string, vm: DockerVm, browserBin: string): Promise<McpServerSpec> {
+    const direct = [vm.engine.bin, "exec", "-i", "-u", vm.user, vm.name, browserBin];
+    const token = await this.harnessToken(agentId);
+    if (!token) {
+      await vm.ready();
+      return { command: direct[0], args: direct.slice(1), env: {} };
+    }
+    const asNode: Record<string, string> = process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {};
+    return {
+      command: process.execPath,
+      args: [BROWSER_BIN],
+      env: { ...asNode, WISP_URL: this.cfg.hub, WISP_TOKEN: token, WISP_RUN: runId, WISP_BROWSER_CMD: JSON.stringify(direct), WISP_BROWSER_TOOLS: path.join(this.cfg.dir, "computers", `browser-tools-${recipeTag()}.json`) },
+    };
   }
 
   private async harnessToken(agentId: string): Promise<string | null> {

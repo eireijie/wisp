@@ -18,7 +18,8 @@ vi.mock("../../access.ts", async (original) => {
 vi.mock("../../components/Access.tsx", async (original) => ({ ...(await original<typeof import("../../components/Access.tsx")>()), enableTailscale: vi.fn() }));
 vi.mock("../../theme.ts", () => ({ motionReduced: () => false }));
 vi.mock("../../devices.ts", () => ({ useDevices: () => [] }));
-vi.mock("../../store.ts", () => ({ useStore: (select: (s: any) => any) => select({ me: { role: "owner" } }) }));
+vi.mock("../../computerMode.ts", () => ({ useComputerMode: () => ({ advanced: false, sharedComputerId: null, loaded: true, setAdvanced: vi.fn() }) }));
+vi.mock("../../store.ts", () => ({ useStore: (select: (s: any) => any) => select({ me: { role: "owner" }, computers: [] }) }));
 const info: AccessInfo = {
   publicUrl: "https://wisp.tail.ts.net",
   lan: [],
