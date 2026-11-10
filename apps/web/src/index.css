@@ -359,6 +359,8 @@ body {
 .prose-w ul { list-style: disc; padding-left: 1.4em; }
 .prose-w ol { list-style: decimal; padding-left: 1.4em; }
 .prose-w li + li { margin-top: 0.15em; }
+.prose-w li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.4em; }
+.prose-w li > input[type="checkbox"] { margin-right: 0.45em; vertical-align: -0.1em; }
 .prose-w a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
 .prose-w code { font-family: var(--font-mono); font-size: 0.88em; background: var(--code); padding: 0.1em 0.35em; border-radius: 4px; }
 .prose-w pre { background: var(--code); padding: 0.75em 0.9em; border-radius: 8px; overflow-x: auto; }
