@@ -89,7 +89,8 @@ struct TeamTemplate: Codable, Hashable, Identifiable {
 /** One request going through a stepped team (TeamFlow in packages/core): what the strip needs. */
 struct TeamFlow: Decodable, Identifiable, Hashable {
   struct Done: Decodable, Hashable { var stepId: String; var verdict: String? }
-  struct Waiting: Decodable, Hashable { var why: String; var options: String; var piece: String? }
+  struct Waiting: Decodable, Hashable { var why: String; var options: String; var piece: String?; var failed: Bool?; var selfReview: SelfReview? }
+  struct SelfReview: Decodable, Hashable { var agent: String }
   /** One step's run in a request: steps that run together each have their own. */
   struct Lane: Decodable, Hashable {
     var stepId: String
@@ -120,6 +121,22 @@ struct TeamFlow: Decodable, Identifiable, Hashable {
     for id in doneSteps { out[id] = Lane(stepId: id, status: "done") }
     if status == "running" || status == "waiting" { out[stepId] = Lane(stepId: stepId, status: status, waitingFor: waitingFor) }
     return out
+  }
+
+  /** What the Inbox says about a team from its newest request: a failed step is never "Quiet". Mirrors teamRunState in @wisp/core. */
+  static func runState(_ flows: [TeamFlow], busyName: String?) -> (text: String, bad: Bool) {
+    if let f = flows.first {
+      switch f.status {
+      case "waiting":
+        let failed = f.waitingFor?.failed == true || f.allLanes.values.contains { $0.status == "waiting" && $0.waitingFor?.failed == true }
+        return failed ? ("Failed · a step didn't finish. Try again or skip it", true) : ("Waiting for you", false)
+      case "running": return ("Working\(busyName.map { " · \($0) is on it" } ?? "")", false)
+      case "failed": return ("Stopped · the last request didn't finish", true)
+      default: break
+      }
+    }
+    if let busyName { return ("Working · \(busyName) is on it", false) }
+    return ("Quiet", false)
   }
 
   /** the lanes that wait for a person */

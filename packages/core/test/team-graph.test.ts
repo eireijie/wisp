@@ -253,6 +253,18 @@ describe("how it works in plain English", () => {
     expect(titleAsVerb("Research")?.third).toBe("researches");
     expect(titleAsVerb("Notify the team")?.third).toBe("notifies the team".replace("notifies", "notifies"));
     expect(titleAsVerb("Finance summary")).toBeNull();
+    expect(titleAsVerb("Find gaps, challenge the plan")?.third).toBe("finds gaps, challenges the plan");
     expect(describeFlow(team([step("a", { action: "Finance summary" })]), names)[0].text).toBe("Nova works on “Finance summary”.");
+  });
+});
+
+describe("describeFlow for a filled template", () => {
+  it("names the agents who really fill the roles, not the template's role names", () => {
+    const t = teamFromTemplate(TEAM_TEMPLATES.find((x) => x.id === "plan-challenge")!);
+    const roles = t.roles.map((r) => ({ ...r, agentId: r.id === "reviewer" || r.id === "frontend" ? "bea" : "atlas" }));
+    const lines = describeFlow({ roles, steps: t.steps }, (id) => (id === "bea" ? "Bea" : "Atlas"));
+    const handOut = lines.find((l) => l.stepId === "hand-out")!;
+    expect(handOut.text).toBe("Atlas hands out the pieces between Atlas and Bea; Bea checks each piece.");
+    expect(handOut.text).not.toMatch(/builder|Reviewer/);
   });
 });

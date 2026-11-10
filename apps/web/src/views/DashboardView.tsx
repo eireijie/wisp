@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronRight, Circle, CircleCheck, CircleX, Plus } from "lucide-react";
-import type { Actor, Agent, Approval } from "@wisp/core";
+import { teamRunState, type Actor, type Agent, type Approval, type TeamFlow } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, useTeams, useWaitingOnYou, usePrefs, type LiveRun } from "../store.ts";
+import { TeamNeedCard, waitingOnYou } from "../team/Runs.tsx";
 import { useFeatures } from "../features.ts";
 import { allowanceText, useAllowance } from "../changes.ts";
 import { go, href } from "../router.ts";
@@ -51,6 +52,20 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
   const approvals = useStore((s) => s.approvals);
   const members = useStore((s) => s.members);
   const version = useStore((s) => s.tasksVersion);
+  const flowsVersion = useStore((s) => s.flowsVersion);
+  // each team's newest requests, so a failed run shows as failed, not as "Quiet"
+  const [teamFlows, setTeamFlows] = useState<Record<string, TeamFlow[]>>({});
+  const teamChannelKey = teams.map((t) => t.channelId).join(",");
+  useEffect(() => {
+    let live = true;
+    for (const id of teamChannelKey ? teamChannelKey.split(",") : [])
+      api<TeamFlow[]>("GET", `/api/channels/${id}/flows`)
+        .then((all) => live && setTeamFlows((prev) => ({ ...prev, [id]: all.slice(0, 5) })))
+        .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [teamChannelKey, flowsVersion]);
   const features = useFeatures();
   const prefs = usePrefs();
   const helpSeen = useHelpSeen();
@@ -75,7 +90,8 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
   const pending = waiting.approvals;
   // "Not now" on a help request hides it here (it stays in the chat and on Computers)
   const helpNeeded = waiting.help.filter((c) => !helpSeen.includes(helpKey(c)));
-  const needsCount = pending.length + helpNeeded.length;
+  const teamNeeds = teams.flatMap((t) => waitingOnYou(teamFlows[t.channelId] ?? []));
+  const needsCount = pending.length + helpNeeded.length + teamNeeds.length;
   const working = (tasks ?? []).filter((t) => t.status === "in_progress");
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? "Agent";
   const channelLabel = (id: string | null) => {
@@ -220,6 +236,9 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                   {helpNeeded.map((c) => (
                     <HelpNeedCard key={c.id} computer={c} />
                   ))}
+                  {teamNeeds.map((n) => (
+                    <TeamNeedCard key={`${n.flow.id}-${n.lane.stepId}`} flow={n.flow} lane={n.lane} />
+                  ))}
                   {pending.map((p) => (p.login ? <LoginNeedCard key={p.id} approval={p} /> : p.storage ? <StorageNeedCard key={p.id} approval={p} /> : <ApprovalNeedCard key={p.id} approval={p} />))}
                 </>
               ) : (
@@ -329,6 +348,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                       const busy = members.find((a) => a.status === "busy");
                       const active = !!busy || teamTasks.some((x) => x.status === "in_progress");
                       const channel = channels.find((c) => c.id === t.channelId);
+                      const run = teamRunState(teamFlows[t.channelId] ?? [], active ? busy?.name ?? "" : null);
                       return (
                         <div key={t.id}>
                           {i > 0 && <Rule />}
@@ -338,7 +358,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                             </span>
                             <span className="min-w-0 flex-1 flex flex-col gap-0.5">
                               <span className="truncate text-base font-medium">{t.name}</span>
-                              <span className="truncate text-sm text-faint">{active ? `Working${busy ? ` · ${busy.name} is on it` : ""}` : "Quiet"}</span>
+                              <span className={cx("truncate text-sm", run.state === "failed" || run.state === "stopped" ? "text-bad" : run.state === "needs-you" ? "text-warn" : "text-faint")}>{run.text}</span>
                             </span>
                           </a>
                         </div>

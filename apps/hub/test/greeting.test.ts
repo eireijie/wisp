@@ -217,6 +217,14 @@ describe("a new agent speaks first", () => {
     for (const w of all) hub.watches.remove(w.id);
   });
 
+  it("tells the agent to move into the setup questions after a concrete first task", async () => {
+    const id = await make("tess");
+    onReply = async () => "Here's your packing list.";
+    const prompt = await answer(id, "make me a packing list as a file");
+    expect(prompt).toContain("do that task first and record it as the goal");
+    expect(prompt).toContain("Never finish a first task without moving into the setup questions");
+  });
+
   it("doesn't offer a role to an agent made for one", async () => {
     const id = await make("eli", { settings: { role: "Researcher" } });
     expect(setupOf(id).steps.role).toBe("Researcher");
@@ -226,17 +234,27 @@ describe("a new agent speaks first", () => {
     expect(prompt).not.toContain("Offer the role that fits");
   });
 
-  it("keeps the chat going when the model fails", async () => {
+  it("doesn't carry on with the scripted questions when the model fails; Try again then works and clears the failure", async () => {
     const id = await make("fin");
     onReply = async () => {
       throw new Error("model overloaded");
     };
     await answer(id, "Plan my week");
+    const dm = dmOf(id).id;
+    const failure = () => hub.store.messages(dm).filter((m) => m.parts.some((p) => p.type === "run_failed"));
+    await waitFor(() => (failure().length ? true : undefined));
+    // no "Which accounts…" from Wisp on the agent's behalf, and the step isn't marked answered
+    expect(said(id).map((m) => m.body)).not.toContain("Which accounts should I work with? For example Google, Meta or Instagram.");
+    expect(setupOf(id).steps.goal).toBeUndefined();
+    // Try again works: the old failure line and its button go away
     onReply = async () => "Got it.";
-    const last = said(id).at(-1)!;
-    expect(last.author).toEqual({ kind: "agent", id });
-    expect(last.body).toBe("Which accounts should I work with? For example Google, Meta or Instagram.");
-    expect(setupOf(id).steps.goal).toBe('"Plan my week" (their words)');
+    const run = hub.store.messages(dm).flatMap((m) => m.parts).find((p) => p.type === "run_failed");
+    const before = calls.length;
+    await owner.request("POST", `/api/runs/${(run as { runId: string }).runId}/retry`);
+    await waitFor(() => calls.length > before || undefined);
+    await idle();
+    await waitFor(() => (failure().length === 0 ? true : undefined));
+    expect(said(id).at(-1)!.body).toBe("Got it.");
   });
 
   it("ends after a fixed number of the person's messages even if the agent never finishes it", async () => {

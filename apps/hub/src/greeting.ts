@@ -271,7 +271,7 @@ export function setupSection(hub: Hub, agent: Agent, at: { channelId: string; li
   const role = roleOf(hub, agent);
   return [
     `## Getting to know ${personName}`,
-    `You're new, and this is your first chat. Wisp said hello for you and asked what they'd like you to do. Lead a short setup, in your own voice and personality${role ? `, as their ${role}` : ""}: one thing per message, a line on what they said and then the next question. Use your own words and fit the steps to your job; skip any that clearly don't apply. If they say "skip", move on without fuss; if they'd rather just get going, finish the setup and help them.`,
+    `You're new, and this is your first chat. Wisp said hello for you and asked what they'd like you to do. Lead a short setup, in your own voice and personality${role ? `, as their ${role}` : ""}: one thing per message, a line on what they said and then the next question. Use your own words and fit the steps to your job; skip any that clearly don't apply. If they say "skip", move on without fuss; if they'd rather just get going, finish the setup and help them. If their first message is already a concrete task ("make me a packing list"), do that task first and record it as the goal. Then, in that same reply after the result, say in one short line that you have a couple of quick questions (they can skip them) and ask the next one. Never finish a first task without moving into the setup questions.`,
     done.length ? `Done so far:\n${done.map((k) => `- ${STEP_TITLE[k]}: ${s.steps[k]}`).join("\n")}` : "",
     s.replies.length ? `What they've written so far:\n${s.replies.map((r) => `- "${r}"`).join("\n")}` : "",
     left.length ? `Still to do, in this order:\n${left.map((k) => `- ${k}: ${GUIDE[k].how(ctx)}`).join("\n")}` : "",
@@ -279,23 +279,6 @@ export function setupSection(hub: Hub, agent: Agent, at: { channelId: string; li
   ]
     .filter(Boolean)
     .join("\n");
-}
-
-/**
- * The model failed mid-setup for a reason other than sign-in: Wisp takes what they last wrote as
- * the answer to the step it was on and asks the next question itself, so the chat doesn't stall.
- */
-export function askNextIfStalled(hub: Hub, agentId: string, channelId: string, signInTrouble: boolean): void {
-  if (signInTrouble) return;
-  const agent = hub.store.agent(agentId);
-  const s = agent && activeSetup(agent, channelId);
-  if (!agent || !s || !s.replies.length) return;
-  const asked = remaining(s).find((k) => GUIDE[k].ask);
-  if (!asked) return;
-  const steps = { ...s.steps, [asked]: `"${s.replies.at(-1)}" (their words)` };
-  hub.store.updateAgent(agent.id, { settings: { setup: { ...s, steps } } });
-  const next = SETUP_STEPS.filter((k) => steps[k] === undefined).find((k) => GUIDE[k].ask);
-  if (next) hub.postMessage({ channelId, author: { kind: "agent", id: agent.id }, body: GUIDE[next].ask!, route: false });
 }
 
 interface Helpers {

@@ -474,7 +474,7 @@ export function layoutSteps<T extends Omit<TeamStep, "x" | "y"> & { x?: number; 
 // --- plain English ----------------------------------------------------------------------
 
 const VERBS = new Set(
-  "plan research build draft write review check find fix test run read collect gather sort triage reproduce verify approve ship send deliver design create make summarize summarise analyze analyse compare study explore investigate prepare publish post update edit clean translate propose pick choose answer reply respond report hand split merge deploy release schedule book call email notify tell ask look search scan list rank score rewrite refactor implement develop code debug document outline brainstorm decide confirm validate monitor track measure label tag file open close assign sign pay order buy sell collect extract fetch pull push upload download share present explain teach polish format proofread fact-check".split(" "),
+  "plan research build draft write review check find fix test run read collect gather sort triage reproduce verify approve ship send deliver design create make summarize summarise analyze analyse compare study explore investigate prepare publish post update edit clean translate propose pick choose answer reply respond report hand split merge deploy release schedule book call email notify tell ask look search scan list rank score rewrite refactor implement develop code debug document outline brainstorm decide confirm validate monitor track measure label tag file open close assign sign pay order buy sell collect extract fetch pull push upload download share present explain teach polish format proofread fact-check challenge".split(" "),
 );
 
 function third(word: string): string {
@@ -492,7 +492,9 @@ export function titleAsVerb(title: string): { third: string; base: string } | nu
   const m = /^([A-Za-z-]+)(\b.*)$/s.exec(t);
   if (!m || !VERBS.has(m[1].toLowerCase())) return null;
   const w = m[1].toLowerCase();
-  return { third: `${third(w)}${m[2]}`, base: `${w}${m[2]}` };
+  // "Find gaps, challenge the plan": each clause that starts with a verb agrees too
+  const more = (rest: string, f: (v: string) => string) => rest.replace(/, ([A-Za-z-]+)\b/g, (all, v: string) => (VERBS.has(v.toLowerCase()) ? `, ${f(v.toLowerCase())}` : all));
+  return { third: `${third(w)}${more(m[2], third)}`, base: `${w}${m[2]}` };
 }
 
 export interface FlowLine {
@@ -554,9 +556,14 @@ export function describeFlow(team: Pick<ChannelTeam, "roles" | "steps">, nameOf:
       const max = s.maxRounds ?? DEFAULT_ROUNDS;
       rest = `${verb ? verb.third : "checks the work"}${what ? ` using ${what}` : ""}. If it isn't good enough it goes back to step ${num(s.sendBackTo)}, up to ${max} round${max === 1 ? "" : "s"}, then it asks you`;
     } else if (s.kind === "hand_out") {
-      const names = (s.handTo ?? []).map((r) => team.roles?.find((x) => x.id === r)?.name).filter(Boolean) as string[];
-      const checker = s.reviewBy ? team.roles?.find((x) => x.id === s.reviewBy)?.name : null;
-      rest = `${verb ? verb.third : "splits the work"}${names.length ? ` between ${joinWords(names)}` : ""}${checker ? `; the ${checker} checks each piece` : ""}`;
+      // the agents who really fill those roles, not the template's role names
+      const who2 = (r: string) => {
+        const role = team.roles?.find((x) => x.id === r);
+        return role?.agentId ? nameOf(role.agentId) : null;
+      };
+      const names = [...new Set((s.handTo ?? []).map(who2).filter((n): n is string => !!n))];
+      const checker = s.reviewBy ? who2(s.reviewBy) : null;
+      rest = `${verb ? verb.third : "splits the work"}${names.length ? ` between ${joinWords(names)}` : ""}${checker ? `; ${checker} checks each piece` : ""}`;
     } else if (verb) {
       rest = what ? `uses ${what} to ${verb.base}` : verb.third;
     } else {
@@ -785,13 +792,17 @@ export interface TeamFlowPiece {
   lastReviewId?: string;
   status: "building" | "reviewing" | "approved" | "failed";
   /** why a failed piece waits for a person, and what trying again redoes */
-  problem?: { why: string; options: "retry" | "rounds"; redo: "build" | "review" };
+  problem?: { why: string; options: "retry" | "rounds"; redo: "build" | "review"; failed?: boolean };
 }
 
 /** What a waiting request asks of a person. "ask" = an ask-me step, answered from the Inbox. */
 export interface FlowWaiting {
   why: string;
   options: "retry" | "rounds" | "ask";
+  /** the step (or its hand-over) ran and failed: offer Try again or Skip, never Approve */
+  failed?: boolean;
+  /** a review step that would be done by the agent whose work it reviews: the person picks another agent, or lets it go ahead */
+  selfReview?: { agent: string };
   /** `piece` when it's one piece of a hand-out that needs a person, not the whole step */
   piece?: string;
 }
@@ -849,6 +860,8 @@ export interface TeamFlow {
   /** follow-up tasks, by the piece they belong to */
   pieceOf?: Record<string, string>;
   waitingFor: FlowWaiting | null;
+  /** review steps a person said may be done by the author of the work */
+  selfReviewOk?: string[];
   /** every step that has started, by step id */
   lanes?: Record<string, FlowLane>;
   /** what the last steps produced, once it's done */
@@ -871,4 +884,22 @@ export interface TeamDraft {
   /** how it works, one line per step */
   lines?: FlowLine[];
   problem?: string;
+}
+
+/** What a team's newest request says about it, for the Inbox: never "quiet" when it failed. */
+export type TeamRunState = { state: "working" | "failed" | "needs-you" | "stopped" | "quiet"; text: string };
+
+export function teamRunState(flows: Pick<TeamFlow, "status" | "waitingFor" | "lanes">[], busyName?: string | null): TeamRunState {
+  const latest = flows[0];
+  if (latest && (latest.status === "waiting" || latest.status === "running")) {
+    // steps that run together each have a lane: one failed step shows even while the others still work
+    const waiting = Object.values(latest.lanes ?? {}).filter((l) => l.status === "waiting");
+    const failed = latest.waitingFor?.failed || waiting.some((l) => l.waitingFor?.failed);
+    if (failed) return { state: "failed", text: "Failed · a step didn't finish. Try again or skip it" };
+    if (latest.status === "waiting" || waiting.length) return { state: "needs-you", text: "Waiting for you" };
+  }
+  if (latest?.status === "running") return { state: "working", text: busyName ? `Working · ${busyName} is on it` : "Working" };
+  if (latest?.status === "failed") return { state: "stopped", text: "Stopped · the last request didn't finish" };
+  if (busyName != null) return { state: "working", text: busyName ? `Working · ${busyName} is on it` : "Working" };
+  return { state: "quiet", text: "Quiet" };
 }
