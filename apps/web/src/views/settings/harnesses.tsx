@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useComputerMode } from "../../computerMode.ts";
 import { ArrowUp, ChevronLeft, Copy, ExternalLink, Loader2, Plus, Share2, UserPen, LogIn, UserMinus, FileCog } from "lucide-react";
 import { harnessLabel, type Connector, type HarnessCatalog, type HarnessLogin, type HarnessSettings, type HarnessSettingsChange, type HarnessSettingItem } from "@wisp/core";
 import { api } from "../../api.ts";
@@ -13,6 +14,7 @@ import { HarnessLogo } from "../../components/HarnessLogo.tsx";
 import { Badge, Circle, Dlg, Item, Label, Panel, Pick, Prim, Sec, Seg, Switch, TextBox, Tile } from "../../components/MarketParts.tsx";
 import { AgentPicker } from "../../components/ShopParts.tsx";
 import { InstallHarness } from "./runtimes.tsx";
+import { replyAfter } from "../../harness-signin.ts";
 
 export interface HarnessesResponse {
   device: { id: string; name: string };
@@ -44,6 +46,10 @@ const HarnessTile = ({ harness, size = 40 }: { harness: string; size?: number })
  */
 export function HarnessesPage() {
   const { computers, error, reload } = useHarnessComputers();
+  // which device hosts a computer is for Advanced; Simple names it plainly
+  const { advanced, sharedComputerId } = useComputerMode();
+  const kindLabel = (c: { id: string; kind: string }, host: string | null | undefined) =>
+    c.kind !== "vm" ? "Device" : advanced ? `VM${host ? ` on ${host}` : ""}` : c.id === sharedComputerId ? "" : "Its own computer";
   const devices = useDevices(10_000);
   const agents = useStore((s) => s.agents);
   const mine = useMemo(() => (devices ?? []).filter((d) => d.mine), [devices]);
@@ -91,8 +97,7 @@ export function HarnessesPage() {
                 <div className="mb-1.5 flex items-baseline justify-between gap-3 px-1">
                   <h3 className="truncate text-[14px] font-semibold">{c.name}</h3>
                   <span className="shrink-0 text-[12px] text-faint">
-                    {c.kind === "vm" ? `VM${host ? ` on ${host}` : ""}` : "Device"}
-                    {c.online ? "" : " · offline"}
+                    {[kindLabel(c, host), c.online ? "" : "offline"].filter(Boolean).join(" · ")}
                   </span>
                 </div>
                 <div className="overflow-hidden rounded-xl border border-line bg-card divide-y divide-line">
@@ -662,10 +667,25 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
     if (login?.status === "running") void act({ op: "login_cancel", loginId: login.id }).catch(() => {});
     onClose();
   };
+  /** what it had printed when a code was sent: anything after is its answer */
+  const [sentAt, setSentAt] = useState<string | null>(null);
+  const answer = sentAt !== null && login ? replyAfter(sentAt, login.output ?? "") : "";
+  // reading the clipboard needs a secure page and a browser that allows it
+  const canPaste = typeof navigator !== "undefined" && !!navigator.clipboard?.readText && window.isSecureContext;
+  const paste = async () => {
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (text) setCode(text);
+    } catch {}
+  };
   const send = async (e: FormEvent) => {
     e.preventDefault();
     if (!login || !code.trim()) return;
-    setLogin(await act({ op: "login_input", loginId: login.id, text: code.trim() }));
+    // what it says after this is its answer to that code ("Invalid code…")
+    const before = login.output ?? "";
+    const next = await act({ op: "login_input", loginId: login.id, text: code.trim() });
+    setSentAt(before);
+    setLogin(next);
     setCode("");
   };
   const step = (n: number, title: string, body: ReactNode, right?: ReactNode) => (
@@ -713,7 +733,7 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
           <Panel>
             {step(
               1,
-              "Open the sign-in page",
+              running.url && !running.code ? "Open the sign-in page and sign in" : "Open the sign-in page",
               running.url ? undefined : (
                 <p className="flex items-center gap-2 text-sm text-muted">
                   <Loader2 size={14} className="animate-spin" /> Starting {label}'s sign-in on {device.name}…
@@ -738,14 +758,24 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
               !running.code &&
               step(
                 2,
-                "Paste the code the page gives you",
-                <form onSubmit={send} id="harness-code" className="flex items-center gap-2">
-                  <TextBox value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste it here" aria-label="Code from the page" className="flex-1" />
+                "Copy the code the page shows, then paste it here",
+                <form onSubmit={send} id="harness-code" className="flex min-w-0 items-center gap-2">
+                  <TextBox value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste the code" aria-label="Code from the sign-in page" className="min-w-0 flex-1" autoComplete="off" autoCapitalize="off" spellCheck={false} />
+                  {canPaste && (
+                    <Sec onClick={() => void paste()} className="shrink-0">
+                      Paste
+                    </Sec>
+                  )}
                 </form>,
               )}
           </Panel>
+          {answer && (
+            <p role="status" className="whitespace-pre-wrap px-1 text-sm text-bad">
+              {answer} Copy the whole code from the page and paste it again.
+            </p>
+          )}
           <p className="px-1 text-sm text-faint">
-            Wisp passes the code to {label} on {device.name}. Your password stays with the harness.
+            {running.url && !running.code ? `After you sign in, the page shows a code. Come back here and paste it; Wisp passes it to ${label} on ${device.name}.` : `Wisp passes the code to ${label} on ${device.name}.`} Your password stays with the harness.
           </p>
           <p className="flex items-center gap-1.5 px-1 text-xs text-muted">
             <Loader2 size={12} className="animate-spin" /> Waiting for you to finish signing in
@@ -779,3 +809,4 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
     </Dlg>
   );
 }
+

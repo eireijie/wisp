@@ -105,6 +105,7 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     const patch = { ...body, ...(body.model !== undefined ? { model: body.model || null } : {}), ...(body.effort !== undefined ? { effort: body.effort || null } : {}) };
     const b = store.setBackground(agent.id, c.actor.id, { ...patch, ...((body.enabled && !was?.enabled) || (raised && was?.nextReason === "daily limit reached") ? { nextAt: null, nextReason: "" } : {}) });
     hub.broadcast(c.workspaceId, { type: "background_changed", agentId: agent.id });
+    if (body.everyMinutes !== undefined) hub.watches.followPace(agent.id, c.actor.id, body.everyMinutes);
     // even in quiet hours: they just turned it on, so they expect to see it work
     if (body.enabled && !was?.enabled) hub.background.wake(agent.id, c.actor.id);
     if (body.enabled === false && was?.enabled) hub.background.turnedOff(agent.id, c.actor.id);
@@ -328,7 +329,9 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     const was = store.background(agentId, userId);
     store.setBackground(agentId, userId, { ...patch, ...(patch.enabled && !was?.enabled ? { nextAt: null, nextReason: "" } : {}) });
     hub.broadcast(workspaceId, { type: "background_changed", agentId });
-    if (patch.enabled && !was?.enabled) hub.background.wake(agentId, userId);
+    if (patch.everyMinutes !== undefined) hub.watches.followPace(agentId, userId, patch.everyMinutes);
+    // the agent turned it on while talking with them: it looks right away only if there's something only a model can look at
+    if (patch.enabled && !was?.enabled && hub.background.hasSomethingToWatch(agentId, null, userId)) hub.background.wake(agentId, userId);
     if (patch.enabled === false && was?.enabled) hub.background.turnedOff(agentId, userId);
   };
 

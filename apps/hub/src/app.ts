@@ -1,5 +1,6 @@
 import { stableHubId } from "./discovery.ts";
 import { watchLocalDevice } from "./local-device.ts";
+import { adoptShared, keepDeviceScreens } from "./shared-computer.ts";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -127,6 +128,13 @@ export async function buildHub(opts: HubOptions) {
   registerVaultGit(app, hub, { dataDir: path.resolve(opts.dataDir) });
   // the hub's own computer becomes a device once someone asks for it and there's an owner
   const stopLocalDevice = watchLocalDevice(hub, path.resolve(opts.dataDir));
+  // agents made before the shared computer, with none of their own, get it (shared-computer.ts)
+  for (const { id: ws } of store.db.prepare("SELECT id FROM workspaces").all() as { id: string }[]) {
+    try {
+      adoptShared(hub, ws);
+      keepDeviceScreens(hub, ws);
+    } catch {}
+  }
 
   if (opts.webDir && fs.existsSync(opts.webDir)) {
     // wildcard serving picks up rebuilt assets without a restart

@@ -291,7 +291,7 @@ function Agents({ channel, members, canManage, onSettings }: { channel: ChannelI
                 <span className="block truncate text-[13px] text-muted">{node?.role ?? (agent?.status === "offline" ? "Offline" : "Works here")}</span>
               </span>
               {lead && <span className="shrink-0 text-[12px] font-medium text-muted">Leads</span>}
-              {agent && <StatusDot status={agent.status} />}
+              {agent && <StatusDot status={agent.status} needsSignIn={!!agent.signIn} />}
               <ChevronRight size={16} className="shrink-0 text-faint" />
             </button>
           );

@@ -76,24 +76,26 @@ describe("reconnect", () => {
 
 describe("live events", () => {
   it.each([
-    [{ type: "status", text: "Thinking" }, "Thinking"],
-    [{ type: "notice", text: "Connection unavailable" }, "Connection unavailable"],
-    [{ type: "error", message: "Run failed" }, "Error: Run failed"],
-    [{ type: "tool_result", name: "read", output: { found: true } }, 'read: {"found":true}'],
-    [{ type: "tool_result", name: "read", output: "Contents" }, "read: Contents"],
-    [{ type: "usage", model: "model", contextUsed: 10, contextWindow: 100, inputTokens: 20, outputTokens: 5, cachedInputTokens: 2, effort: "high" }, "Usage:"],
-  ] as [AgentEvent, string][])("makes %j visible through the existing text renderer", (ev, expected) => {
+    [{ type: "status", text: "Thinking" }],
+    [{ type: "notice", text: "Connection unavailable" }],
+    [{ type: "error", message: "Run failed" }],
+    [{ type: "tool_result", name: "wisp.memory_search", output: { content: [{ type: "text", text: "agents/agt_1/First chat.md" }], structured_content: null } }],
+    [{ type: "tool_result", name: "shell", output: "Contents" }],
+    [{ type: "usage", model: "model", contextUsed: 10, contextWindow: 100, inputTokens: 20, outputTokens: 5, cachedInputTokens: 2, effort: "high" }],
+  ] as [AgentEvent][])("keeps %j out of the reply text", (ev) => {
+    event({ type: "text", text: "On it." });
     event(ev);
-    expect(useStore.getState().live.run.text).toContain(expected);
+    expect(useStore.getState().live.run.text).toBe("On it.");
   });
 
-  it("preserves text deltas, tool calls and computer activity alongside other events", () => {
+  it("streams only the agent's words; tool calls move the working line", () => {
     event({ type: "text", text: "Hello" });
     event({ type: "text", text: " world" });
     event({ type: "tool_call", name: "computer_click", input: { x: 1 } });
+    event({ type: "tool_result", name: "computer_click", output: { content: [{ type: "image" }] } });
     event({ type: "notice", text: "Still working" });
-    event({ type: "text", text: "More" });
-    expect(useStore.getState().live.run).toMatchObject({ text: "Hello world\nStill working\nMore", tools: ["computer_click"], last: { name: "computer_click", input: { x: 1 } }, usedComputer: true });
+    event({ type: "text", text: "\n\nMore" });
+    expect(useStore.getState().live.run).toMatchObject({ text: "Hello world\n\nMore", tools: ["computer_click"], last: { name: "computer_click", input: { x: 1 } }, usedComputer: true });
   });
 });
 

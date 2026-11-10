@@ -1,2 +1,3 @@
 { "name": "@wisp/node", "version": "0.0.1", "type": "module", "license": "Apache-2.0", "bin": { "wisp": "src/cli.ts" },
-  "dependencies": { "@wisp/core": "*", "@wisp/adapters": "*", "@wisp/mcp": "*", "@wisp/sdk": "*", "@wisp/update": "*", "ws": "^8.18.0", "tsx": "^4.19.0" } }
+  "dependencies": { "@wisp/core": "*", "@wisp/adapters": "*", "@wisp/mcp": "*", "@wisp/sdk": "*", "@wisp/update": "*", "ws": "^8.18.0", "tsx": "^4.19.0" },
+  "optionalDependencies": { "node-pty": "^1.1.0" } }

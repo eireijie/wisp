@@ -178,7 +178,7 @@ export function AgentAvatar({
   return (
     <span className="relative inline-block shrink-0" style={{ width: size, height: size }}>
       <Ghost key={agent?.id} look={look} size={size} mood={mood} animate={animate ?? (live || interactive)} ambient={live} interactive={interactive} label={agent?.name ?? "agent"} />
-      {badge && agent?.status && <StatusDot status={agent.status} className="absolute bottom-0 right-0 ring-2 ring-panel" />}
+      {badge && agent?.status && <StatusDot status={agent.status} needsSignIn={!!(agent as { signIn?: unknown }).signIn} className="absolute bottom-0 right-0 ring-2 ring-panel" />}
     </span>
   );
 }
@@ -204,18 +204,24 @@ export function UserAvatar({ name, size = 32 }: { name: string; size?: number })
  * accent; working is blue.
  */
 export const AGENT_STATUS: Record<Agent["status"], { label: string; hue: string; dot?: string }> = {
-  online: { label: "online", hue: "var(--status-online)" },
-  busy: { label: "working", hue: "var(--status-working)", dot: "var(--status-working)" },
-  offline: { label: "offline", hue: "var(--status-idle)" },
+  online: { label: "Online", hue: "var(--status-online)" },
+  busy: { label: "Working", hue: "var(--status-working)", dot: "var(--status-working)" },
+  offline: { label: "Offline", hue: "var(--status-idle)" },
 };
 
-export function StatusDot({ status, className }: { status: Agent["status"]; className?: string }) {
-  const s = AGENT_STATUS[status];
+/** How an online agent that can't answer until someone signs its harness in shows. */
+export const NEEDS_SIGN_IN = { label: "needs sign-in", hue: "var(--warn)", dot: "var(--warn)" };
+
+/** The look for an agent's status; online but with its harness signed out where it runs reads "needs sign-in". */
+const statusLook = (status: Agent["status"], needsSignIn?: boolean) => (needsSignIn && status === "online" ? NEEDS_SIGN_IN : AGENT_STATUS[status]);
+
+export function StatusDot({ status, needsSignIn, className }: { status: Agent["status"]; needsSignIn?: boolean; className?: string }) {
+  const s = statusLook(status, needsSignIn);
   return <span className={cx("inline-block size-2 rounded-full", status === "busy" && "animate-pulse", className)} style={{ background: s.dot ?? s.hue }} title={s.label} />;
 }
 
-export function StatusChip({ status }: { status: Agent["status"] }) {
-  const s = AGENT_STATUS[status];
+export function StatusChip({ status, needsSignIn }: { status: Agent["status"]; needsSignIn?: boolean }) {
+  const s = statusLook(status, needsSignIn);
   return (
     <span className={cx("status-chip inline-flex items-center gap-1.5 rounded-full px-2.5 h-[22px] text-xs font-medium leading-none whitespace-nowrap", status === "offline" && "opacity-70")} style={{ "--sc": s.hue } as CSSProperties}>
       {s.dot && <span className={cx("size-1.5 rounded-full", status === "busy" && "animate-pulse")} style={{ background: s.dot }} />}
@@ -243,7 +249,11 @@ export function GhostMark({ size = 20, draw, className }: { size?: number; draw?
 export function Loader({ label = "Loading…" }: { label?: string }) {
   return (
     <div role="status" className="h-full w-full grid place-items-center bg-panel" style={{ color: "var(--loader)" }}>
-      <GhostMark size={88} draw />
+      {/* a faint outline stays put so the screen is never empty while the ghost redraws */}
+      <span className="relative grid place-items-center">
+        <GhostMark size={88} className="opacity-20" />
+        <GhostMark size={88} draw className="absolute inset-0" />
+      </span>
       <span className="sr-only">{label}</span>
     </div>
   );
@@ -342,6 +352,7 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
                 <button
                   key={it.label}
                   role="menuitem"
+                  aria-label={it.label}
                   onClick={() => {
                     setOpen(false);
                     it.onSelect();

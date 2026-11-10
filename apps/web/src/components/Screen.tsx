@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { KeyRound, Loader2, MonitorOff, RefreshCw, Sparkle } from "lucide-react";
+import { KeyRound, Loader2, MonitorOff, Power, RefreshCw, Sparkle } from "lucide-react";
 import type { ComputerAction, RecordedStep } from "@wisp/core";
 import { ApiError, api, getToken } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
@@ -63,6 +63,10 @@ export function ScreenThumb({ computer, refreshMs = 4000, className }: { compute
           ) : computer.paused ? (
             <>
               <MonitorOff size={14} /> Paused at the device
+            </>
+          ) : failed && computer.kind === "vm" && computer.status === "stopped" ? (
+            <>
+              <Power size={14} /> Off · starts when it's needed
             </>
           ) : failed ? (
             computer.code ? (

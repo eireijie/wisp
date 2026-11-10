@@ -80,6 +80,14 @@ export interface AgentSettings {
    * all stay in there) or directly on the device. Unset means the device, as agents did before.
    */
   runIn?: "computer" | "device";
+  /**
+   * Its people's own computers it may use, by device id: "ask" asks the device's owner first, each
+   * task; "tell" goes ahead and says so after. Only a device's owner sets its entry, and only for
+   * work they asked for. Left out: it can't.
+   */
+  useDevices?: Record<string, "ask" | "tell">;
+  /** made before any device could run the shared computer: it gets it once one can (set by the hub) */
+  waitsForShared?: boolean;
   /** its job title, e.g. "Engineer" or "Researcher"; the lead hands work out by it */
   role?: string;
   /** what the role means for how it works: what it owns, what to send its way */
@@ -209,7 +217,26 @@ export interface Agent {
   computerId: string | null;
   settings: AgentSettings;
   status: "online" | "busy" | "offline";
+  /**
+   * Set (by the hub, on agents it sends) when its harness is known not to be signed in where it
+   * runs, so it can't answer until someone signs in there: missing or null when it is, or when
+   * nobody can tell yet.
+   */
+  signIn?: AgentSignIn | null;
   createdAt: string;
+}
+
+/** Where an agent's harness needs signing in before it can answer. */
+export interface AgentSignIn {
+  harness: string;
+  /** the device, or the agent's own computer (a VM), its harness runs on: its name */
+  where: string;
+  /** the device it runs on, or the device the VM is on */
+  nodeId: string;
+  /** set when it runs inside its own computer (a VM): sign-in happens on that computer's screen */
+  computerId: string | null;
+  /** the harness account it uses on the device ("default" unless picked) */
+  account: string;
 }
 
 export interface Channel {
@@ -425,6 +452,18 @@ export interface Approval {
   flow?: { flowId: string; stepId: string } | null;
   /** set when an agent asks to add, replace or delete a file on a storage (the Storage mod) */
   storage?: import("./storage.ts").StorageRequest | null;
+  /** set when an agent asks to use a person's own computer for a task ("Use my computers", ask first) */
+  device?: DeviceUseRequest | null;
+}
+
+/** An agent asking to use someone's own computer for the task at hand. */
+export interface DeviceUseRequest {
+  nodeId: string;
+  deviceName: string;
+  /** whose device it is: only they can answer */
+  ownerId: string;
+  /** the device's screen opens with a code picked there: the answer comes with it */
+  code: "pin" | "password" | null;
 }
 
 /**

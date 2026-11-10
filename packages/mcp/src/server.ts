@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -377,13 +378,13 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     "watch_start",
     {
       description:
-        "Start watching one of the person's apps for them, once they've said yes (\"keep an eye on my Slack\"). Wisp looks for changes on its own, at no token cost, and wakes you with what changed. It uses the key from your connector for that app, or one you give in `key` (ask before making a key for them). For apps with no easy key (Google, Meta, school or bank sites), use service \"browser\" with config.url and config.lookFor: you'll be woken every few hours to look in your computer's browser. Tell them what you'll watch and that they can stop it any time.",
+        "Start watching one of the person's apps for them, once they've said yes (\"keep an eye on my Slack\"). Wisp looks for changes on its own, at no token cost, and wakes you with what changed. It uses the key from your connector for that app, or one you give in `key` (ask before making a key for them). For apps with no easy key (Google, Meta, school or bank sites), use service \"browser\" with config.url and config.lookFor: Wisp reads the page itself when it can and wakes you only when it changed; a site behind a sign-in is looked at in your computer's browser. Unless you pass every_minutes, a site is looked at as often as your background checks for them, so you can tell them one number. Tell them what you'll watch, how often (the result says), and that they can stop it any time.",
       inputSchema: {
         service: z.enum(["slack", "github", "notion", "linear", "jira", "stripe", "gdrive", "gmail", "gcal", "browser"]),
         key: z.record(z.string(), z.string()).optional().describe("values for this watch alone, named like the connector's (GITHUB_TOKEN, SLACK_BOT_TOKEN…)"),
         config: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional().describe("Slack: channels (names); Stripe: types; browser: url and lookFor"),
         label: z.string().optional().describe("what the person sees, e.g. \"Canvas assignments\""),
-        every_minutes: z.number().optional().describe("how often to look; browser watches: 120 or more"),
+        every_minutes: z.number().optional().describe("how often to look; browser watches: 120 or more, and leave it out to match your background checks"),
       },
     },
     safe(async ({ service, key, config, label, every_minutes }) => {
@@ -505,7 +506,7 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     "chat_status",
     {
       description:
-        "Say where your DM with the person you work for stands, when it changes. \"waiting\": the next step is theirs (an answer, something they said they'd do); Wisp checks back for you if they go quiet. \"done\": what they asked for is finished; add did/saved/next when real work got done and they'll see a short wrap-up. \"open\": anything else. \"closed\": you're dropping it after they didn't answer.",
+        "Say where your DM with the person you work for stands, when it changes. \"waiting\": the next step is theirs (an answer, something they said they'd do); Wisp checks back for you if they go quiet. \"done\": what they asked for is finished; add did/saved/next only for what your reply doesn't already say (a wrap-up card shows them; lines your reply repeats are dropped). \"open\": anything else. \"closed\": you're dropping it after they didn't answer.",
       inputSchema: {
         status: z.enum(["open", "waiting", "done", "closed"]),
         summary: z.string().optional().describe("what's open, in their words: \"send Sam the deck\""),
@@ -671,19 +672,42 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     }),
   );
 
+  /**
+   * A file the agent made: read where it runs, else (a path only its computer has, like
+   * ~/files/notes.md in its VM, or any path on the remote endpoint) from its computer.
+   */
+  const readMine = async (p: string): Promise<{ name: string; data: Uint8Array }> => {
+    if (opts.localFiles !== false) {
+      const local = p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p;
+      try {
+        return { name: path.basename(local), data: await fs.readFile(local) };
+      } catch (err) {
+        if (!["ENOENT", "ENOTDIR", "EACCES"].includes((err as NodeJS.ErrnoException).code ?? "")) throw err;
+      }
+    }
+    const comp = await client.myComputer().catch(() => null);
+    if (!comp) throw new Error(`There's no file at ${p}.`);
+    const f = await client.computer<{ name: string; data: string }>({ action: "file_read", path: p });
+    return { name: f.name, data: Buffer.from(f.data, "base64") };
+  };
+
+  server.registerTool(
+    "file_upload",
+    {
+      description:
+        "Send a file you made (a report, an image, a spreadsheet; up to 100 MB) to the person you're answering: it's attached to your reply in this chat. Give its path where you work or on your computer. Returns a file id, which you can also put in chat_send's file_ids or a task. Only say a file is attached after this succeeds.",
+      inputSchema: { local_path: z.string().describe('the file\'s path, e.g. "~/files/report.pdf"'), channel: z.string().optional().describe("only for a file meant for another chat; post it there with chat_send's file_ids") },
+    },
+    safe(async ({ local_path, channel }) => {
+      const f = await readMine(local_path);
+      const ch = channel ? await resolveChannel(channel) : undefined;
+      const up = await client.uploadFile(f.name, f.data, guessMime(f.name), ch?.id);
+      return text(`Sent ${up.name} (${up.size} bytes, file id ${up.id}).${ch ? ` To post it in ${ch.name}, use chat_send with file_ids ["${up.id}"].` : " It's attached to your reply."}`);
+    }),
+  );
+
   // the remote endpoint runs on the hub, whose files aren't the caller's
   if (opts.localFiles !== false) {
-    server.registerTool(
-      "file_upload",
-      { description: "Upload a local file to Wisp so other agents and people can get it. Returns a file id to attach to messages or tasks.", inputSchema: { local_path: z.string(), channel: z.string().optional() } },
-      safe(async ({ local_path, channel }) => {
-        const data = await fs.readFile(local_path);
-        const ch = channel ? await resolveChannel(channel) : undefined;
-        const f = await client.uploadFile(path.basename(local_path), data, guessMime(local_path), ch?.id);
-        return text(`Uploaded ${f.name} as ${f.id} (${f.size} bytes).`);
-      }),
-    );
-
     server.registerTool(
       "file_download",
       { description: "Download a Wisp file by id into a local directory.", inputSchema: { file_id: z.string(), dest_dir: z.string().optional() } },
@@ -792,9 +816,11 @@ type Safe = <A>(fn: (a: A) => Promise<{ content: Content[] }>) => (a: A) => Prom
 function registerComputerTools(server: McpServer, client: WispClient, own: { name: string; kind: string }, safe: Safe) {
   // the screen's size, for scaling coordinates
   let space: { width: number; height: number } | null = null;
+  // one of the person's own computers it switched to (Use my computers), else its own
+  let on: { device: string; why?: string } | undefined;
   const look = async (note: string, settleMs = 600): Promise<{ content: Content[] }> => {
     if (settleMs) await new Promise((r) => setTimeout(r, settleMs));
-    const s = await client.computer<Screenshot>({ action: "screenshot" });
+    const s = await client.computer<Screenshot>({ action: "screenshot" }, on);
     space = { width: s.width, height: s.height };
     return { content: [{ type: "image", data: s.image, mimeType: s.mime }, { type: "text", text: `${note}${note ? " " : ""}Screen is ${s.width}x${s.height}; coordinates are pixels in this image.` }] };
   };
@@ -807,6 +833,30 @@ function registerComputerTools(server: McpServer, client: WispClient, own: { nam
   const shot = z.boolean().optional().describe("return a screenshot afterwards (default true)");
 
   server.registerTool(
+    "computer_switch",
+    {
+      description: `Work on one of your person's own computers instead of "${own.name}", when a task needs their apps or sign-ins there; only ones they allowed you, only for their own requests. Pass its name, and why (shown to them if they're asked first). If you're asked to wait for an answer, end your turn. Pass "own" to go back. Without a name: lists the ones you may use.`,
+      inputSchema: { to: z.string().optional().describe('a device name, or "own"'), why: z.string().max(500).optional() },
+    },
+    safe(async ({ to, why }) => {
+      if (!to) {
+        const list = await client.myDevices();
+        return text(list.length ? list.map((d) => `${d.name}: ${d.how === "ask" ? "ask first" : "allowed, tell after"}${d.online ? "" : " (offline)"}${d.screenOn ? "" : " (screen off at the device)"}`).join("\n") : "You may only use your own computer.");
+      }
+      if (to.trim().toLowerCase() === "own") {
+        on = undefined;
+        space = null;
+        return look(`Back on "${own.name}".`, 0);
+      }
+      const next = { device: to.trim(), ...(why ? { why } : {}) };
+      // asking for a screenshot is the check: allowed, or asked (and told to wait)
+      const s = await client.computer<Screenshot>({ action: "screenshot" }, next);
+      on = next;
+      space = { width: s.width, height: s.height };
+      return { content: [{ type: "image" as const, data: s.image, mimeType: s.mime }, { type: "text" as const, text: `Now on ${next.device}. Screen is ${s.width}x${s.height}; coordinates are pixels in this image. Its files and clipboard stay there; your computer_run still runs on "${own.name}".` }] };
+    }),
+  );
+  server.registerTool(
     "computer_screenshot",
     { description: `See the screen of your computer "${own.name}".`, inputSchema: {} },
     safe(async () => look("", 0)),
@@ -815,7 +865,7 @@ function registerComputerTools(server: McpServer, client: WispClient, own: { nam
     "computer_click",
     { description: "Click at a point on the screen.", inputSchema: { ...xy, button: z.enum(["left", "right", "middle"]).optional(), double: z.boolean().optional(), screenshot: shot } },
     safe(async ({ x, y, button, double, screenshot }) => {
-      await client.computer({ action: "click", x, y, button, double, space: await at() });
+      await client.computer({ action: "click", x, y, button, double, space: await at() }, on);
       return after(screenshot, `Clicked (${x}, ${y}).`);
     }),
   );
@@ -823,8 +873,8 @@ function registerComputerTools(server: McpServer, client: WispClient, own: { nam
     "computer_type",
     { description: "Type text where the keyboard focus is (click the field first). Set enter to press Enter after.", inputSchema: { text: z.string(), enter: z.boolean().optional(), screenshot: shot } },
     safe(async ({ text: t, enter, screenshot }) => {
-      await client.computer({ action: "type", text: t });
-      if (enter) await client.computer({ action: "key", keys: "Enter" });
+      await client.computer({ action: "type", text: t }, on);
+      if (enter) await client.computer({ action: "key", keys: "Enter" }, on);
       return after(screenshot, `Typed ${t.length} characters${enter ? " and pressed Enter" : ""}.`);
     }),
   );
@@ -832,7 +882,7 @@ function registerComputerTools(server: McpServer, client: WispClient, own: { nam
     "computer_key",
     { description: "Press a key or shortcut, e.g. 'Enter', 'Escape', 'Tab', 'ctrl+l', 'cmd+t' (Mac), 'ctrl+shift+t', 'PageDown'.", inputSchema: { keys: z.string(), screenshot: shot } },
     safe(async ({ keys, screenshot }) => {
-      await client.computer({ action: "key", keys });
+      await client.computer({ action: "key", keys }, on);
       return after(screenshot, `Pressed ${keys}.`);
     }),
   );
@@ -840,7 +890,7 @@ function registerComputerTools(server: McpServer, client: WispClient, own: { nam
     "computer_scroll",
     { description: "Scroll at a point (the mouse moves there first).", inputSchema: { ...xy, direction: z.enum(["up", "down", "left", "right"]), amount: z.number().int().min(1).max(30).optional().describe("wheel clicks, default 3"), screenshot: shot } },
     safe(async ({ x, y, direction, amount, screenshot }) => {
-      await client.computer({ action: "scroll", x, y, direction, amount, space: await at() });
+      await client.computer({ action: "scroll", x, y, direction, amount, space: await at() }, on);
       return after(screenshot, `Scrolled ${direction}.`, 400);
     }),
   );
@@ -848,7 +898,7 @@ function registerComputerTools(server: McpServer, client: WispClient, own: { nam
     "computer_drag",
     { description: "Press at one point, drag to another, and release.", inputSchema: { ...xy, to_x: z.number(), to_y: z.number(), screenshot: shot } },
     safe(async ({ x, y, to_x, to_y, screenshot }) => {
-      await client.computer({ action: "drag", x, y, toX: to_x, toY: to_y, space: await at() });
+      await client.computer({ action: "drag", x, y, toX: to_x, toY: to_y, space: await at() }, on);
       return after(screenshot, `Dragged to (${to_x}, ${to_y}).`);
     }),
   );
@@ -856,7 +906,7 @@ function registerComputerTools(server: McpServer, client: WispClient, own: { nam
     "computer_move",
     { description: "Move the mouse without clicking (to hover).", inputSchema: { ...xy, screenshot: shot } },
     safe(async ({ x, y, screenshot }) => {
-      await client.computer({ action: "move", x, y, space: await at() });
+      await client.computer({ action: "move", x, y, space: await at() }, on);
       return after(screenshot, `Moved to (${x}, ${y}).`, 400);
     }),
   );
@@ -864,7 +914,7 @@ function registerComputerTools(server: McpServer, client: WispClient, own: { nam
     "computer_open",
     { description: "Open a URL in the browser, or a file or app, the way double-clicking it would.", inputSchema: { target: z.string().describe("a URL, a path, or an app name"), screenshot: shot } },
     safe(async ({ target, screenshot }) => {
-      await client.computer({ action: "open", target });
+      await client.computer({ action: "open", target }, on);
       return after(screenshot, `Opened ${target}.`, 2500);
     }),
   );

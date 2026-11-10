@@ -323,7 +323,7 @@ function AgentsHere({ node: n, onAdd }: { node: NodeInfo; onAdd: () => void }) {
                 {a.name}
               </a>
               <span className="hidden sm:flex">
-                <StatusChip status={a.status} />
+                <StatusChip status={a.status} needsSignIn={!!a.signIn} />
               </span>
               {n.mine ? <WorksOnPicker agent={a} node={n} screen={screen} vms={vms} busy={busy === a.id} onPick={(c) => set(a, c)} /> : <span className="text-xs text-muted">{worksOnLabel(a, computers)}</span>}
             </li>

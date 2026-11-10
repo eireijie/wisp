@@ -106,6 +106,8 @@ interface State {
   live: Record<string, LiveRun>; // by runId
   computers: ComputerInfo[];
   approvals: Record<string, Approval>;
+  /** agents whose keyboard someone took in Code: agent id → who has it */
+  keyboard: Record<string, string>;
   /** bumps when routines change, so open lists refetch */
   routinesVersion: number;
   /** bumped when an agent's background work or follow-ups change */
@@ -192,6 +194,7 @@ export const useStore = create<State>((set, get) => ({
   live: {},
   computers: [],
   approvals: {},
+  keyboard: {},
   routinesVersion: 0,
   backgroundVersion: 0,
   changesVersion: 0,
@@ -435,6 +438,13 @@ export const useStore = create<State>((set, get) => ({
         agents: s.agents.map((a) => (a.id === e.agentId ? { ...a, status: e.status } : a)),
         live: e.status === "busy" ? s.live : Object.fromEntries(Object.entries(s.live).filter(([, r]) => r.agentId !== e.agentId)),
       }));
+    } else if (e.type === "keyboard") {
+      set((s) => {
+        const keyboard = { ...s.keyboard };
+        if (e.userId) keyboard[e.agentId] = e.userId;
+        else delete keyboard[e.agentId];
+        return { keyboard };
+      });
     } else if (e.type === "computer") {
       const c = e.computer as ComputerInfo;
       set((s) => ({ computers: s.computers.some((x) => x.id === c.id) ? s.computers.map((x) => (x.id === c.id ? c : x)) : [...s.computers, c] }));
@@ -462,6 +472,7 @@ export const useStore = create<State>((set, get) => ({
     } else if (e.type === "model_login") {
       set((s) => ({ modelLogins: { ...s.modelLogins, [e.login.id]: e.login } }));
     } else if (e.type === "run_event") {
+      for (const tap of runTaps) tap(e);
       set((s) => {
         const cur = s.live[e.runId] ?? { runId: e.runId, agentId: e.agentId, channelId: e.channelId, threadId: e.threadId ?? null, threadPath: e.threadPath ?? [], text: "", tools: [], last: null, usedComputer: false };
         return { live: { ...s.live, [e.runId]: applyEvent(cur, e.event) } };
@@ -470,6 +481,10 @@ export const useStore = create<State>((set, get) => ({
     if (notify) notifyOn(e, before, get());
   },
 }));
+
+/** Views that need every step of a run (Code's agent panes), not the store's short summary. */
+export type RunEvent = Extract<ClientEvent, { type: "run_event" }>;
+export const runTaps = new Set<(e: RunEvent) => void>();
 
 /** A channel and each of its threads have independent history and load errors. */
 export const conversationKey = (channelId: string, threadId?: string) => threadId ? `${channelId}/t/${threadId}` : channelId;
@@ -532,25 +547,16 @@ function applyReactions(s: State, messageId: string, reactions: Reaction[]): Par
   };
 }
 
-function applyEvent(r: LiveRun, ev: AgentEvent): LiveRun {
+/**
+ * A live run as its events arrive. Only the agent's own words go into the reply text; tool calls
+ * move the working line ("Searching memory") and the steps, and tool output, statuses, notices,
+ * errors and usage never land in the bubble (the posted message carries what's worth keeping).
+ * Exported for tests.
+ */
+export function applyEvent(r: LiveRun, ev: AgentEvent): LiveRun {
   if (ev.type === "text") return { ...r, text: r.text + ev.text };
   if (ev.type === "tool_call") return { ...r, tools: [...r.tools, ev.name], last: { name: ev.name, input: ev.input }, usedComputer: r.usedComputer || /computer_/.test(ev.name) };
-  // "started" only opens the live run (the working bubble shows it); it isn't a line of the reply
-  if (ev.type === "status" && ev.text === "started") return r;
-  // The existing streaming view renders text; give non-text events their own lines.
-  let text: string;
-  if (ev.type === "status" || ev.type === "notice") text = ev.text;
-  else if (ev.type === "error") text = `Error: ${ev.message}`;
-  else if (ev.type === "tool_result") {
-    // tool output can be a whole file; the live view only needs a glimpse
-    const out = typeof ev.output === "string" ? ev.output : (JSON.stringify(ev.output) ?? "");
-    text = `${ev.name}: ${out.length > 300 ? out.slice(0, 300) + "…" : out}`;
-  }
-  else if (ev.type === "usage") {
-    const { type: _, ...usage } = ev;
-    text = `Usage: ${Object.entries(usage).map(([key, value]) => `${key}: ${value}`).join(", ")}`;
-  } else return r;
-  return { ...r, text: r.text + (r.text && !r.text.endsWith("\n") ? "\n" : "") + text + "\n" };
+  return r;
 }
 
 function dedupe(list: Message[]): Message[] {
@@ -600,9 +606,8 @@ export function useChatsUnread(): number {
   return useStore((s) => s.channels.reduce((n, c) => n + (c.joined || c.kind === "dm" ? c.unread || 0 : 0), 0));
 }
 
-/** The Inbox badge: everything waiting on you plus unread messages in your channels and DMs. */
+/** The Inbox badge: what's waiting on you, the same count as "Needs you" on the page (unread replies have the Chats badge). */
 export function useInboxCount(): number {
   const waiting = useWaitingOnYou();
-  const unread = useChatsUnread();
-  return waiting.approvals.length + waiting.help.length + unread;
+  return waiting.approvals.length + waiting.help.length;
 }

@@ -1,7 +1,8 @@
 import type { WebSocket } from "ws";
-import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, compactPlan, plainCompact, startsNewChat, SUMMARY_REQUEST, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential } from "@wisp/core";
+import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, TERM_PREFIX, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential, type AgentSignIn, compactPlan, plainCompact, startsNewChat, SUMMARY_REQUEST } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
+import { Terminals } from "./terminals.ts";
 import { Logins } from "./logins.ts";
 import { Storage } from "./storage.ts";
 import { Discussions } from "./discussions.ts";
@@ -33,6 +34,8 @@ import { foldTeams } from "./fold-teams.ts";
 import { TeamFlows } from "./team-flows.ts";
 import type { RunKind, Store } from "./store.ts";
 import { guestEvent } from "./guest-computers.ts";
+import { adoptShared } from "./shared-computer.ts";
+import { DeviceUse } from "./device-use.ts";
 
 const CONTEXT_MESSAGES = 20;
 /** How long after a run ends its device may still send back the sign-in it renewed. */
@@ -81,6 +84,9 @@ export class Hub {
   /** stepped teams: requests going through a channel team's roles and steps */
   readonly flows: TeamFlows;
   readonly computers: Computers;
+  /** the Code mod's terminals, relayed to devices */
+  readonly terminals: Terminals;
+  readonly deviceUse: DeviceUse;
   /** logins agents fill from the person's password manager */
   readonly logins: Logins;
   /** files on the person's own storage (the Storage mod) */
@@ -137,6 +143,8 @@ export class Hub {
     this.discussions = new Discussions(this);
     this.flows = new TeamFlows(this);
     this.computers = new Computers(this);
+    this.terminals = new Terminals(this);
+    this.deviceUse = new DeviceUse(this);
     this.logins = new Logins(this);
     this.storage = new Storage(this);
     this.routines = new Routines(this);
@@ -274,6 +282,8 @@ export class Hub {
 
   /** Send an event to everyone in a workspace, or only to the people `only` picks. */
   broadcast(workspaceId: string, event: ClientEvent, only?: (userId: string) => boolean) {
+    // Code switched off: its terminals close now, not on the next keypress
+    if (event.type === "features") this.terminals.recheck(workspaceId);
     const data = JSON.stringify(event);
     const guest = guestEvent(event);
     for (const c of this.clients) {
@@ -334,6 +344,7 @@ export class Hub {
     conn.socket.close(4401, "device removed");
     for (const a of this.store.agentsOnNode(nodeId)) this.broadcast(conn.workspaceId, { type: "agent_status", agentId: a.id, status: "offline" });
     this.computers.nodeGone(nodeId);
+    this.terminals.nodeGone(nodeId);
     this.releaseNodeConnections(nodeId);
   }
 
@@ -382,9 +393,43 @@ export class Hub {
     return vm ?? this.store.nodeCatalog(agent.nodeId);
   }
 
+  /**
+   * Where the agent's harness has to be signed in before it can answer, when Wisp knows it isn't:
+   * on its device, or inside its own computer (a VM) when it runs there. null when it's signed in,
+   * runs on a model connection (which brings its own sign-in), or nobody can tell yet.
+   */
+  signInNeeded(agent: Pick<Agent, "id" | "nodeId" | "computerId" | "harness" | "settings">): AgentSignIn | null {
+    if (!agent.nodeId || agent.settings.connectionId || harnessInfo(agent.harness)?.protocol === "mcp") return null;
+    if (this.runsInComputer(agent)) {
+      const comp = this.store.computer(agent.computerId!)!;
+      const here = this.store.computerCatalog(agent.nodeId, comp.id)?.find((h) => h.harness === agent.harness);
+      return here?.accounts?.default === false ? { harness: agent.harness, where: comp.name, nodeId: agent.nodeId, computerId: comp.id, account: "default" } : null;
+    }
+    const here = this.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness);
+    const account = here?.agentAccounts?.[agent.id] ?? "default";
+    if (here?.accounts?.[account] !== false) return null;
+    return { harness: agent.harness, where: this.store.node(agent.nodeId)?.name ?? "its device", nodeId: agent.nodeId, computerId: null, account };
+  }
+
   /** The catalog an agent's models, efforts and "/" commands come from: its harness where it runs. */
   catalogFor(agent: Pick<Agent, "nodeId" | "computerId" | "harness" | "settings">): HarnessCatalog | undefined {
     return this.harnessesWhere(agent).find((h) => h.harness === agent.harness);
+  }
+
+  /**
+   * The model sign-in a harness's CLI in a terminal on `c` uses: the one that agent runs there use
+   * (then any agent's with that harness), when it's this person's own; else their own first
+   * connection the harness can use. Never someone else's: the terminal could read it.
+   */
+  terminalCredential(c: Computer, userId: string, harness: string): RunCredential | null {
+    const own = (cid: string | null | undefined) => {
+      const r = cid ? this.models.row(cid) : undefined;
+      return r && r.workspace_id === c.workspaceId && r.user_id === userId && credentialSupport(harness, r.provider, r.kind) ? r : undefined;
+    };
+    const agents = this.store.agents(c.workspaceId).filter((a) => a.harness === harness);
+    const here = agents.filter((a) => (c.kind === "vm" ? a.computerId === c.id && this.runsInComputer(a) : a.nodeId === c.nodeId && !this.runsInComputer(a)));
+    const r = [...here, ...agents].map((a) => own(a.settings.connectionId)).find(Boolean) ?? this.models.mine(c.workspaceId, userId).find((m) => own(m.id));
+    return r ? this.models.credentialFor(r.id) : null;
   }
 
   /** The connection a run carries: the agent's, when its harness can use it. */
@@ -528,7 +573,9 @@ export class Hub {
       if (this.closed) return;
       if (isBinary) {
         const frame = readTunnelFrame(new Uint8Array(raw as Buffer));
-        if (frame) this.computers.onTunnelData(nodeId, frame.tunnelId, frame.payload);
+        if (!frame) return;
+        if (frame.tunnelId.startsWith(TERM_PREFIX)) this.terminals.onData(nodeId, frame.tunnelId, frame.payload);
+        else this.computers.onTunnelData(nodeId, frame.tunnelId, frame.payload);
         return;
       }
       let msg: NodeToHub;
@@ -545,6 +592,7 @@ export class Hub {
       this.pausedNodes.delete(nodeId);
       for (const a of this.store.agentsOnNode(nodeId)) this.broadcast(workspaceId, { type: "agent_status", agentId: a.id, status: "offline" });
       this.computers.nodeGone(nodeId);
+    this.terminals.nodeGone(nodeId);
       this.releaseNodeConnections(nodeId);
     });
   }
@@ -562,7 +610,10 @@ export class Hub {
         return;
       }
       case "capabilities": {
+        const couldRunVms = !!store.nodeCapabilities(conn.nodeId)?.vm.ok;
         store.setNodeCapabilities(conn.nodeId, msg.capabilities);
+        // a device that can now run computers: agents still waiting for the shared one get it
+        if (!couldRunVms && msg.capabilities.vm.ok) adoptShared(this, conn.workspaceId);
         const was = this.pausedNodes.has(conn.nodeId);
         if (msg.capabilities.paused) this.pausedNodes.add(conn.nodeId);
         else this.pausedNodes.delete(conn.nodeId);
@@ -589,7 +640,7 @@ export class Hub {
       case "computer_status": {
         const c = store.computer(msg.computerId);
         if (!c || c.nodeId !== conn.nodeId) return;
-        store.updateComputer(c.id, { status: msg.status, statusText: msg.text });
+        store.updateComputer(c.id, { status: msg.status, statusText: msg.text || (msg.status === "stopped" ? "Off. It starts when it's needed." : "") });
         this.computers.changed(c.id);
         return;
       }
@@ -605,20 +656,31 @@ export class Hub {
         this.computers.onTunnelClosed(conn.nodeId, msg.tunnelId, msg.error);
         return;
       }
+      case "term_ready": {
+        this.terminals.onReady(conn.nodeId, msg.termId, msg.resumed);
+        return;
+      }
+      case "term_closed": {
+        this.terminals.onClosed(conn.nodeId, msg.termId, msg.error, msg.exited);
+        return;
+      }
       case "catalog": {
+        // what it says about sign-ins changes whether its agents can answer: apps show that before anyone writes
+        const agents = store.agentsOnNode(conn.nodeId);
+        const before = JSON.stringify(agents.map((a) => this.signInNeeded(a)));
         // a VM's harnesses only for a VM of this device
         if (msg.computerId) {
           const c = store.computer(msg.computerId);
           if (c?.kind === "vm" && c.nodeId === conn.nodeId) store.setComputerCatalog(conn.nodeId, c.id, msg.catalog);
-          return;
-        }
-        store.setNodeCatalog(conn.nodeId, msg.catalog);
+        } else store.setNodeCatalog(conn.nodeId, msg.catalog);
+        if (JSON.stringify(agents.map((a) => this.signInNeeded(a))) !== before) this.broadcast(conn.workspaceId, { type: "agents_changed" });
         return;
       }
       case "credential_refreshed": {
         // only for a run of this device's on this connection, while it runs or shortly after, and
         // only for sign-ins that rotate (a key or a long-lived token is never "renewed")
-        if (!msg.runId || !this.mayRenew(conn, msg.runId, msg.connectionId)) return;
+        const ok = msg.terminal ? this.terminals.handedOut.has(`${conn.nodeId}:${msg.connectionId}`) : !!msg.runId && this.mayRenew(conn, msg.runId, msg.connectionId);
+        if (!ok) return;
         if (!this.models.rotates(msg.connectionId)) return;
         if (this.models.saveRenewed(msg.connectionId, msg.secret)) {
           this.connectionsChanged(msg.connectionId);
@@ -661,7 +723,9 @@ export class Hub {
             this.connectionsChanged(cid);
           }
         }
-        const live = this.live.get(run.id) ?? { parts: [], text: "" };
+        // a person's own computer it used on "tell me after": it says so now, after the reply
+    queueMicrotask(() => this.deviceUse.runEnded(run));
+    const live = this.live.get(run.id) ?? { parts: [], text: "" };
         collect(live, msg.event);
         this.live.set(run.id, live);
         // a background check works quietly: nothing shows in the DM unless it messages the person
@@ -722,6 +786,7 @@ export class Hub {
       // a memory pass posts nothing: what it saved is in Memory's history
       store.setRunStatus(run.id, "finalText" in result ? "done" : "failed", "error" in result ? result.error : undefined);
       this.autoMemory.finished(run.id);
+      if (agent && run.requestedBy) this.background.warnIfClimbing(agent.workspaceId, run.requestedBy);
     } else if (run.kind === "background") {
       store.setRunStatus(run.id, "finalText" in result ? "done" : "failed", "error" in result ? result.error : undefined);
       this.background.finished(run, "finalText" in result ? result.finalText.trim() || live.text.trim() : `The check failed: ${result.error}`);
@@ -758,7 +823,9 @@ export class Hub {
       // it worked on its screen: the reply keeps the screen, so it doesn't vanish when the run ends
       const screen = agent?.computerId && !gone ? this.screenAfterRun(agent.computerId, live.parts, body, run) : null;
       const parts = [...live.parts, ...(screen ? [screen] : []), ...skillParts];
-      const reply = body && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy, conversationId: this.chatOfRun(run) }) : null;
+      // files it sent go out even when it said nothing with them
+      const sentFiles = live.parts.some((p) => p.type === "file");
+      const reply = (body || sentFiles) && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy, conversationId: this.chatOfRun(run) }) : null;
       // follow-ups it set and how it left the chat show under its answer
       this.loops.runEnded(run, reply?.id ?? (repeated && posted ? posted.id : null));
       // work worth remembering that it didn't save gets a memory pass once the chat goes quiet
@@ -1222,6 +1289,35 @@ export class Hub {
     this.broadcast(agent.workspaceId, { type: "message_removed", messageId: sys.id, channelId: sys.channelId, threadId: sys.threadId }, this.audience(sys.channelId));
   }
 
+  /** Agents whose keyboard someone took (Code mod): who has it. Their runs wait. */
+  readonly keyboard = new Map<string, { userId: string; workspaceId: string; timer?: NodeJS.Timeout }>();
+
+  takeKeyboard(agent: Agent, userId: string) {
+    const held = this.keyboard.get(agent.id);
+    if (held?.timer) clearTimeout(held.timer);
+    this.keyboard.set(agent.id, { userId, workspaceId: agent.workspaceId });
+    if (held?.userId !== userId) this.broadcast(agent.workspaceId, { type: "keyboard", agentId: agent.id, userId });
+  }
+
+  /** The agent has its keyboard back: what waited for it runs now. */
+  handBackKeyboard(agentId: string) {
+    const held = this.keyboard.get(agentId);
+    if (!held) return;
+    if (held.timer) clearTimeout(held.timer);
+    this.keyboard.delete(agentId);
+    this.broadcast(held.workspaceId, { type: "keyboard", agentId, userId: null });
+    for (const q of this.store.activeRuns(agentId)) if (this.store.run(q.id)?.status === "queued") this.dispatchRun(q.id);
+  }
+
+  /** The person's terminal went away without handing back (a closed tab): give it back after a while. */
+  keyboardLeft(agentId: string, afterMs = 10 * 60_000) {
+    const held = this.keyboard.get(agentId);
+    if (!held) return;
+    if (held.timer) clearTimeout(held.timer);
+    held.timer = setTimeout(() => this.handBackKeyboard(agentId), afterMs);
+    held.timer.unref?.();
+  }
+
   /** Send a queued run to its agent's device (if it's online; otherwise it waits until the device connects). */
   dispatchRun(runId: string) {
     const run = this.store.run(runId);
@@ -1229,6 +1325,8 @@ export class Hub {
     const agent = this.store.agent(run.agentId);
     const conn = agent?.nodeId ? this.nodes.get(agent.nodeId) : undefined;
     if (!agent || !conn || this.pausedNodes.has(conn.nodeId)) return;
+    // the owner has its keyboard: the run waits until they hand it back
+    if (this.keyboard.has(agent.id)) return;
     // a sign-in about to be renewed is used by one run at a time (renewing it kills the old one); this run waits its turn
     const cid = agent.settings.connectionId;
     if (cid && this.models.oneAtATime(cid) && [...this.connectionRuns.values()].includes(cid)) return;
@@ -1358,6 +1456,39 @@ export class Hub {
     return running.length === 1 ? this.store.run(running[0].id) : undefined;
   }
 
+  /** A status line in a run's live reply that comes from the hub, not its device ("Starting the computer…"). */
+  runStatus(runId: string, text: string) {
+    const run = this.store.run(runId);
+    if (!run || run.status !== "running" || run.kind) return;
+    const event = { type: "status" as const, text };
+    const live = this.live.get(run.id) ?? { parts: [], text: "" };
+    collect(live, event);
+    this.live.set(run.id, live);
+    const ws = this.store.agent(run.agentId)?.workspaceId;
+    if (ws) this.broadcast(ws, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, ...this.whereRuns(run), event }, this.audience(run.channelId));
+  }
+
+  /**
+   * A file an agent sent while working on a run: it's attached to that run's reply (or its
+   * "Run failed" line), so it shows in the chat. A background check, which posts nothing, keeps none.
+   */
+  attachToRun(runId: string, file: { id: string; name: string }) {
+    const run = this.store.run(runId);
+    if (!run || run.status !== "running" || run.kind) return;
+    const live = this.live.get(runId) ?? { parts: [], text: "" };
+    if (!live.parts.some((p) => p.type === "file" && p.fileId === file.id)) live.parts.push({ type: "file", fileId: file.id, name: file.name });
+    this.live.set(runId, live);
+  }
+
+  /** Files an agent posted with chat_send aren't attached to its reply as well. */
+  detachFromRun(agentId: string, fileIds: string[]) {
+    const ids = new Set(fileIds);
+    for (const [runId, live] of this.live) {
+      if (this.store.run(runId)?.agentId !== agentId) continue;
+      live.parts = live.parts.filter((p) => !(p.type === "file" && ids.has(p.fileId)));
+    }
+  }
+
   currentRun(agentId: string) {
     const r = this.store.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 1").get(agentId) as { id: string } | undefined;
     return r ? this.store.run(r.id) : undefined;
@@ -1415,6 +1546,26 @@ export class Hub {
       }, 120_000);
       this.pendingGit.set(requestId, { resolve, timer });
       this.send(conn, { type: "merge", requestId, agentId, ...w });
+    });
+  }
+
+  /**
+   * Code's review side, read on the device the task's agent works on: a branch's diff, files or
+   * one file, or its checks (which run there, so they get longer than a merge).
+   */
+  requestReview(agentId: string, what: "diff" | "files" | "file" | "checks", w: { repo: string; branch: string; base: string; file?: string }): Promise<{ ok: boolean; output: string }> {
+    const agent = this.store.agent(agentId);
+    const conn = agent?.nodeId ? this.nodes.get(agent.nodeId) : undefined;
+    if (!agent || !conn) return Promise.resolve({ ok: false, output: `${agent ? `@${agent.handle}'s device` : "the device"} is offline` });
+    const requestId = id("git");
+    const wait = what === "checks" ? 45 * 60_000 : 60_000;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingGit.delete(requestId);
+        resolve({ ok: false, output: `the device didn't answer within ${what === "checks" ? "45 minutes" : "a minute"}` });
+      }, wait);
+      this.pendingGit.set(requestId, { resolve, timer });
+      this.send(conn, { type: "review", requestId, what, ...w });
     });
   }
 
@@ -1682,6 +1833,7 @@ export class Hub {
       teamNotes ? `\n${teamNotes}` : "",
       `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the wisp MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available, and follow your memory skill (me/skills/memory/SKILL.md) whenever you save something.`,
       background ? "" : `Reply with the message you want posted. Keep it conversational; only @mention another agent when you actually need them to act.`,
+      background ? "" : `To send a file you made (a report, an image, a spreadsheet), call file_upload with its path; it's attached to your reply. Only say a file is attached after file_upload succeeded.`,
       asks.length
         ? `Before any of these that nobody asked for in so many words: ${asks.join("; ")}, ask first with approval_request and end your turn; you'll be woken with the answer. Ask about anything else that's hard to undo, too.`
         : `When something is hard to undo and nobody asked for it in so many words, ask first with approval_request and end your turn; you'll be woken with the answer.`,

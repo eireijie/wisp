@@ -120,14 +120,35 @@ function lastLine(s: string): string {
 /**
  * The link to open and the one-time code to enter, as sign-ins print them ("go to
  * https://…/device and enter ABCD-1234"). The last link wins: a later one is what it's waiting on.
- * Exported for tests.
+ *
+ * A code is only ever looked for outside links: sign-in links are full of "code" (`code=true`,
+ * `…%2Foauth%2Fcode%2Fcallback`, `code_challenge=…`), and none of that is a code to type. One in a
+ * link's `user_code` is used only when it looks like one. Codes are upper-case letters
+ * and digits, often in halves (ABCD-1234). Sign-ins that want a code pasted back (Claude Code) have
+ * none to show. Exported for tests.
  */
 export function findLink(output: string): { url?: string; code?: string } {
-  const urls = [...output.matchAll(/https?:\/\/[^\s"'<>)\]]+/g)].map((m) => m[0].replace(/[.,;:]+$/, ""));
+  const LINK = /https?:\/\/[^\s"'<>)\]]+/g;
+  const urls = [...output.matchAll(LINK)].map((m) => m[0].replace(/[.,;:]+$/, ""));
   const url = urls.at(-1);
-  // a code is short, upper-case letters/digits, often in two halves (ABCD-1234), near the word "code"
-  const near = /code[^A-Za-z0-9\n]{0,40}([A-Z0-9]{3,8}(?:-[A-Z0-9]{3,8})+|[A-Z0-9]{6,10})\b/i.exec(output);
-  const loose = /\b([A-Z0-9]{4}-[A-Z0-9]{4,5})\b/.exec(output);
-  const code = (near?.[1] && /[A-Z]/.test(near[1]) && /\d|-/.test(near[1]) ? near[1] : undefined) ?? loose?.[1];
+  const isCode = (s: string | undefined | null): s is string => !!s && /^(?:[A-Z0-9]{3,8}(?:-[A-Z0-9]{3,8})+|[A-Z0-9]{6,10})$/.test(s) && /[A-Z]/.test(s) && /\d|-/.test(s);
+  // the words around the links, with each link swapped for a space so nothing in one is read as a code
+  const text = output.replace(LINK, " ");
+  // near the word "code", within a couple of lines ("Enter this one-time code (expires in 15 minutes)\n   7O27-5PWBT")
+  let code: string | undefined;
+  for (const m of text.matchAll(/\bcode\b([\s\S]{0,120})/gi)) {
+    code = m[1].split(/[^A-Za-z0-9-]+/).find(isCode);
+    if (code) break;
+  }
+  code ??= text.split(/[^A-Za-z0-9-]+/).find((w) => /^[A-Z0-9]{4}-[A-Z0-9]{4,5}$/.test(w) && isCode(w));
+  if (!code) {
+    for (const u of urls) {
+      try {
+        const q = new URL(u).searchParams;
+        const v = q.get("user_code");
+        if (isCode(v)) code = v;
+      } catch {}
+    }
+  }
   return { url, code };
 }

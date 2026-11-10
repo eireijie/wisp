@@ -22,6 +22,30 @@ describe("harness sign-ins", () => {
     expect(findLink("Paste code here if prompted >")).toEqual({ url: undefined, code: undefined });
   });
 
+  it("never takes a piece of a link as the code (Claude Code's sign-in link is full of \"code\")", () => {
+    // what `claude auth login` really prints: a link to open, then it waits for a pasted code
+    const claude = "Opening browser to sign in…\nIf the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile&code_challenge=19RssOz1P5Z48SUsKO0JJoqkCUH-U0lNqyi9gZStE0s&code_challenge_method=S256&state=iRQhHCchw9eXQlsft2AJFoHwj8qYUxU53hOaGZi2PKg\nPaste code here if prompted > ";
+    const found = findLink(claude);
+    expect(found.code).toBeUndefined();
+    expect(found.url).toMatch(/^https:\/\/claude\.com\/cai\/oauth\/authorize\?code=true&.*state=iRQhHCchw9eXQlsft2AJFoHwj8qYUxU53hOaGZi2PKg$/);
+    // a link with an upper-case "code" piece in it isn't a code either
+    expect(findLink("Open https://x.example/oauth?code=AB12CD34EF&redirect=%2FCODE%2FCALLBACK1 and paste the code").code).toBeUndefined();
+  });
+
+  it("reads Codex's device sign-in as it really prints it (colors, code on the line under the word)", () => {
+    const codex = "\nWelcome to Codex [v\u001b[90m0.162.1\u001b[0m]\n\nFollow these steps to sign in with ChatGPT using device code authorization:\n\n1. Open this link in your browser and sign in to your account\n   \u001b[94mhttps://auth.openai.com/codex/device\u001b[0m\n\n2. Enter this one-time code \u001b[90m(expires in 15 minutes)\u001b[0m\n   \u001b[94m7O27-5PWBT\u001b[0m\n";
+    const clean = codex.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "");
+    expect(findLink(clean)).toEqual({ url: "https://auth.openai.com/codex/device", code: "7O27-5PWBT" });
+  });
+
+  it("reads other device sign-ins: a code after \"code:\", one only in the link, and a plain one", () => {
+    expect(findLink("Please visit https://www.kimi.com/device and enter the code: KQ7M-2XRP")).toEqual({ url: "https://www.kimi.com/device", code: "KQ7M-2XRP" });
+    expect(findLink("Open https://accounts.x.ai/oauth2/device?user_code=HXQ4P9TR to sign in")).toEqual({ url: "https://accounts.x.ai/oauth2/device?user_code=HXQ4P9TR", code: "HXQ4P9TR" });
+    expect(findLink("Your code is 5JX9QK2M\nGo to https://cursor.com/login")).toEqual({ url: "https://cursor.com/login", code: "5JX9QK2M" });
+    // words and numbers near "code" aren't codes
+    expect(findLink("Waiting for the code (expires in 900 seconds)…").code).toBeUndefined();
+  });
+
   it("runs the sign-in with the account's folder, takes a pasted code, and reports how it ended", async () => {
     const done: string[] = [];
     const logins = new HarnessLogins((l) => done.push(l.status));

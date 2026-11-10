@@ -68,7 +68,8 @@ enum Readiness {
     if !device.harnesses.isEmpty && !inComputer && !device.harnesses.contains(agent.harness) {
       return (false, "\(HarnessChoice.label(agent.harness)) isn't installed on \(device.name)")
     }
-    if signedIn(agent, on: device) == false { return (false, "\(HarnessChoice.label(agent.harness)) isn't signed in") }
+    // the hub's word (on its device or inside its own computer), else what the device list says
+    if agent.signIn != nil || signedIn(agent, on: device) == false { return (false, "\(HarnessChoice.label(agent.harness)) isn't signed in") }
     return (true, nil)
   }
 
