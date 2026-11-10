@@ -591,9 +591,8 @@ export function useChatsUnread(): number {
   return useStore((s) => s.channels.reduce((n, c) => n + (c.joined || c.kind === "dm" ? c.unread || 0 : 0), 0));
 }
 
-/** The Inbox badge: everything waiting on you plus unread messages in your channels and DMs. */
+/** The Inbox badge: what's waiting on you, the same count as "Needs you" on the page (unread replies have the Chats badge). */
 export function useInboxCount(): number {
   const waiting = useWaitingOnYou();
-  const unread = useChatsUnread();
-  return waiting.approvals.length + waiting.help.length + unread;
+  return waiting.approvals.length + waiting.help.length;
 }
