@@ -371,6 +371,8 @@ export interface Message {
   /** structured parts such as tool calls; free-form for forward compatibility */
   parts: MessagePart[];
   hop: number; // how many agent-to-agent hops led to this message (loop guard)
+  /** who it was for: the agents it woke, or for a reply, whoever asked (Code's "between agents") */
+  to?: Actor[];
   reactions?: Reaction[];
   /** set when this message replies to another one in the same channel: a quote, not a thread */
   replyToId?: string;

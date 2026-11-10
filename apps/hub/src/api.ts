@@ -1063,6 +1063,47 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return { messages: messages.map((m) => messageView(c, m)), replyCounts: store.replyCounts(messages.filter((m) => m.id !== q.thread).map((m) => m.id)) };
   });
 
+  /**
+   * Code's "between agents": what agents sent each other in a channel, threads included, newest
+   * last. A message counts when an agent wrote it or it was for an agent.
+   */
+  app.get("/api/channels/:id/between", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    const ch = channelVisible(c, (req.params as { id: string }).id);
+    if (!ch) return reply.code(404).send({ error: "channel not found" });
+    const limit = limitParam((req.query as { limit?: string }).limit, 60, 200);
+    const rows = store.db
+      .prepare("SELECT id FROM messages WHERE channel_id = ? AND deleted_at IS NULL AND (author_kind = 'agent' OR to_json LIKE '%\"agent\"%') ORDER BY created_at DESC, rowid DESC LIMIT ?")
+      .all(ch.id, limit) as { id: string }[];
+    const messages = rows.map((r) => store.message(r.id)).filter((m): m is NonNullable<typeof m> => !!m).reverse();
+    return { messages: messages.map((m) => messageView(c, m)) };
+  });
+
+  /** Code's agent terminal: an agent's own messages and the ones for it, across the channels you can see, newest last. */
+  app.get("/api/agents/:id/log", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    const agent = store.agent((req.params as { id: string }).id);
+    if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
+    const limit = limitParam((req.query as { limit?: string }).limit, 80, 200);
+    const rows = store.db
+      .prepare("SELECT id, channel_id FROM messages WHERE deleted_at IS NULL AND ((author_kind = 'agent' AND author_id = ?) OR instr(to_json, ?) > 0) ORDER BY created_at DESC, rowid DESC LIMIT ?")
+      .all(agent.id, JSON.stringify({ kind: "agent", id: agent.id }), limit * 2) as { id: string; channel_id: string }[];
+    const seen = new Map<string, boolean>();
+    const visible = (id: string) => {
+      if (!seen.has(id)) seen.set(id, !!channelVisible(c, id));
+      return seen.get(id)!;
+    };
+    const messages = rows
+      .filter((r) => visible(r.channel_id))
+      .slice(0, limit)
+      .map((r) => store.message(r.id))
+      .filter((m): m is NonNullable<typeof m> => !!m)
+      .reverse();
+    return { messages: messages.map((m) => messageView(c, m)) };
+  });
+
   app.post("/api/channels/:id/messages", async (req, reply) => {
     const c = need(req, reply);
     if (!c) return;
@@ -1771,6 +1812,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
         hop: 1,
         route: task.from.kind === "agent",
         onBehalfOf: requesterOf(c),
+        to: task.from.id === "system" ? [] : [task.from],
       });
       if (body.result) hub.taskReplyPosted(task, message, body.result);
     }

@@ -770,7 +770,7 @@ export class Hub {
       const parts = [...live.parts, ...(screen ? [screen] : []), ...skillParts];
       // files it sent go out even when it said nothing with them
       const sentFiles = live.parts.some((p) => p.type === "file");
-      const reply = (body || sentFiles) && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy, conversationId: this.chatOfRun(run) }) : null;
+      const reply = (body || sentFiles) && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy, conversationId: this.chatOfRun(run), to: this.askerOfRun(run) }) : null;
       // follow-ups it set and how it left the chat show under its answer
       this.loops.runEnded(run, reply?.id ?? (repeated && posted ? posted.id : null));
       // work worth remembering that it didn't save gets a memory pass once the chat goes quiet
@@ -883,10 +883,11 @@ export class Hub {
    * the person the message ultimately serves; by default the person who wrote it, or for an
    * agent, whoever asked it for the work it's doing now.
    */
-  postMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; route?: boolean; replyInThread?: boolean; onBehalfOf?: string | null; conversationId?: string | null; contextId?: string | null }): Message {
+  postMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; route?: boolean; replyInThread?: boolean; onBehalfOf?: string | null; conversationId?: string | null; contextId?: string | null; to?: Actor[] }): Message {
     const channel = this.store.channel(m.channelId);
     if (!channel) throw new Error("channel not found");
-    const msg = this.store.insertMessage({ ...m, conversationId: m.conversationId ?? this.workingChat(m) ?? setupChat(this, m), contextId: m.contextId ?? this.repliedChat(m) });
+    const to = this.recipients(m, channel.workspaceId);
+    const msg = this.store.insertMessage({ ...m, to, conversationId: m.conversationId ?? this.workingChat(m) ?? setupChat(this, m), contextId: m.contextId ?? this.repliedChat(m) });
     if (channel.kind === "dm" && m.author.kind === "user" && m.author.id !== "system") {
       this.loops.personWrote(channel.id);
       // before it's routed, so the reply's prompt has it
@@ -896,6 +897,35 @@ export class Hub {
     this.push.onMessage(msg, channel, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
     if (m.route !== false) this.route(msg, channel.workspaceId, m.replyInThread ?? false, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
     return msg;
+  }
+
+  /**
+   * Who a message is for, so Code can show what agents send each other: whoever it's given as
+   * being for (a reply's asker), plus the agents it wakes, or, when it isn't routed, the agents it
+   * @mentions. Never its own author.
+   */
+  private recipients(m: { channelId: string; threadId?: string | null; author: Actor; body: string; hop?: number; route?: boolean; to?: Actor[] }, workspaceId: string): Actor[] {
+    const out: Actor[] = [...(m.to ?? [])];
+    const woken =
+      m.route !== false
+        ? this.targets({ id: "", channelId: m.channelId, threadId: m.threadId ?? null, author: m.author, body: m.body, parts: [], hop: m.hop ?? 0, createdAt: "" }, workspaceId)
+        : parseMentions(m.body).flatMap((h) => this.store.agentByHandle(workspaceId, h)?.id ?? []);
+    for (const id of woken) out.push({ kind: "agent", id });
+    const seen = new Set<string>();
+    return out.filter((a) => {
+      const k = `${a.kind}:${a.id}`;
+      if (seen.has(k) || a.id === "system" || (a.kind === m.author.kind && a.id === m.author.id)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
+
+  /** Who a run's reply answers: whoever asked, or for a hand-off Wisp posted, whoever handed it out. */
+  askerOfRun(run: { threadId: string | null; triggerMessageId: string }): Actor[] {
+    const trigger = run.triggerMessageId ? this.store.message(run.triggerMessageId) : undefined;
+    if (trigger && trigger.author.id !== "system") return [trigger.author];
+    const task = run.threadId ? this.store.taskByThread(run.threadId) : undefined;
+    return task && task.from.id !== "system" ? [task.from] : [];
   }
 
   /**

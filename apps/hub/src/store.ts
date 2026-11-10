@@ -837,8 +837,8 @@ export class Store {
 
   // --- messages -------------------------------------------------------------
 
-  insertMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; conversationId?: string | null; contextId?: string | null }): Message {
-    const msg: Message = { id: id("msg"), channelId: m.channelId, threadId: m.threadId ?? null, author: m.author, body: m.body, parts: m.parts ?? [], hop: m.hop ?? 0, createdAt: now(), ...(m.replyToId ? { replyToId: m.replyToId } : {}) };
+  insertMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; conversationId?: string | null; contextId?: string | null; to?: Actor[] }): Message {
+    const msg: Message = { id: id("msg"), channelId: m.channelId, threadId: m.threadId ?? null, author: m.author, body: m.body, parts: m.parts ?? [], hop: m.hop ?? 0, createdAt: now(), ...(m.replyToId ? { replyToId: m.replyToId } : {}), ...(m.to?.length ? { to: m.to.map((a) => ({ kind: a.kind, id: a.id }) as Actor) } : {}) };
     // the top of a DM or team splits into chats after a quiet break; threads don't
     let contextId = m.contextId ?? null;
     if (!msg.threadId) {
@@ -855,8 +855,8 @@ export class Store {
     }
     if (!msg.conversationId || contextId === msg.conversationId) contextId = null;
     this.db
-      .prepare("INSERT INTO messages (id, channel_id, thread_id, author_kind, author_id, body, parts_json, hop, created_at, reply_to_id, conversation_id, context_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(msg.id, msg.channelId, msg.threadId, msg.author.kind, msg.author.id, msg.body, JSON.stringify(msg.parts), msg.hop, msg.createdAt, msg.replyToId ?? null, msg.conversationId ?? null, contextId);
+      .prepare("INSERT INTO messages (id, channel_id, thread_id, author_kind, author_id, body, parts_json, hop, created_at, reply_to_id, conversation_id, context_id, to_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(msg.id, msg.channelId, msg.threadId, msg.author.kind, msg.author.id, msg.body, JSON.stringify(msg.parts), msg.hop, msg.createdAt, msg.replyToId ?? null, msg.conversationId ?? null, contextId, msg.to ? JSON.stringify(msg.to) : null);
     return this.withReplyQuote(contextId ? { ...msg, contextId } : msg);
   }
 
@@ -1625,6 +1625,7 @@ type MessageRow = {
   reply_to_id: string | null;
   conversation_id?: string | null;
   context_id?: string | null;
+  to_json?: string | null;
 };
 
 /** A message as stored; `contextId` is turned into `context` (with its start time) by withReplyQuote. */
@@ -1643,6 +1644,7 @@ function toMessage(r: MessageRow): Message & { contextId?: string } {
     ...(r.reply_to_id ? { replyToId: r.reply_to_id } : {}),
     ...(r.conversation_id ? { conversationId: r.conversation_id } : {}),
     ...(r.context_id ? { contextId: r.context_id } : {}),
+    ...(r.to_json && r.to_json !== "[]" ? { to: JSON.parse(r.to_json) as Actor[] } : {}),
   };
 }
 

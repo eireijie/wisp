@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import Database from "better-sqlite3";
-import { splitConversations, type ChatPoint } from "@wisp/core";
+import { parseMentions, splitConversations, type ChatPoint } from "@wisp/core";
 
 const SCHEMA = `
 PRAGMA journal_mode = WAL;
@@ -317,6 +317,8 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   // the chat a top-level message is part of (chats split after a quiet break), and an earlier one it brings back
   ["messages", "conversation_id", "TEXT"],
   ["messages", "context_id", "TEXT"],
+  // who a message was for (agents it woke, or whoever a reply answers)
+  ["messages", "to_json", "TEXT"],
   ["push_subscriptions", "prefs_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["agents", "settings_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["nodes", "catalog_json", "TEXT NOT NULL DEFAULT '[]'"],
@@ -404,6 +406,7 @@ export function openDb(file: string): Database.Database {
   db.exec("CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, created_at)");
   // run again until every top-level message has its chat (an upgrade cut short picks up where it stopped)
   if (db.prepare("SELECT 1 FROM messages WHERE thread_id IS NULL AND conversation_id IS NULL LIMIT 1").get()) migrateConversations(db);
+  if (added.has("messages.to_json")) migrateRecipients(db);
   migrateGrants(db);
   migrateGroups(db);
   migrateNodeOwners(db);
@@ -429,6 +432,24 @@ function migrateConversations(db: Database.Database) {
       for (const [message, conversation] of splitConversations(run)) set.run(conversation, message);
     })();
   }
+}
+
+/**
+ * Messages from before they said who they were for: the agents they @mention, where those can be
+ * found in the same workspace. Others stay unknown.
+ */
+export function migrateRecipients(db: Database.Database) {
+  const rows = db.prepare("SELECT m.id, m.body, m.author_kind, m.author_id, c.workspace_id AS ws FROM messages m JOIN channels c ON c.id = m.channel_id WHERE m.to_json IS NULL AND m.body LIKE '%@%'");
+  const agent = db.prepare("SELECT id FROM agents WHERE workspace_id = ? AND handle = ? COLLATE NOCASE");
+  const set = db.prepare("UPDATE messages SET to_json = ? WHERE id = ?");
+  const found: [string, string][] = [];
+  for (const r of rows.iterate() as Iterable<{ id: string; body: string; author_kind: string; author_id: string; ws: string }>) {
+    const ids = [...new Set(parseMentions(r.body).map((h) => (agent.get(r.ws, h) as { id: string } | undefined)?.id).filter((x): x is string => !!x && !(r.author_kind === "agent" && x === r.author_id)))];
+    if (ids.length) found.push([JSON.stringify(ids.map((id) => ({ kind: "agent", id }))), r.id]);
+  }
+  db.transaction(() => {
+    for (const [to, id] of found) set.run(to, id);
+  })();
 }
 
 /** Connection tokens for agents used to last forever; ones from then get the same limit as new ones. */
