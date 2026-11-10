@@ -2561,6 +2561,12 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     else hub.computers.openTunnel(comp, socket, ticket.code);
   });
 
+  /** A terminal (the Code mod): a one-time ticket from POST /api/computers/:id/terminal; the pane's size rides along. */
+  app.get("/ws/terminals/:id", { websocket: true }, (socket, req) => {
+    const q = req.query as { ticket?: string; cols?: string; rows?: string };
+    hub.terminals.connect(socket, (req.params as { id: string }).id, q.ticket, { cols: Number(q.cols), rows: Number(q.rows) });
+  });
+
   /** Browsers can't set headers on WebSockets, so the session token arrives in the first frame. */
   app.get("/ws", { websocket: true }, (socket) => {
     const timer = setTimeout(() => socket.close(4401, "auth timeout"), 5000);

@@ -6,6 +6,7 @@ import { ComputerError } from "./computers.ts";
 import { OrgoClient, OrgoError } from "./orgo.ts";
 import { routineSlug } from "./routines.ts";
 import type { Hub } from "./hub.ts";
+import { sessionName } from "./terminals.ts";
 import { VM_SIZES, computerDefaults } from "./policy.ts";
 import { greetNewAgent } from "./greeting.ts";
 import { ADVANCED_KEY, adoptShared, advancedOn, sharedComputer } from "./shared-computer.ts";
@@ -277,6 +278,35 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       if (!computers.online(comp)) return reply.code(503).send({ error: comp.kind === "orgo" ? "add an Orgo API key in Settings → Computers first" : `${comp.name} is offline: its device isn't connected` });
       const transport = computers.transport(comp);
       return { transport, url: `/ws/computers/${comp.id}/${transport}?ticket=${await computers.ticket(comp, c.actor.id, body.code)}`, direct: false };
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  /** The computers this person can open a terminal on (the Code mod), with what the page needs to open one. */
+  app.get("/api/terminals", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    return store
+      .computers(c.workspaceId)
+      .filter((x) => !hub.terminals.refusal(x, c.actor.id))
+      .map((x) => ({ id: x.id, name: x.name, kind: x.kind, online: computers.online(x), code: x.kind === "device" ? computers.codeKind(x) : null }));
+  });
+
+  /**
+   * A terminal on it (the Code mod): a one-time link to the shell named `session`, for the person
+   * whose machine it is. A device's own screen needs its code, which the device checks.
+   */
+  app.post("/api/computers/:id/terminal", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    const comp = own(c, (req.params as { id: string }).id);
+    if (!comp) return reply.code(404).send({ error: "computer not found" });
+    const body = parse(z.object({ session: z.string().max(60).optional(), code: SCREEN_CODE.optional(), launch: z.enum(HARNESS_IDS as [string, ...string[]]).optional() }), req.body ?? {}, reply);
+    if (!body) return;
+    try {
+      const session = sessionName(body.session);
+      return { session, url: `/ws/terminals/${comp.id}?ticket=${hub.terminals.ticket(comp, c.actor.id, session, body.code, body.launch, body.launch ? hub.terminalCredential(comp, c.actor.id, body.launch) : null)}` };
     } catch (err) {
       return fail(reply, err);
     }

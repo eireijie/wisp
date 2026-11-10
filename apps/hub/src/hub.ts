@@ -1,7 +1,8 @@
 import type { WebSocket } from "ws";
-import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential, type AgentSignIn } from "@wisp/core";
+import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, TERM_PREFIX, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential, type AgentSignIn } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
+import { Terminals } from "./terminals.ts";
 import { Logins } from "./logins.ts";
 import { Storage } from "./storage.ts";
 import { Discussions } from "./discussions.ts";
@@ -83,6 +84,8 @@ export class Hub {
   /** stepped teams: requests going through a channel team's roles and steps */
   readonly flows: TeamFlows;
   readonly computers: Computers;
+  /** the Code mod's terminals, relayed to devices */
+  readonly terminals: Terminals;
   readonly deviceUse: DeviceUse;
   /** logins agents fill from the person's password manager */
   readonly logins: Logins;
@@ -140,6 +143,7 @@ export class Hub {
     this.discussions = new Discussions(this);
     this.flows = new TeamFlows(this);
     this.computers = new Computers(this);
+    this.terminals = new Terminals(this);
     this.deviceUse = new DeviceUse(this);
     this.logins = new Logins(this);
     this.storage = new Storage(this);
@@ -278,6 +282,8 @@ export class Hub {
 
   /** Send an event to everyone in a workspace, or only to the people `only` picks. */
   broadcast(workspaceId: string, event: ClientEvent, only?: (userId: string) => boolean) {
+    // Code switched off: its terminals close now, not on the next keypress
+    if (event.type === "features") this.terminals.recheck(workspaceId);
     const data = JSON.stringify(event);
     const guest = guestEvent(event);
     for (const c of this.clients) {
@@ -338,6 +344,7 @@ export class Hub {
     conn.socket.close(4401, "device removed");
     for (const a of this.store.agentsOnNode(nodeId)) this.broadcast(conn.workspaceId, { type: "agent_status", agentId: a.id, status: "offline" });
     this.computers.nodeGone(nodeId);
+    this.terminals.nodeGone(nodeId);
     this.releaseNodeConnections(nodeId);
   }
 
@@ -407,6 +414,22 @@ export class Hub {
   /** The catalog an agent's models, efforts and "/" commands come from: its harness where it runs. */
   catalogFor(agent: Pick<Agent, "nodeId" | "computerId" | "harness" | "settings">): HarnessCatalog | undefined {
     return this.harnessesWhere(agent).find((h) => h.harness === agent.harness);
+  }
+
+  /**
+   * The model sign-in a harness's CLI in a terminal on `c` uses: the one that agent runs there use
+   * (then any agent's with that harness), when it's this person's own; else their own first
+   * connection the harness can use. Never someone else's: the terminal could read it.
+   */
+  terminalCredential(c: Computer, userId: string, harness: string): RunCredential | null {
+    const own = (cid: string | null | undefined) => {
+      const r = cid ? this.models.row(cid) : undefined;
+      return r && r.workspace_id === c.workspaceId && r.user_id === userId && credentialSupport(harness, r.provider, r.kind) ? r : undefined;
+    };
+    const agents = this.store.agents(c.workspaceId).filter((a) => a.harness === harness);
+    const here = agents.filter((a) => (c.kind === "vm" ? a.computerId === c.id && this.runsInComputer(a) : a.nodeId === c.nodeId && !this.runsInComputer(a)));
+    const r = [...here, ...agents].map((a) => own(a.settings.connectionId)).find(Boolean) ?? this.models.mine(c.workspaceId, userId).find((m) => own(m.id));
+    return r ? this.models.credentialFor(r.id) : null;
   }
 
   /** The connection a run carries: the agent's, when its harness can use it. */
@@ -550,7 +573,9 @@ export class Hub {
       if (this.closed) return;
       if (isBinary) {
         const frame = readTunnelFrame(new Uint8Array(raw as Buffer));
-        if (frame) this.computers.onTunnelData(nodeId, frame.tunnelId, frame.payload);
+        if (!frame) return;
+        if (frame.tunnelId.startsWith(TERM_PREFIX)) this.terminals.onData(nodeId, frame.tunnelId, frame.payload);
+        else this.computers.onTunnelData(nodeId, frame.tunnelId, frame.payload);
         return;
       }
       let msg: NodeToHub;
@@ -567,6 +592,7 @@ export class Hub {
       this.pausedNodes.delete(nodeId);
       for (const a of this.store.agentsOnNode(nodeId)) this.broadcast(workspaceId, { type: "agent_status", agentId: a.id, status: "offline" });
       this.computers.nodeGone(nodeId);
+    this.terminals.nodeGone(nodeId);
       this.releaseNodeConnections(nodeId);
     });
   }
@@ -630,6 +656,14 @@ export class Hub {
         this.computers.onTunnelClosed(conn.nodeId, msg.tunnelId, msg.error);
         return;
       }
+      case "term_ready": {
+        this.terminals.onReady(conn.nodeId, msg.termId, msg.resumed);
+        return;
+      }
+      case "term_closed": {
+        this.terminals.onClosed(conn.nodeId, msg.termId, msg.error, msg.exited);
+        return;
+      }
       case "catalog": {
         // what it says about sign-ins changes whether its agents can answer: apps show that before anyone writes
         const agents = store.agentsOnNode(conn.nodeId);
@@ -645,7 +679,8 @@ export class Hub {
       case "credential_refreshed": {
         // only for a run of this device's on this connection, while it runs or shortly after, and
         // only for sign-ins that rotate (a key or a long-lived token is never "renewed")
-        if (!msg.runId || !this.mayRenew(conn, msg.runId, msg.connectionId)) return;
+        const ok = msg.terminal ? this.terminals.handedOut.has(`${conn.nodeId}:${msg.connectionId}`) : !!msg.runId && this.mayRenew(conn, msg.runId, msg.connectionId);
+        if (!ok) return;
         if (!this.models.rotates(msg.connectionId)) return;
         if (this.models.saveRenewed(msg.connectionId, msg.secret)) {
           this.connectionsChanged(msg.connectionId);
