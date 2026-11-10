@@ -156,6 +156,17 @@ function Shells({ lead, embedded = false, store }: { lead?: ReactNode; embedded?
     changeTab(tab.id, (t) => ({ ...t, root: splitPane(t.root, t.focus ?? "", dir, leaf), focus: leaf.key, zoom: false }));
   };
 
+  /** what to do when a harness's CLI can't start on a computer: open it where it's signed in, or sign in here */
+  const fixesFor = (target: ShellTarget, launch: string) => {
+    const name = harnessLabel(launch) ?? launch;
+    const fixes: { label: string; onClick: () => void }[] = [];
+    const devices = targets?.filter((t) => t.id !== target.id && t.online && t.kind === "device") ?? [];
+    const other = devices.find((t) => /^this (mac|computer|pc)$/i.test(t.name)) ?? devices[0];
+    if (other) fixes.push({ label: `Open ${name} on ${other.name}`, onClick: () => addPane(other, "row", launch) });
+    fixes.push({ label: "Open a shell here to sign in", onClick: () => addPane(target, "row") });
+    return fixes;
+  };
+
   const newTab = (target: ShellTarget | undefined = defaultTarget(), launch?: string) => {
     if (!target || ws.tabs.length >= MAX_TABS) return;
     const leaf = leafFor(target, launch);
@@ -365,6 +376,7 @@ function Shells({ lead, embedded = false, store }: { lead?: ReactNode; embedded?
                           focused={shown && focused}
                           onFocus={() => (t.focus === leaf.key ? undefined : changeTab(t.id, (x) => ({ ...x, focus: leaf.key })))}
                           onClose={() => closePane(leaf.key)}
+                          fixes={leaf.launch ? fixesFor(target, leaf.launch) : undefined}
                         />
                       ) : (
                         <Gone onClose={() => closePane(leaf.key)} />

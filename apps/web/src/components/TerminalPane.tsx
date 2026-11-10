@@ -56,6 +56,7 @@ export function TerminalPane({
   closeLabel,
   launch,
   label,
+  fixes,
 }: {
   target: ShellTarget;
   session: string;
@@ -71,6 +72,8 @@ export function TerminalPane({
   launch?: string;
   /** what the header says after the name; the session's name when left out */
   label?: string;
+  /** things to do instead when the terminal can't start (shown beside Try again) */
+  fixes?: { label: string; onClick: () => void }[];
 }) {
   const holder = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal | null>(null);
@@ -173,6 +176,8 @@ export function TerminalPane({
       sock.current = ws;
       let exited = false;
       let ready = false;
+      // a close reason holds ~120 bytes, so the hub sends the whole error as a frame first
+      let failure: string | undefined;
       ws.onmessage = (e) => {
         if (e.data instanceof ArrayBuffer) return term.current?.write(new Uint8Array(e.data));
         try {
@@ -186,20 +191,23 @@ export function TerminalPane({
             opened.current = true;
             setStatus({ state: "live" });
             if (focused) term.current?.focus();
-          } else if (msg.type === "closed") exited = !!msg.exited;
+          } else if (msg.type === "closed") {
+            exited = !!msg.exited;
+            if (typeof msg.error === "string" && msg.error) failure = msg.error;
+          }
         } catch {}
       };
       ws.onclose = (e) => {
         if (sock.current === ws) sock.current = null;
         if (gone) return;
-        if (exited) return setStatus({ state: "ended", text: e.reason && e.reason !== "closed" ? e.reason : "The shell ended." });
+        if (exited) return setStatus({ state: "ended", text: failure ?? (e.reason && e.reason !== "closed" ? e.reason : "The shell ended.") });
         if (e.code === 4403 || e.code === 4401 || e.code === 4400) return setStatus({ state: "lost", text: e.reason || "This terminal can't be opened.", retry: false });
         if (/code|PIN|password/i.test(e.reason) && target.code) {
           code.current = undefined;
           return setStatus({ state: "code", error: e.reason });
         }
         // dropped (the device or the hub went away): try again; the shell is still there
-        if (!ready && e.code === 4502) return setStatus({ state: "lost", text: e.reason || "The terminal couldn't start.", retry: false });
+        if (!ready && e.code === 4502) return setStatus({ state: "lost", text: failure ?? (e.reason || "The terminal couldn't start."), retry: false });
         setStatus({ state: "lost", text: e.code === 4503 ? `${target.name} is offline. Reconnecting…` : "Reconnecting…", retry: true });
         retry = setTimeout(connect, Math.min(30_000, 1000 * 2 ** tries++));
       };
@@ -256,13 +264,13 @@ export function TerminalPane({
       </header>
       <div className="relative min-h-0 flex-1 px-2 pt-1.5">
         <div ref={holder} className="h-full w-full" />
-        {status.state !== "live" && <Overlay status={status} target={target} onCode={submitCode} onRetry={() => setAttempt((n) => n + 1)} />}
+        {status.state !== "live" && <Overlay status={status} target={target} onCode={submitCode} fixes={fixes} onRetry={() => setAttempt((n) => n + 1)} />}
       </div>
     </section>
   );
 }
 
-function Overlay({ status, target, onCode, onRetry }: { status: Status; target: ShellTarget; onCode: (code: string) => void; onRetry: () => void }) {
+function Overlay({ status, target, onCode, onRetry, fixes }: { status: Status; target: ShellTarget; onCode: (code: string) => void; onRetry: () => void; fixes?: { label: string; onClick: () => void }[] }) {
   const [value, setValue] = useState("");
   if (status.state === "live") return null;
   const submit = (e: FormEvent) => {
@@ -271,11 +279,11 @@ function Overlay({ status, target, onCode, onRetry }: { status: Status; target: 
     setValue("");
   };
   return (
-    <div className="absolute inset-0 grid place-items-center bg-[#0c0c0e]/85 px-6 text-center text-[12.5px] text-[#a1a1aa] m-fade-in">
+    <div className="absolute inset-0 flex overflow-y-auto bg-[#0c0c0e]/85 px-6 py-3 text-center text-[12.5px] text-[#a1a1aa] m-fade-in">
       {status.state === "connecting" ? (
-        <span>Connecting…</span>
+        <span className="m-auto">Connecting…</span>
       ) : status.state === "code" ? (
-        <form onSubmit={submit} className="flex w-full max-w-[260px] flex-col items-center gap-2.5">
+        <form onSubmit={submit} className="m-auto flex w-full max-w-[260px] flex-col items-center gap-2.5">
           <span className="text-[#f2f2f4]">Enter {target.name}'s {target.code === "password" ? "password" : "PIN"}</span>
           <input
             autoFocus
@@ -288,13 +296,20 @@ function Overlay({ status, target, onCode, onRetry }: { status: Status; target: 
           {status.error && <span className="text-[#ff6b6b]">{status.error}</span>}
         </form>
       ) : (
-        <div className="flex max-w-[340px] flex-col items-center gap-2.5">
+        <div className="m-auto flex max-w-[380px] flex-col items-center gap-2.5">
           <span className="text-balance">{status.text}</span>
           {!(status.state === "lost" && status.retry) && (
-            <button type="button" onClick={onRetry} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/[.09] bg-[#1d1d21] px-2.5 text-[#f2f2f4] transition-colors hover:bg-[#26262b] active:scale-[.97]">
-              <RotateCw size={13} strokeWidth={2} />
-              {status.state === "ended" ? "Start a new shell" : "Try again"}
-            </button>
+            <div className="flex flex-wrap justify-center gap-2">
+              {status.state === "lost" && fixes?.map((f) => (
+                <button key={f.label} type="button" onClick={f.onClick} className="inline-flex h-7 items-center rounded-md border border-white/[.09] bg-[#1d1d21] px-2.5 text-[#f2f2f4] transition-colors hover:bg-[#26262b] active:scale-[.97]">
+                  {f.label}
+                </button>
+              ))}
+              <button type="button" onClick={onRetry} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/[.09] bg-[#1d1d21] px-2.5 text-[#f2f2f4] transition-colors hover:bg-[#26262b] active:scale-[.97]">
+                <RotateCw size={13} strokeWidth={2} />
+                {status.state === "ended" ? "Start a new shell" : "Try again"}
+              </button>
+            </div>
           )}
         </div>
       )}

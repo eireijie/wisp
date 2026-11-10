@@ -129,6 +129,17 @@ describe.skipIf(!hasPty)("a terminal on the owner's device", () => {
     expect(p.control.at(-1)).toMatchObject({ type: "closed", exited: true });
   });
 
+  it("sends a long start error whole, since a close reason is cut short", async () => {
+    const p = await pane("long");
+    const termId = [...(hub.terminals as any).open.keys()].at(-1);
+    const error = `The agents on Shared computer run Codex on This Mac, signed in there. Open Codex on This Mac, or open a shell here and run \`codex login\`. ${"More words. ".repeat(10)}`;
+    hub.terminals.onClosed(device.nodeId!, termId, error);
+    await waitFor(() => p.closed);
+    expect(p.closed!.code).toBe(4502);
+    expect(p.closed!.reason.length).toBeLessThan(error.length);
+    expect(p.control.at(-1)).toMatchObject({ type: "closed", error });
+  });
+
   it("closes open terminals when Code is turned off", async () => {
     const p = await pane("off");
     expect((await api("PUT", "/api/features", { code: false })).status).toBe(200);

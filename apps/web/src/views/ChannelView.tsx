@@ -1979,7 +1979,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
                 send();
               }
             }}
-            className="block min-w-0 flex-1 resize-none bg-transparent py-[11px] md:py-[7px] text-[15px] md:text-[15px] outline-none placeholder:text-faint placeholder:truncate"
+            className="block min-w-[11rem] flex-1 resize-none bg-transparent py-[11px] md:py-[7px] text-[15px] md:text-[15px] outline-none placeholder:text-faint placeholder:truncate"
           />
           {dmAgent && ctx && (
             <span className="self-center min-w-0 max-w-[45%] shrink pr-1.5 max-md:hidden">
