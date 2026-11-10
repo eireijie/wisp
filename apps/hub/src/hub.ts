@@ -747,7 +747,9 @@ export class Hub {
       // it worked on its screen: the reply keeps the screen, so it doesn't vanish when the run ends
       const screen = agent?.computerId && !gone ? this.screenAfterRun(agent.computerId, live.parts, body, run) : null;
       const parts = [...live.parts, ...(screen ? [screen] : []), ...skillParts];
-      const reply = body && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy, conversationId: this.chatOfRun(run) }) : null;
+      // files it sent go out even when it said nothing with them
+      const sentFiles = live.parts.some((p) => p.type === "file");
+      const reply = (body || sentFiles) && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy, conversationId: this.chatOfRun(run) }) : null;
       // follow-ups it set and how it left the chat show under its answer
       this.loops.runEnded(run, reply?.id ?? (repeated && posted ? posted.id : null));
       // work worth remembering that it didn't save gets a memory pass once the chat goes quiet
@@ -1313,6 +1315,27 @@ export class Hub {
     return running.length === 1 ? this.store.run(running[0].id) : undefined;
   }
 
+  /**
+   * A file an agent sent while working on a run: it's attached to that run's reply (or its
+   * "Run failed" line), so it shows in the chat. A background check, which posts nothing, keeps none.
+   */
+  attachToRun(runId: string, file: { id: string; name: string }) {
+    const run = this.store.run(runId);
+    if (!run || run.status !== "running" || run.kind) return;
+    const live = this.live.get(runId) ?? { parts: [], text: "" };
+    if (!live.parts.some((p) => p.type === "file" && p.fileId === file.id)) live.parts.push({ type: "file", fileId: file.id, name: file.name });
+    this.live.set(runId, live);
+  }
+
+  /** Files an agent posted with chat_send aren't attached to its reply as well. */
+  detachFromRun(agentId: string, fileIds: string[]) {
+    const ids = new Set(fileIds);
+    for (const [runId, live] of this.live) {
+      if (this.store.run(runId)?.agentId !== agentId) continue;
+      live.parts = live.parts.filter((p) => !(p.type === "file" && ids.has(p.fileId)));
+    }
+  }
+
   currentRun(agentId: string) {
     const r = this.store.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 1").get(agentId) as { id: string } | undefined;
     return r ? this.store.run(r.id) : undefined;
@@ -1636,6 +1659,7 @@ export class Hub {
       teamNotes ? `\n${teamNotes}` : "",
       `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the wisp MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available, and follow your memory skill (me/skills/memory/SKILL.md) whenever you save something.`,
       background ? "" : `Reply with the message you want posted. Keep it conversational; only @mention another agent when you actually need them to act.`,
+      background ? "" : `To send a file you made (a report, an image, a spreadsheet), call file_upload with its path; it's attached to your reply. Only say a file is attached after file_upload succeeded.`,
       asks.length
         ? `Before any of these that nobody asked for in so many words: ${asks.join("; ")}, ask first with approval_request and end your turn; you'll be woken with the answer. Ask about anything else that's hard to undo, too.`
         : `When something is hard to undo and nobody asked for it in so many words, ask first with approval_request and end your turn; you'll be woken with the answer.`,

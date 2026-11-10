@@ -764,8 +764,9 @@ final class Store {
         activity[e.agentId] = e.event.text
         if let text = e.event.text, text != "started" { addStep(text, for: e.agentId) }
       case "tool_call":
-        activity[e.agentId] = "Using \(e.event.name ?? "a tool")"
-        addStep("Used \(e.event.name ?? "a tool")", for: e.agentId)
+        let line = CallActivity.line(tool: e.event.name ?? "", file: e.event.file)
+        activity[e.agentId] = line
+        addStep(line, for: e.agentId)
       case "text": activity[e.agentId] = "Writing…"
       default: break
       }

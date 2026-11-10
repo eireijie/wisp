@@ -121,12 +121,12 @@ struct AgentTile: View {
     .sheet(isPresented: $editingLook) { LookEditor(agent: store.agent(agent.id) ?? agent) }
   }
 
-  /** "Working · Reading release.md" in green with pulsing dots, or "Idle" / "Offline" */
+  /** "Reading release.md" (or "Working") in green with pulsing dots, or "Idle" / "Offline" */
   @ViewBuilder private var status: some View {
     if agent.status == .busy {
       HStack(spacing: 6) {
         WorkingDots()
-        Text(["Working", doing.flatMap { $0 == "started" ? nil : $0 }].compactMap { $0 }.joined(separator: " · "))
+        Text(ActivityText.line(doing))
           .font(.system(size: 13)).foregroundStyle(Palette.statusWorkingText).lineLimit(2).multilineTextAlignment(.center)
       }
     } else {

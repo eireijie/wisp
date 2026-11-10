@@ -262,6 +262,19 @@ describe("open loops", () => {
     expect(hub.store.chatLoop(dm().id)!.status).toBe("done");
   });
 
+  it("leaves out wrap-up lines the reply already says, and the card when nothing's left", async () => {
+    onReply = async (agent) => {
+      await agent.chatStatus({ status: "done", did: "Created and attached notes.md with three short bullets about the repo" });
+      return "Attached notes.md with three short bullets about the repo.";
+    };
+    expect(partsOf(await replyTo("send me notes.md"), "wrapup")).toEqual([]);
+    onReply = async (agent) => {
+      await agent.chatStatus({ status: "done", did: "Sent the deck to Sam", next: "Look for Sam's reply · Wed" });
+      return "Sent the deck to Sam.";
+    };
+    expect(partsOf(await replyTo("send the deck"), "wrapup")).toEqual([{ type: "wrapup", did: "", saved: "", next: "Look for Sam's reply · Wed" }]);
+  });
+
   it("doesn't check back for someone who turned it off", async () => {
     await owner.request("PUT", `/api/agents/${agentId}/checkback`, { enabled: false });
     onReply = async (agent) => {

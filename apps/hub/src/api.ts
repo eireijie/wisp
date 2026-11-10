@@ -1089,6 +1089,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       hop = (running?.hop ?? 0) + 1;
     }
     store.addChannelMember(ch.id, c.actor);
+    // a file it posts here itself isn't attached to its reply again
+    if (c.actor.kind === "agent" && files.length) hub.detachFromRun(c.actor.id, files.map((f) => f!.id));
     return hub.postMessage({ channelId: ch.id, threadId, author: c.actor, body: body.body, replyToId, parts: [...files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })), ...(body.voice ? [{ type: "status" as const, text: "Voice message" }] : [])], hop, onBehalfOf: requesterOf(c) });
   });
 
@@ -2449,7 +2451,13 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       await fsp.mkdir(path.dirname(dest), { recursive: true });
       await fsp.writeFile(dest, buf);
     }
-    return store.insertFile({ workspaceId: c.workspaceId, sha256: sha, name, mime, size: buf.length, uploader: c.actor, channelId });
+    const file = store.insertFile({ workspaceId: c.workspaceId, sha256: sha, name, mime, size: buf.length, uploader: c.actor, channelId });
+    // an agent sending a file while it answers: the file goes with its reply in that chat
+    if (c.actor.kind === "agent") {
+      const run = hub.runFor(c.actor.id, req.headers["x-wisp-run"]) ?? hub.currentRun(c.actor.id);
+      if (run && (!channelId || channelId === run.channelId)) hub.attachToRun(run.id, file);
+    }
+    return file;
   });
 
   app.get("/api/files", async (req, reply) => {
