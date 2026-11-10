@@ -108,12 +108,12 @@ export interface Line {
   text: string;
 }
 
-const READS = /^(read|view|open|glob|grep|search|ls|list|find|cat|web_?fetch|web_?search|fetch)/i;
-const EDITS = /^(edit|write|multi_?edit|apply_?patch|patch|create|str_replace|notebook)/i;
-const RUNS = /^(bash|shell|exec|run|terminal|command|local_shell|computer_run)/i;
+export const READS = /^(read|view|open|glob|grep|search|ls|list|find|cat|web_?fetch|web_?search|fetch)/i;
+export const EDITS = /^(edit|write|multi_?edit|apply_?patch|patch|create|str_replace|notebook)/i;
+export const RUNS = /^(bash|shell|exec|run|terminal|command|local_shell|computer_run)/i;
 
 /** The few words that say what a step touched: the file, the command, the search. */
-function argOf(input: unknown): string {
+export function argOf(input: unknown): string {
   if (typeof input === "string") return input;
   const i = (input ?? {}) as Record<string, unknown>;
   const cmd = i.command ?? i.cmd;
@@ -129,7 +129,7 @@ function unwrapShell(cmd: string) {
   return m ? m[2].replace(m[1] === '"' ? /\\"/g : /'\\''/g, m[1]) : cmd;
 }
 
-function shortTool(name: string) {
+export function shortTool(name: string) {
   return name.replace(/^mcp__[^_]+__/, "").replace(/^[\w-]+\./, "").replace(/^wisp_/, "");
 }
 
@@ -142,7 +142,7 @@ export function toolLine(name: string, input: unknown): { kind: LineKind; text: 
   return { kind, text: `● ${verb}${arg ? `  ${arg}` : ""}` };
 }
 
-function outputLines(output: unknown): string[] {
+export function outputLines(output: unknown): string[] {
   // a command's result: what it printed, and how it ended when it failed
   const o = output && typeof output === "object" ? (output as Record<string, unknown>) : null;
   const printed = o ? [o.output, o.stdout, o.formatted_output, o.aggregated_output].find((v) => typeof v === "string") : output;
