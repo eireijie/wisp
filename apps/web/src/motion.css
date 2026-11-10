@@ -70,6 +70,13 @@ a.rounded-full,
 /* a terminal pane opening in Code */
 @keyframes m-pane-in { from { opacity: 0; transform: scale(0.985); } }
 .m-pane { animation: m-pane-in 300ms var(--settle) backwards; }
+/* Code: a new step slides up into an agent's pane; a working dot breathes; the task list slides in */
+@keyframes m-code-line-in { from { opacity: 0; transform: translateY(3px); } }
+.m-code-line { animation: m-code-line-in 220ms ease-out backwards; }
+@keyframes m-code-pulse { 50% { opacity: 0.35; } }
+.m-code-pulse { animation: m-code-pulse 1.4s ease-in-out infinite; }
+@keyframes m-code-list-in { from { opacity: 0; transform: translateX(-12px); } }
+.m-code-list { animation: m-code-list-in 240ms var(--settle) backwards; }
 /* a sign-in waiting on the person: its dot breathes */
 @keyframes m-wait-pulse { 50% { opacity: 0.3; } }
 .m-wait { animation: m-wait-pulse 1.4s ease-in-out infinite; }
@@ -205,7 +212,8 @@ button[role="switch"]:active:not(:disabled) .m-knob { scale: 1.2 1; }
   .m-tabs[data-away="true"] { transform: none; }
   .m-badge[data-zero="true"] { transform: none; }
   .m-bubble-me, .m-bubble-them, .m-work, .m-swap, .m-menu, .m-dialog, .m-drawer, .m-palette-card,
-  .m-panel, .m-toast, .m-toast-top, .m-chat-layer, .m-pill-in, .m-chip-in, .m-unfold, .m-fade-in, .m-pane { animation: m-fade 120ms ease-out backwards !important; }
+  .m-panel, .m-toast, .m-toast-top, .m-chat-layer, .m-pill-in, .m-chip-in, .m-unfold, .m-fade-in, .m-pane, .m-code-line, .m-code-list { animation: m-fade 120ms ease-out backwards !important; }
+  .m-code-pulse { animation: none !important; }
   .m-wait { animation: none !important; }
   .m-scrim, .m-palette-scrim { animation: m-scrim-in 120ms ease-out backwards !important; }
   .m-menu[data-closing="true"], [data-closing="true"] .m-palette-card { animation: m-fade 120ms ease-out reverse both !important; }

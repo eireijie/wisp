@@ -1274,6 +1274,35 @@ export class Hub {
     this.broadcast(agent.workspaceId, { type: "message_removed", messageId: sys.id, channelId: sys.channelId, threadId: sys.threadId }, this.audience(sys.channelId));
   }
 
+  /** Agents whose keyboard someone took (Code mod): who has it. Their runs wait. */
+  readonly keyboard = new Map<string, { userId: string; workspaceId: string; timer?: NodeJS.Timeout }>();
+
+  takeKeyboard(agent: Agent, userId: string) {
+    const held = this.keyboard.get(agent.id);
+    if (held?.timer) clearTimeout(held.timer);
+    this.keyboard.set(agent.id, { userId, workspaceId: agent.workspaceId });
+    if (held?.userId !== userId) this.broadcast(agent.workspaceId, { type: "keyboard", agentId: agent.id, userId });
+  }
+
+  /** The agent has its keyboard back: what waited for it runs now. */
+  handBackKeyboard(agentId: string) {
+    const held = this.keyboard.get(agentId);
+    if (!held) return;
+    if (held.timer) clearTimeout(held.timer);
+    this.keyboard.delete(agentId);
+    this.broadcast(held.workspaceId, { type: "keyboard", agentId, userId: null });
+    for (const q of this.store.activeRuns(agentId)) if (this.store.run(q.id)?.status === "queued") this.dispatchRun(q.id);
+  }
+
+  /** The person's terminal went away without handing back (a closed tab): give it back after a while. */
+  keyboardLeft(agentId: string, afterMs = 10 * 60_000) {
+    const held = this.keyboard.get(agentId);
+    if (!held) return;
+    if (held.timer) clearTimeout(held.timer);
+    held.timer = setTimeout(() => this.handBackKeyboard(agentId), afterMs);
+    held.timer.unref?.();
+  }
+
   /** Send a queued run to its agent's device (if it's online; otherwise it waits until the device connects). */
   dispatchRun(runId: string) {
     const run = this.store.run(runId);
@@ -1281,6 +1310,8 @@ export class Hub {
     const agent = this.store.agent(run.agentId);
     const conn = agent?.nodeId ? this.nodes.get(agent.nodeId) : undefined;
     if (!agent || !conn || this.pausedNodes.has(conn.nodeId)) return;
+    // the owner has its keyboard: the run waits until they hand it back
+    if (this.keyboard.has(agent.id)) return;
     // a sign-in about to be renewed is used by one run at a time (renewing it kills the old one); this run waits its turn
     const cid = agent.settings.connectionId;
     if (cid && this.models.oneAtATime(cid) && [...this.connectionRuns.values()].includes(cid)) return;
@@ -1500,6 +1531,26 @@ export class Hub {
       }, 120_000);
       this.pendingGit.set(requestId, { resolve, timer });
       this.send(conn, { type: "merge", requestId, agentId, ...w });
+    });
+  }
+
+  /**
+   * Code's review side, read on the device the task's agent works on: a branch's diff, files or
+   * one file, or its checks (which run there, so they get longer than a merge).
+   */
+  requestReview(agentId: string, what: "diff" | "files" | "file" | "checks", w: { repo: string; branch: string; base: string; file?: string }): Promise<{ ok: boolean; output: string }> {
+    const agent = this.store.agent(agentId);
+    const conn = agent?.nodeId ? this.nodes.get(agent.nodeId) : undefined;
+    if (!agent || !conn) return Promise.resolve({ ok: false, output: `${agent ? `@${agent.handle}'s device` : "the device"} is offline` });
+    const requestId = id("git");
+    const wait = what === "checks" ? 45 * 60_000 : 60_000;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingGit.delete(requestId);
+        resolve({ ok: false, output: `the device didn't answer within ${what === "checks" ? "45 minutes" : "a minute"}` });
+      }, wait);
+      this.pendingGit.set(requestId, { resolve, timer });
+      this.send(conn, { type: "review", requestId, what, ...w });
     });
   }
 

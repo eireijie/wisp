@@ -168,3 +168,13 @@ describe("which shell opens", () => {
     expect(vmShell({ bin: "docker", name: "wisp-c1", user: "wisp", home: "/home/wisp" }, "codex-1", "codex").args.slice(-2)).toEqual(["codex-1", "codex"]);
   });
 });
+
+describe("taking an agent's keyboard", async () => {
+  const { takeoverShell, TAKEOVER_HARNESSES } = await import("../src/terminals.ts");
+  it("resumes the agent's own session, in its folder, with its sign-in", () => {
+    expect(takeoverShell({ harness: "codex", sessionId: "s1", cwd: "/w", env: { CODEX_HOME: "/h" } })).toEqual({ file: "codex", args: ["resume", "s1"], cwd: "/w", env: { CODEX_HOME: "/h", TERM: "xterm-256color" } });
+    expect(takeoverShell({ harness: "claude-code", sessionId: "s2", cwd: "/w", env: {} }).args).toEqual(["--resume", "s2"]);
+    expect([...TAKEOVER_HARNESSES].sort()).toEqual(["claude-code", "codex"]);
+    expect(() => takeoverShell({ harness: "hermes", sessionId: "s", cwd: "/w", env: {} })).toThrow(/Claude Code and Codex/);
+  });
+});

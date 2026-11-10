@@ -290,7 +290,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     return store
       .computers(c.workspaceId)
       .filter((x) => !hub.terminals.refusal(x, c.actor.id))
-      .map((x) => ({ id: x.id, name: x.name, kind: x.kind, online: computers.online(x), code: x.kind === "device" ? computers.codeKind(x) : null }));
+      .map((x) => ({ id: x.id, name: x.name, kind: x.kind, nodeId: x.nodeId ?? null, online: computers.online(x), code: x.kind === "device" ? computers.codeKind(x) : null }));
   });
 
   /**
@@ -306,7 +306,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!body) return;
     try {
       const session = sessionName(body.session);
-      return { session, url: `/ws/terminals/${comp.id}?ticket=${hub.terminals.ticket(comp, c.actor.id, session, body.code, body.launch, body.launch ? hub.terminalCredential(comp, c.actor.id, body.launch) : null)}` };
+      return { session, url: `/ws/terminals/${comp.id}?ticket=${hub.terminals.ticket(comp, c.actor.id, session, body.code, undefined, body.launch, body.launch ? hub.terminalCredential(comp, c.actor.id, body.launch) : null)}` };
     } catch (err) {
       return fail(reply, err);
     }
