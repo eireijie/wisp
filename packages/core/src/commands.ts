@@ -8,10 +8,45 @@ import type { CommandOption } from "./types.ts";
 /** Commands Wisp answers itself, for every agent, without waking it. */
 export const WISP_COMMANDS: { name: string; description: string }[] = [
   { name: "context", description: "See how full this conversation is" },
+  { name: "compact", description: "Shrink this conversation so it can keep going" },
+  { name: "new", description: "Start a fresh conversation" },
+  { name: "stop", description: "Stop what it's working on" },
   { name: "model", description: "See or change the model, like /model gpt-6.1-sol (or /model default)" },
   { name: "effort", description: "See or change how hard it thinks, like /effort high (or /effort default)" },
   { name: "harness", description: "See or change the harness it runs in, like /harness codex" },
 ];
+
+/**
+ * How /compact runs in a harness. Claude Code and Hermes compact their own session when sent their
+ * command headless; `codex exec` and the rest have no commands, so Wisp asks for a summary and
+ * carries it into a new conversation.
+ */
+export function compactPlan(harness: string): { via: "native"; command: string } | { via: "summary" } {
+  if (harness === "claude-code") return { via: "native", command: "compact" };
+  if (harness === "hermes") return { via: "native", command: "compress" };
+  return { via: "summary" };
+}
+
+/** What a harness without its own /compact is asked, so its answer can start the next conversation. */
+export const SUMMARY_REQUEST =
+  "Write a summary of this conversation so far, so that you could carry on from it in a fresh conversation: what we are doing, what was decided, the names of files and things that matter, and what is left to do. Plain text, under 300 words, no greeting.";
+
+/** Hermes' "Context compressed: 4 -> 4 messages\n~15,322 -> ~15,322 tokens" as one plain line. */
+export function plainCompact(text: string): string | null {
+  const m = /~?([\d,]+)\s*->\s*~?([\d,]+)\s*tokens/i.exec(text);
+  if (!m) return null;
+  const k = (n: string) => {
+    const v = Number(n.replace(/,/g, ""));
+    return v >= 1000 ? `${Math.round(v / 100) / 10}k` : String(v);
+  };
+  if (Number(m[2].replace(/,/g, "")) >= Number(m[1].replace(/,/g, ""))) return `Nothing to shrink yet (${k(m[1])} tokens).`;
+  return `Compacted: ${k(m[1])} → ${k(m[2])} tokens`;
+}
+
+/** A message that is just "/new" (after any @mentions): it starts a new chat. */
+export function startsNewChat(body: string): boolean {
+  return /^(?:@[\w.-]+\s+)*\/new\s*$/i.test(body.trim());
+}
 
 /** One entry in the "/" menu: where it comes from decides how it runs. */
 export interface AgentCommand {

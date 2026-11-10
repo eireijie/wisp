@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
+import { SUMMARY_REQUEST } from "@wisp/core";
 import { makeRoomAs } from "./room.ts";
 
 let dir: string;
@@ -79,7 +80,7 @@ const post = async (body: string) => (await api("POST", `/api/channels/${general
 describe("/ commands", () => {
   it("lists the harness's own, then Wisp's, keeping Wisp's names", async () => {
     const { data } = await api<{ commands: any[] }>("GET", `/api/agents/${atlas.id}/commands`);
-    expect(data.commands.map((c) => `${c.name}:${c.kind}:${c.group}`)).toEqual(["compress:command:harness", "humanizer:skill:harness", "context:wisp:wisp", "model:wisp:wisp", "effort:wisp:wisp", "harness:wisp:wisp"]);
+    expect(data.commands.map((c) => `${c.name}:${c.kind}:${c.group}`)).toEqual(["compress:command:harness", "humanizer:skill:harness", "context:wisp:wisp", "compact:wisp:wisp", "new:wisp:wisp", "stop:wisp:wisp", "model:wisp:wisp", "effort:wisp:wisp", "harness:wisp:wisp"]);
   });
 
   it("puts skills agents learned first, with who learned them, and other Wisp skills last", async () => {
@@ -88,7 +89,7 @@ describe("/ commands", () => {
     hub.skills.attach(learned.id, atlas.id, true);
     const shared = hub.skills.create(ws, null, { name: "Notes", slug: "meeting-notes", description: "Take notes", source: "custom", content: "x", allAgents: true });
     const { data } = await api<{ commands: any[] }>("GET", `/api/agents/${atlas.id}/commands`);
-    expect(data.commands.map((c) => `${c.name}:${c.group}`)).toEqual(["humanizer:learned", "compress:harness", "context:wisp", "model:wisp", "effort:wisp", "harness:wisp", "meeting-notes:skill"]);
+    expect(data.commands.map((c) => `${c.name}:${c.group}`)).toEqual(["humanizer:learned", "compress:harness", "context:wisp", "compact:wisp", "new:wisp", "stop:wisp", "model:wisp", "effort:wisp", "harness:wisp", "meeting-notes:skill"]);
     expect(data.commands[0]).toMatchObject({ kind: "wisp-skill", via: "prompt", learnedBy: "Atlas", isNew: true });
     hub.skills.remove(learned.id);
     hub.skills.remove(shared.id);
@@ -161,5 +162,39 @@ describe("/ commands", () => {
     // a member still can
     await post("@codexer /model sol 6.1");
     expect(hub.store.agent(codexer.id)?.model).toBe("gpt-6.1-sol");
+  });
+
+  it("sends /compact to Hermes as its own /compress, and to Claude Code as /compact", async () => {
+    const msg = await post("@atlas /compact keep the plan");
+    expect(await hub.buildPrompt(atlas.id, general.id, null, msg.id)).toBe("/compress keep the plan");
+    expect(hub.commandFor(atlas, "/compact")).toMatchObject({ via: "raw", name: "compress", compact: true });
+    expect(hub.commandFor({ ...atlas, harness: "claude-code" }, "/compact")).toMatchObject({ via: "raw", name: "compact", compact: true });
+  });
+
+  it("asks a Codex agent for a summary on /compact, and starts the next chat with it", async () => {
+    const msg = await post("@codexer /compact");
+    expect(await hub.buildPrompt(codexer.id, general.id, null, msg.id)).toBe(SUMMARY_REQUEST);
+    for (const r of hub.store.activeRuns(codexer.id)) hub.cancelRun(r.id);
+  });
+
+  it("starts a new chat on /new and says so", async () => {
+    const before = await post("@atlas hello there");
+    const msg = await post("@atlas /new");
+    expect(hub.store.message(msg.id)?.conversationId).toBe(msg.id);
+    expect(hub.store.message(msg.id)?.conversationId).not.toBe(hub.store.message(before.id)?.conversationId);
+    const notes = hub.store.messages(general.id, { limit: 10 }).filter((m) => m.createdAt >= msg.createdAt).flatMap((m) => m.parts.flatMap((p) => (p.type === "status" ? [p.text] : [])));
+    expect(notes.some((t) => t.startsWith("Started a new conversation"))).toBe(true);
+    const next = await post("@atlas what now?");
+    expect(hub.store.message(next.id)?.conversationId).toBe(msg.id);
+  });
+
+  it("stops what the agent is doing here on /stop", async () => {
+    const msg = await post("@atlas do a long thing");
+    const run = hub.store.activeRuns(atlas.id).find((r) => r.triggerMessageId === msg.id);
+    expect(run).toBeTruthy();
+    await post("@atlas /stop");
+    expect(hub.store.run(run!.id)?.status).toBe("cancelled");
+    const notes = hub.store.messages(general.id, { limit: 10 }).flatMap((m) => m.parts.flatMap((p) => (p.type === "status" ? [p.text] : [])));
+    expect(notes.at(-1)).toContain("Stopped");
   });
 });

@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential } from "@wisp/core";
+import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, compactPlan, plainCompact, startsNewChat, SUMMARY_REQUEST, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, plainFailure, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem, credentialSupport, harnessInfo, providerLabel, type HarnessCatalog, type ModelLogin, type ModelProvider, type RunCredential } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Logins } from "./logins.ts";
@@ -732,9 +732,20 @@ export class Hub {
       this.routines.runFinished(run);
       body = result.finalText.trim() || live.text.trim();
       // a harness command (/compact, say) may finish without a word; say it ran
-      const trigger = !body && agent && run.triggerMessageId ? store.message(run.triggerMessageId) : undefined;
+      const trigger = agent && run.triggerMessageId ? store.message(run.triggerMessageId) : undefined;
       const ran = trigger && agent ? this.commandFor(agent, trigger.body) : null;
-      if (ran?.via === "raw" && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "notice", text: `Ran /${ran.name}.` }], hop: run.hop + 1, route: false, conversationId: this.chatOfRun(run) });
+      if (ran?.compact && body) body = plainCompact(body) ?? body;
+      // Claude Code says how far it shrank in a notice of its own; otherwise a bare "Compacted."
+      const said = ran?.compact && live.parts.some((p) => p.type === "notice");
+      if (ran?.via === "raw" && !gone && !body) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: said ? live.parts : [...live.parts, { type: "notice", text: ran.compact ? "Compacted." : `Ran /${ran.name}.` }], hop: run.hop + 1, route: false, conversationId: this.chatOfRun(run) });
+      // a harness with no /compact of its own: its summary opens the next conversation
+      if (agent && trigger && body && !gone && this.isSummaryCompact(agent, trigger.body)) {
+        const u = store.latestUsage(agent.id, run.channelId, run.threadId);
+        const was = u?.contextUsed && u.contextWindow ? `${Math.round((100 * u.contextUsed) / u.contextWindow)}%` : null;
+        this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: `Summary of our last conversation:\n\n${body}`, hop: run.hop + 1, route: false, startsChat: !run.threadId });
+        this.postSystem({ ...trigger, threadId: run.threadId }, `Compacted${was ? `: ${was} → a fresh conversation that starts from a summary` : ": started a fresh conversation from a summary"}.`);
+        body = "";
+      }
       const posted = taskReply ? store.message(taskReply.messageId) : undefined;
       // the answer task_update already posted, repeated as the final reply (as-is, or wrapped in a line or two)
       const same = (a: string, b: string) => !!a.trim() && !!b.trim() && a.includes(b.trim());
@@ -860,10 +871,12 @@ export class Hub {
    * the person the message ultimately serves; by default the person who wrote it, or for an
    * agent, whoever asked it for the work it's doing now.
    */
-  postMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; route?: boolean; replyInThread?: boolean; onBehalfOf?: string | null; conversationId?: string | null; contextId?: string | null }): Message {
+  postMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; route?: boolean; replyInThread?: boolean; onBehalfOf?: string | null; conversationId?: string | null; contextId?: string | null; startsChat?: boolean }): Message {
     const channel = this.store.channel(m.channelId);
     if (!channel) throw new Error("channel not found");
-    const msg = this.store.insertMessage({ ...m, conversationId: m.conversationId ?? this.workingChat(m) ?? setupChat(this, m), contextId: m.contextId ?? this.repliedChat(m) });
+    // a person's "/new" is the first message of a new chat, so no harness session is carried into it
+    const startsChat = m.startsChat ?? (m.author.kind === "user" && m.author.id !== "system" && !m.threadId && startsNewChat(m.body));
+    const msg = this.store.insertMessage({ ...m, startsChat, conversationId: m.conversationId ?? this.workingChat(m) ?? setupChat(this, m), contextId: m.contextId ?? this.repliedChat(m) });
     if (channel.kind === "dm" && m.author.kind === "user" && m.author.id !== "system") {
       this.loops.personWrote(channel.id);
       // before it's routed, so the reply's prompt has it
@@ -1023,7 +1036,7 @@ export class Hub {
         continue;
       }
       // commands Wisp answers itself don't wake the agent
-      if (msg.author.kind === "user" && this.commandFor(agent, msg.body)?.via === "wisp") {
+      if (msg.author.kind === "user" && this.commandFor(agent, msg.body)?.via === "wisp" && !this.isSummaryCompact(agent, msg.body)) {
         this.answerCommand(agent, msg, threadId);
         continue;
       }
@@ -1048,11 +1061,17 @@ export class Hub {
   }
 
   /** The command a message runs for this agent ("/name args", or "@handle /name args" in a channel), if it names one it has. */
-  commandFor(agent: Agent, body: string): (AgentCommand & { args: string }) | null {
+  commandFor(agent: Agent, body: string): (AgentCommand & { args: string; compact?: boolean }) | null {
     const parsed = parseCommand(body, agent.handle);
     if (!parsed) return null;
     const cmd = this.commands(agent).find((c) => c.name === parsed.name);
-    return cmd ? { ...cmd, args: parsed.args } : null;
+    if (!cmd) return null;
+    // Wisp's /compact is the harness's own where it has one (headless), sent by that name
+    if (cmd.kind === "wisp" && cmd.name === "compact") {
+      const plan = compactPlan(agent.harness);
+      if (plan.via === "native") return { ...cmd, name: plan.command, via: "raw", args: parsed.args, compact: true };
+    }
+    return { ...cmd, args: parsed.args };
   }
 
   /** /model: say which model the agent runs on, or switch it ("default" goes back to the harness's own). */
@@ -1147,12 +1166,38 @@ export class Hub {
     this.postSystem(near, `${handle} will run in ${harnessLabel(pick.harness)} from the next message${keepModel ? "" : `, on its default model (it doesn't have ${agent.model})`}. Its memory, skills and chats stay.`);
   }
 
+  /** A harness without its own /compact: Wisp asks it for a summary and carries that into a new chat. */
+  private isSummaryCompact(agent: Agent, body: string): boolean {
+    return parseCommand(body, agent.handle)?.name === "compact" && compactPlan(agent.harness).via === "summary";
+  }
+
+  /** /new: the message itself began a new chat (see postMessage), so there is no session to resume. */
+  private answerNew(agent: Agent, msg: Message, threadId: string | null) {
+    const near = { ...msg, threadId };
+    if (threadId) return void this.postSystem(near, "A thread is one conversation. Use /new in the main chat.");
+    const channel = this.store.channel(msg.channelId);
+    this.postSystem(near, channel?.kind === "dm" ? "Started a new conversation." : `Started a new conversation with ${this.handleOf(agent.id)}.`);
+  }
+
+  /** /stop: cancel what this agent is doing here. */
+  private answerStop(agent: Agent, msg: Message, threadId: string | null) {
+    const near = { ...msg, threadId };
+    const mine = this.store.activeRuns(agent.id).filter((r) => {
+      const run = this.store.run(r.id);
+      return run && run.channelId === msg.channelId && run.threadId === threadId && !run.kind;
+    });
+    for (const r of mine) this.cancelRun(r.id);
+    this.postSystem(near, mine.length ? `Stopped ${this.handleOf(agent.id)}.` : `${this.handleOf(agent.id)} isn't working on anything here.`);
+  }
+
   /** Commands Wisp answers itself: /context (how full the conversation is), /model, /effort and /harness. */
   private answerCommand(agent: Agent, msg: Message, threadId: string | null) {
     const parsed = parseCommand(msg.body, agent.handle);
     if (parsed?.name === "model") return void this.answerModel(agent, msg, threadId, parsed.args);
     if (parsed?.name === "effort") return void this.answerEffort(agent, msg, threadId, parsed.args);
     if (parsed?.name === "harness") return void this.answerHarness(agent, msg, threadId, parsed.args);
+    if (parsed?.name === "new") return void this.answerNew(agent, msg, threadId);
+    if (parsed?.name === "stop") return void this.answerStop(agent, msg, threadId);
     const usage = this.store.latestUsage(agent.id, msg.channelId, threadId);
     this.postMessage({ channelId: msg.channelId, threadId, author: { kind: "agent", id: agent.id }, body: "", parts: [{ type: "context", usage }], hop: msg.hop + 1, route: false });
   }
@@ -1577,6 +1622,7 @@ export class Hub {
     // a harness's own command goes to it exactly as typed, into the same conversation
     const command = !background && trigger.author.kind === "user" ? this.commandFor(agent, trigger.body) : null;
     if (command?.via === "raw") return `/${command.name}${command.args ? ` ${command.args}` : ""}`;
+    if (!background && trigger.author.kind === "user" && this.isSummaryCompact(agent, trigger.body)) return SUMMARY_REQUEST;
     const others = store
       .agents(agent.workspaceId)
       .filter((a) => a.id !== agent.id)

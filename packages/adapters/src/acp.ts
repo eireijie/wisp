@@ -397,11 +397,17 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
   };
 }
 
+/**
+ * Commands that make no sense in a chat run one message at a time: Wisp has its own (/new, /compact,
+ * /stop, /model, /context), or they act on a running turn that Wisp's runs never leave open.
+ */
+const ACP_CHAT_SKIP = new Set(["new", "reset", "clear", "compact", "compress", "model", "context", "steer", "queue", "stop"]);
+
 /** The commands from an available_commands_update; an agent runs them when a prompt starts with "/name". Exported for tests. */
 export function acpCommands(list: Json): CommandOption[] {
   if (!Array.isArray(list)) return [];
   return list
-    .filter((c: Json) => typeof c?.name === "string" && c.name.trim())
+    .filter((c: Json) => typeof c?.name === "string" && c.name.trim() && !ACP_CHAT_SKIP.has(c.name.trim().replace(/^\//, "")))
     .slice(0, 500)
     .map((c: Json) => ({ name: c.name.trim().replace(/^\//, ""), description: shortDescription(c.description), hint: typeof c.input?.hint === "string" ? c.input.hint.slice(0, 120) : undefined, kind: "command" as const, via: "raw" as const }));
 }
