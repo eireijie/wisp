@@ -7,7 +7,8 @@ import { useStore } from "../store.ts";
 import { go, href, type AgentTab } from "../router.ts";
 import { effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { setChannelPrefs } from "../components/Channels.tsx";
-import { computerKindLabel, whoCanAsk, type DeviceInfo } from "../devices.ts";
+import { computerSummary, whoCanAsk, type DeviceInfo } from "../devices.ts";
+import { useComputerMode } from "../computerMode.ts";
 import { AgentAvatar, cx, harnessLabel, timeAgo } from "../components/ui.tsx";
 
 /** What each section is called, on the left list and at the top of its page. */
@@ -93,10 +94,11 @@ export function OverviewRows({ agent, nodes }: { agent: Agent; nodes: DeviceInfo
     api<Skill[]>("GET", "/api/skills").then(setSkills, () => setSkills([]));
   }, [agent.id, skillsVersion]);
   const to = (tab: AgentTab) => href({ view: "agents", agentId: agent.id, tab });
+  const { advanced } = useComputerMode();
   const computer = computers.find((c) => c.id === agent.computerId);
   const device = nodes.find((n) => n.id === agent.nodeId);
   const model = [agent.model ? prettyModel(agent.model) : "Automatic", agent.settings.effort ? effortName(agent.settings.effort) : null].filter(Boolean).join(" · ");
-  const computerValue = computer ? `${computer.name} · ${computerKindLabel(computer, nodes)}` : agent.settings.headless ? "Headless" : device ? device.name : "None yet";
+  const computerValue = computer ? computerSummary(computer, nodes, advanced) : agent.settings.headless ? "Headless" : device ? device.name : "None yet";
   const on = routines?.filter((r) => r.enabled).length ?? 0;
   const mine = skills?.filter((s) => s.allAgents || s.agentIds.includes(agent.id)).length ?? 0;
   const dm = channels.find((c) => c.kind === "dm" && c.name.endsWith(`:${agent.id}`));

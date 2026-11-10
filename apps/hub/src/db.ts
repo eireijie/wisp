@@ -365,6 +365,8 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["approvals", "flow_json", "TEXT"],
   // an agent asking to change a file on a storage (the Storage mod)
   ["approvals", "storage_json", "TEXT"],
+  // an agent asking to use a person's own computer for a task
+  ["approvals", "device_json", "TEXT"],
   // last_run_at is when a run was requested; this is when one actually finished
   ["routines", "last_completed_at", "TEXT"],
   ["messages", "edited_at", "TEXT"],

@@ -187,7 +187,7 @@ export const NodeToHub = z.discriminatedUnion("type", [
    * A run's sign-in was renewed by its harness (Codex and Hermes rotate ChatGPT's refresh token):
    * the hub keeps the new one, so the next run anywhere doesn't use the old, now dead one.
    */
-  z.object({ type: z.literal("credential_refreshed"), connectionId: z.string().max(64), runId: z.string().max(64).optional(), secret: ConnectionSecret }),
+  z.object({ type: z.literal("credential_refreshed"), connectionId: z.string().max(64), runId: z.string().max(64).optional(), terminal: z.boolean().optional(), secret: ConnectionSecret }),
   /** how a model sign-in this device runs is going (the link and code to show); never the secret */
   z.object({ type: z.literal("model_login"), login: ModelLogin }),
   /** a model sign-in finished: on success, what the hub keeps as the new connection */
@@ -206,6 +206,10 @@ export const NodeToHub = z.discriminatedUnion("type", [
   z.object({ type: z.literal("screen_frame"), computerId: z.string(), image: z.string(), width: z.number().int(), height: z.number().int() }),
   z.object({ type: z.literal("tunnel_ready"), tunnelId: z.string() }),
   z.object({ type: z.literal("tunnel_closed"), tunnelId: z.string(), error: z.string().optional() }),
+  /** a terminal is showing (`resumed`: it was already running, and its recent screen follows) */
+  z.object({ type: z.literal("term_ready"), termId: z.string(), resumed: z.boolean() }),
+  /** a terminal stopped showing; `exited`: its shell ended (otherwise it may still be running) */
+  z.object({ type: z.literal("term_closed"), termId: z.string(), error: z.string().max(500).optional(), exited: z.boolean().optional() }),
   /** something about the screen's code its owner should hear about (wrong codes, a lockout) */
   z.object({ type: z.literal("screen_event"), text: z.string().max(500), alert: z.boolean().optional() }),
   /** agents that already exist on this device and could be brought into Wisp */
@@ -238,6 +242,15 @@ export const HubToNode = z.discriminatedUnion("type", [
   /** close the screen again for `purpose` (the viewer left) */
   z.object({ type: z.literal("screen_lock"), purpose: z.string().max(100) }),
   z.object({ type: z.literal("tunnel_close"), tunnelId: z.string() }),
+  /**
+   * The Code mod's terminals, a shell on a computer this device runs: open (or reattach to) the shell
+   * named `session` there; keys and screen bytes travel as binary frames with `termId` (see tunnelFrame).
+   * A device's own screen asks for its code, as live view does.
+   */
+  z.object({ type: z.literal("term_open"), termId: z.string(), computer: ComputerSpec, session: z.string().max(60), cols: z.number().int().min(2).max(1000), rows: z.number().int().min(1).max(500), code: z.string().max(200).optional(), launch: z.string().max(40).optional(), credential: RunCredential.optional(), harnessOn: z.string().max(120).optional() }),
+  z.object({ type: z.literal("term_resize"), termId: z.string(), cols: z.number().int().min(2).max(1000), rows: z.number().int().min(1).max(500) }),
+  /** stop showing it; `end`: the pane was closed, so the shell stops too */
+  z.object({ type: z.literal("term_close"), termId: z.string(), end: z.boolean().optional() }),
   /** look again for agents that already exist on this device */
   z.object({ type: z.literal("discover") }),
   /** check again what this device has: harnesses and their models, its screen and VM support, agents to import */
@@ -323,6 +336,9 @@ export type ClientEvent =
   | { type: "model_login"; login: ModelLogin }
   /** an owner switched optional features on or off (Settings → General → Mods) */
   | { type: "features"; features: import("./features.ts").Features };
+
+/** Terminal ids start with this, so a binary frame goes to the right place. */
+export const TERM_PREFIX = "term_";
 
 /**
  * Tunnel bytes travel as binary WebSocket frames: one byte with the tunnel id's length, the id,

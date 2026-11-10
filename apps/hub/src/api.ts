@@ -80,6 +80,7 @@ import { registerRemoteMcp } from "./remote-mcp.ts";
 import { agentPolicy } from "./policy.ts";
 import { FEATURE_PRESET, createOrganization, registerOrgApi } from "./api-orgs.ts";
 import { agentDefaults } from "./agent-defaults.ts";
+import { advancedOn, simplePlacement } from "./shared-computer.ts";
 import { spawnRight } from "./spawn.ts";
 import { greetNewAgent, registerSetupApi } from "./greeting.ts";
 import { workspaceFeatures } from "./features.ts";
@@ -135,6 +136,7 @@ const SETTINGS = z
     headless: z.boolean(),
     anyoneCanAsk: z.boolean(),
     runIn: z.enum(["computer", "device"]),
+    useDevices: z.record(z.string().min(1).max(64), z.enum(["ask", "tell"])),
     role: z.string().trim().max(60),
     roleNotes: z.string().max(2000),
     respondTo: z.enum(["me", "anyone", "people"]),
@@ -1189,7 +1191,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     // a person's device only when it's shared, or theirs and this is their work; else where its maker runs
     const requester = requesterOf(c) ?? maker.settings.createdBy ?? null;
     const node = defaults.nodeId ? store.node(defaults.nodeId) : undefined;
-    const nodeId = node && (node.shared || !node.ownerId || node.ownerId === requester) ? node.id : maker.nodeId;
+    let nodeId = node && (node.shared || !node.ownerId || node.ownerId === requester) ? node.id : maker.nodeId;
     const policy = agentPolicy(hub, c.workspaceId);
     let settings: Record<string, unknown> = {
       respondTo: "me",
@@ -1200,14 +1202,26 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       ...(body.role.trim() ? { role: body.role.trim() } : {}),
     };
     let computerId: string | null = null;
+    // the shared computer when it's for an owner's work (Simple, or Advanced's default); else its own
+    const forOwner = !!requester && store.role(c.workspaceId, requester) === "owner";
+    const choice = !advancedOn(store, c.workspaceId) ? (forOwner ? "shared" : "own-vm") : defaults.computer === "shared" && !forOwner ? "own-vm" : defaults.computer;
+    if (choice === "shared") {
+      const placed = simplePlacement(hub, c.workspaceId);
+      if (placed.computerId) {
+        nodeId = placed.nodeId;
+        computerId = placed.computerId;
+      } else if (placed.waits && (nodeId ?? null) === placed.nodeId) settings = { ...settings, waitsForShared: true };
+    }
     const caps = nodeId ? store.nodeCapabilities(nodeId) : null;
-    if (defaults.computer === "own-vm" && nodeId && caps?.vm.ok) {
+    if (computerId) {
+      // placed on the shared computer above
+    } else if (choice === "own-vm" && nodeId && caps?.vm.ok) {
       const size = VM_SIZES[computerDefaults(hub, c.workspaceId).vmSize];
       const comp = store.createComputer({ workspaceId: c.workspaceId, name: `${body.name}'s computer`.slice(0, 80), kind: "vm", nodeId, config: { cpus: size.cpus, memoryGb: size.memoryGb }, status: "starting" });
       hub.computers.startInBackground(comp);
       computerId = comp.id;
       settings = { runIn: "computer", ...settings };
-    } else if (defaults.computer === "none") settings = { headless: true, ...settings };
+    } else if (choice === "none") settings = { headless: true, ...settings };
     const created = store.createAgent({ workspaceId: c.workspaceId, handle, name: body.name, harness, model: harness === defaults.harness ? defaults.model : maker.model, nodeId: nodeId ?? null, computerId, instructions: body.instructions });
     const agent = store.updateAgent(created.id, { settings: settings as never })!;
     const general = store.channelByName(c.workspaceId, "general");
@@ -1264,6 +1278,18 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       if (fields.model === undefined) fields.model = defaults.models[fields.harness ?? ""] ?? (fields.harness === defaults.harness ? defaults.model : undefined);
       if (fields.nodeId === undefined && defaults.nodeId && canUseDevice(c, defaults.nodeId)) fields.nodeId = defaults.nodeId;
     }
+    // where it works: in Simple an owner's agent goes on the shared computer, with its AI tool beside it
+    // (a member's gets a computer of its own, so it never has the owner's sign-ins); Advanced follows the defaults
+    const isOwner = c.viewer.role === "owner";
+    const computerChoice = !defaults ? null : !advancedOn(store, c.workspaceId) ? (isOwner ? "shared" : "own-vm") : defaults.computer === "shared" && !isOwner ? "own-vm" : defaults.computer;
+    let placedComputer: string | null | undefined;
+    if (computerChoice === "shared" && fields.computerId === undefined) {
+      const placed = simplePlacement(hub, c.workspaceId);
+      if (body.nodeId === undefined && placed.nodeId && canUseDevice(c, placed.nodeId)) fields.nodeId = placed.nodeId;
+      placedComputer = placed.computerId && fields.nodeId === placed.nodeId ? placed.computerId : null;
+      // no computer anywhere yet (or no device at all): it gets the shared one once a device can run it
+      if (placed.waits && (fields.nodeId ?? null) === placed.nodeId) body.settings = { ...body.settings, waitsForShared: true } as typeof body.settings;
+    }
     const harness = fields.harness;
     if (!harness) return reply.code(400).send({ error: "harness: pick a harness (no device offers one yet to use as a default)" });
     if (store.agentByHandle(c.workspaceId, body.handle)) return reply.code(409).send({ error: "handle taken" });
@@ -1276,21 +1302,23 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const screenWhy = screenProblem(body.computerId, fields.nodeId ?? null);
     if (screenWhy) return reply.code(400).send({ error: screenWhy });
     if (body.settings?.anyoneCanAsk && (!body.nodeId || store.node(body.nodeId)?.ownerId !== c.actor.id)) delete body.settings.anyoneCanAsk;
+    // only a device's owner lets an agent use it
+    if (body.settings?.useDevices) body.settings.useDevices = Object.fromEntries(Object.entries(body.settings.useDevices).filter(([nodeId]) => store.node(nodeId)?.ownerId === c.actor.id && store.node(nodeId)?.workspaceId === c.workspaceId));
     // new agents start at the workspace's default access unless someone picked one
     if (!body.settings?.access) body.settings = { ...body.settings, access: agentPolicy(hub, c.workspaceId).defaultAccess };
     // it remembers who made it, and answers only them until they say otherwise
     body.settings = { respondTo: "me", ...body.settings, createdBy: c.actor.id };
     // "Use my defaults" with a VM: the agent gets a computer of its own on its device
-    let computerId = fields.computerId;
+    let computerId = placedComputer !== undefined ? placedComputer : fields.computerId;
     if (defaults && computerId === undefined) {
       const caps = fields.nodeId ? store.nodeCapabilities(fields.nodeId) : null;
-      if (defaults.computer === "own-vm" && fields.nodeId && caps?.vm.ok) {
+      if (computerChoice === "own-vm" && fields.nodeId && caps?.vm.ok) {
         const size = VM_SIZES[computerDefaults(hub, c.workspaceId).vmSize];
         const comp = store.createComputer({ workspaceId: c.workspaceId, name: `${body.name}'s computer`.slice(0, 80), kind: "vm", nodeId: fields.nodeId, config: { cpus: size.cpus, memoryGb: size.memoryGb }, status: "starting" });
         hub.computers.startInBackground(comp);
         computerId = comp.id;
         body.settings = { runIn: "computer", ...body.settings };
-      } else if (defaults.computer === "none") body.settings = { headless: true, ...body.settings };
+      } else if (computerChoice === "none") body.settings = { headless: true, ...body.settings };
     }
     const created = store.createAgent({ ...fields, harness, computerId, workspaceId: c.workspaceId });
     const agent = store.updateAgent(created.id, { settings: body.settings })!;
@@ -1319,6 +1347,17 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!body) return;
     // who made it is the hub's record, not a setting
     if (body.settings) delete body.settings.createdBy;
+    // whether it may use someone's own computer is that person's call, device by device
+    if (body.settings?.useDevices) {
+      const before = agent.settings.useDevices ?? {};
+      const next = body.settings.useDevices;
+      for (const nodeId of new Set([...Object.keys(before), ...Object.keys(next)])) {
+        if (before[nodeId] === next[nodeId]) continue;
+        const node = store.node(nodeId);
+        if (!node || node.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "useDevices: unknown device" });
+        if (node.ownerId !== c.actor.id) return reply.code(403).send({ error: `Only ${node.ownerId ? (store.user(node.ownerId)?.name ?? "its owner") : "its owner"} decides whether agents use ${node.name}` });
+      }
+    }
     // who an agent answers is up to whoever made it (and the organization's owners)
     if (body.settings && (body.settings.respondTo !== undefined || body.settings.respondPeople !== undefined)) {
       const creator = agent.settings.createdBy;
@@ -2562,6 +2601,12 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (transport !== "vnc") hub.computers.addFrameViewer(comp, socket, ticket.userId);
     else if (comp.kind === "orgo") hub.computers.openOrgoRelay(comp, socket);
     else hub.computers.openTunnel(comp, socket, ticket.code);
+  });
+
+  /** A terminal (the Code mod): a one-time ticket from POST /api/computers/:id/terminal; the pane's size rides along. */
+  app.get("/ws/terminals/:id", { websocket: true }, (socket, req) => {
+    const q = req.query as { ticket?: string; cols?: string; rows?: string };
+    hub.terminals.connect(socket, (req.params as { id: string }).id, q.ticket, { cols: Number(q.cols), rows: Number(q.rows) });
   });
 
   /** Browsers can't set headers on WebSockets, so the session token arrives in the first frame. */

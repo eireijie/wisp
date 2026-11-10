@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, signInProblem, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
+import { CONNECTOR_CATALOG, HARNESSES, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, withArticle, TERM_PREFIX, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunCredential, type RunRequest, type VmConfig, signInProblem } from "@wisp/core";
 import { HARNESS_SPECS, HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
 import { WispClient, WispError } from "@wisp/sdk";
 import { runUpdate, version } from "@wisp/update";
@@ -14,9 +14,10 @@ import { RemoteDesktopServer, type RemoteDesktopConfig } from "./computers/remot
 import type { RustdeskConfig } from "./rustdesk.ts";
 import { detectRemoteApps } from "./remote-apps.ts";
 import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
+import { Terminals, deviceShell, sessionName, shellQuote, vmShell } from "./terminals.ts";
 import { HarnessLogins } from "./harness-login.ts";
 import { ModelLogins } from "./model-login.ts";
-import { type DockerVm } from "./computers/docker.ts";
+import { recipeTag, type DockerVm } from "./computers/docker.ts";
 import { mcpBundle } from "./vm-tools.ts";
 import { NO_NODE, findNpmDir, withDir } from "./npm.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
@@ -26,6 +27,7 @@ import { bringBack, mergeBranch, prepareCheckout, prepareClone } from "./git.ts"
 /** How often a device looks again at whether its harnesses are signed in (someone may do it in a terminal). */
 const SIGN_IN_CHECK_MS = 20_000;
 const MCP_BIN = fileURLToPath(new URL("../../../bin/wisp-mcp.mjs", import.meta.url));
+const BROWSER_BIN = fileURLToPath(new URL("../../../bin/wisp-browser.mjs", import.meta.url));
 
 export interface NodeConfig {
   hub: string;
@@ -105,6 +107,10 @@ export class NodeDaemon {
   private remoteServer: RemoteDesktopServer;
   /** tunnels opened with the screen's code */
   private codeTunnels = new Set<string>();
+  /** the Code mod's shells, here and in the VMs (keys: "dev:<computer>:<session>" or "vm:…") */
+  private terminals = new Terminals();
+  /** terminals still starting (a VM coming up), and whether the hub let go of them meanwhile */
+  private openingTerms = new Map<string, { end?: boolean; gone?: boolean }>();
   /** each harness's logins here, and which agent uses which */
   private accounts: HarnessAccounts;
   /** whether each harness is signed in, where it runs ("<computer id or nothing>\\n<harness>") */
@@ -204,6 +210,106 @@ export class NodeDaemon {
     this.codeTunnels.clear();
   }
 
+  /**
+   * A shell for the Code mod, on this device or inside one of its VMs. The hub lets only the
+   * computer's owner ask; this device's own shell also needs the screen's code, checked here every time.
+   */
+  private async openTerminal(msg: Extract<HubToNode, { type: "term_open" }>) {
+    const { termId, computer } = msg;
+    const closed = (error?: string, exited?: boolean) => this.send({ type: "term_closed", termId, error, exited });
+    if (this.local.paused) return closed("the device is paused");
+    if (computer.kind !== "device" && computer.kind !== "vm") return closed("this computer has no terminal here");
+    if (computer.kind === "device" && this.lock.enabled) {
+      const r = this.lock.check(msg.code);
+      this.codeResult(r);
+      if (!r.ok) return closed(r.error);
+    }
+    const session = sessionName(msg.session);
+    const key = `${computer.kind === "vm" ? "vm" : "dev"}:${computer.id}:${session}`;
+    const command = async () => {
+      // a harness's CLI in the pane: only ones from Wisp's own list, by name
+      const harness = msg.launch ? HARNESSES.find((h) => h.id === msg.launch) : undefined;
+      if (msg.launch && !harness) throw new Error(`${msg.launch} isn't a harness Wisp knows`);
+      const vm = computer.kind === "vm" ? await this.computers.vm(computer) : null;
+      if (computer.kind === "vm" && !vm) throw new Error("this VM isn't on this device");
+      await vm?.ready();
+      const pane = harness ? await this.terminalLaunch(harness.id, harness.binary, msg.credential, vm, computer.name, msg.harnessOn) : null;
+      const cmd = vm ? vmShell({ bin: vm.engine.bin, name: vm.name, user: vm.user, home: vm.home }, session, pane?.launch) : deviceShell(session, { launch: pane?.launch });
+      return { ...cmd, ended: pane?.ended };
+    };
+    const opening: { end?: boolean; gone?: boolean } = {};
+    this.openingTerms.set(termId, opening);
+    try {
+      const { resumed, replay } = await this.terminals.attach(
+        key,
+        termId,
+        { cols: msg.cols, rows: msg.rows },
+        command,
+        (b) => {
+          if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(tunnelFrame(termId, b));
+        },
+        closed,
+      );
+      if (opening.gone) return this.terminals.detach(termId, opening.end);
+      // ready first, so the page clears itself before the recent screen arrives
+      this.send({ type: "term_ready", termId, resumed });
+      replay();
+    } catch (err) {
+      closed((err as Error).message);
+    } finally {
+      this.openingTerms.delete(termId);
+    }
+  }
+
+  /**
+   * What a terminal runs to start a harness's CLI: signed in with the model connection agent runs on
+   * that computer use (in the same folder, so a sign-in either renews stays shared), or the harness's
+   * own sign-in there. A VM's harness with neither is said in plain words instead of opening its own
+   * sign-in prompt.
+   */
+  private async terminalLaunch(harness: string, binary: string, cred: RunCredential | undefined, vm: DockerVm | null, where: string, harnessOn?: string): Promise<{ launch: string; ended?: () => void }> {
+    const label = harnessLabel(harness);
+    const support = cred ? credentialSupport(harness, cred.provider, cred.kind) : null;
+    // PowerShell has no `. file` for the variables: Windows CLIs use their own sign-in
+    if (!cred || !support || (!vm && process.platform === "win32")) {
+      if (vm && (await vm.signedIn(harness).catch(() => null)) === false) {
+        // the agents here run it on a device, signed in there; that sign-in stays on the device
+        if (harnessOn) throw new Error(`The agents on ${where} run ${label} on ${harnessOn}, signed in there. Open ${label} on ${harnessOn}, or run \`${binary} login\` in a shell here to sign ${where} in too.`);
+        throw new Error(`${label} isn't signed in on ${where}. Connect a model for it in Settings → Models, or sign in to ${label} once from an agent's page → Computer.`);
+      }
+      return { launch: binary };
+    }
+    const id = safeId(cred.connectionId);
+    this.keepConnections?.add(id);
+    const files = vm ? vmCredentialFs(vm) : localCredentialFs;
+    const baseHome = vm ? `${vm.home}/${VM_HARNESS_DIR[harness] ?? ".config"}` : this.accounts.dir(harness, this.accounts.accountOf("", harness));
+    const connectionHome = vm ? `${vm.home}/.wisp/connections/${id}/${harness}` : path.join(this.cfg.dir, "connections", id, harness);
+    let prepared: PreparedCredential;
+    try {
+      prepared = await prepareCredential(harness, cred, { fs: files, baseHome, connectionHome });
+      // Codex's own screen reads a key only from auth.json (CODEX_API_KEY is for `codex exec`), so it
+      // gets one in the connection's folder, as `codex login --with-api-key` writes it
+      if (harness === "codex" && cred.kind === "key") {
+        if (cred.provider !== "openai") throw new Error(`Codex's own screen can't use ${withArticle(providerLabel(cred.provider))} key`);
+        await files.write(files.join(connectionHome, "auth.json"), JSON.stringify({ auth_mode: "apikey", OPENAI_API_KEY: cred.secret.key }, null, 2), 0o600);
+        for (const name of ["config.toml", "skills", "AGENTS.md", "rules", "prompts"]) await files.link(files.join(baseHome, name), files.join(connectionHome, name)).catch(() => {});
+        prepared = { env: { CODEX_HOME: connectionHome }, refreshed: async () => null };
+      }
+    } catch (err) {
+      throw new Error(`couldn't use the ${providerLabel(cred.provider)} connection: ${(err as Error).message}`);
+    }
+    // its variables in a private file, read by the CLI's own shell only (not left in the shell after it)
+    const file = files.join(connectionHome, "terminal.env");
+    await files.write(file, Object.entries(prepared.env).map(([k, v]) => `export ${k}=${shellQuote(v)}\n`).join(""), 0o600);
+    // a sign-in the CLI renewed goes back to the hub, as a run's does
+    const ended = () =>
+      void prepared
+        .refreshed()
+        .then((secret) => secret && this.send({ type: "credential_refreshed", connectionId: cred.connectionId, terminal: true, secret }))
+        .catch(() => {});
+    return { launch: `(. ${shellQuote(file)}; ${binary})`, ended };
+  }
+
   /** A code was entered for this screen: tell its owner when it was wrong. */
   private codeResult(r: { ok: boolean; lockedOut?: boolean; triesLeft?: number }) {
     if (r.ok) return;
@@ -221,6 +327,7 @@ export class NodeDaemon {
       // a new code (or none) or a new server: whatever the old one opened closes
       this.lock.lockAll();
       this.closeTunnels();
+      if (codeChanged) this.terminals.killAll("dev:");
       this.computers.stopAll();
     }
     this.applyRemoteServer();
@@ -232,6 +339,7 @@ export class NodeDaemon {
       this.log("paused: stopping agents and computers until `wisp node resume`");
       for (const a of this.aborts.values()) a.abort("paused");
     }
+    if (this.local.paused) this.terminals.killAll();
     if (this.local.paused || !this.local.shareScreen) {
       this.computers.stopAll();
       this.closeTunnels();
@@ -279,6 +387,7 @@ export class NodeDaemon {
     this.logins.stopAll();
     this.modelLogins.stopAll();
     this.closeTunnels();
+    this.terminals.killAll();
     this.remoteServer.stop();
     const end = Date.now() + wait;
     while (this.aborts.size && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
@@ -301,7 +410,9 @@ export class NodeDaemon {
     ws.on("message", (raw, isBinary) => {
       if (isBinary) {
         const frame = readTunnelFrame(new Uint8Array(raw as Buffer));
-        if (frame) this.tunnels.get(frame.tunnelId)?.write(frame.payload);
+        if (!frame) return;
+        if (frame.tunnelId.startsWith(TERM_PREFIX)) this.terminals.write(frame.tunnelId, frame.payload);
+        else this.tunnels.get(frame.tunnelId)?.write(frame.payload);
         return;
       }
       let msg: HubToNode;
@@ -316,6 +427,8 @@ export class NodeDaemon {
       // live views and tunnels belong to this connection; the hub asks again after a reconnect
       this.computers.stopAll();
       this.closeTunnels();
+      // shells keep running for a while, so the person picks up where they were once it's back
+      this.terminals.detachAll();
       if (this.stopped) return;
       if (code === 4401) {
         this.log("hub rejected the node token. Create a new node in Wisp and run `wisp node start` again.");
@@ -404,7 +517,10 @@ export class NodeDaemon {
             void this.sendVmCatalog(msg.computer);
             void this.sweepVmConnections(msg.computer);
           }
-          if (msg.action.action === "destroy") this.forgetVm(msg.computer.id);
+          if (msg.action.action === "destroy") {
+            this.forgetVm(msg.computer.id);
+            this.terminals.killAll(`vm:${msg.computer.id}:`);
+          }
         },
         (err) => {
           this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message });
@@ -456,6 +572,14 @@ export class NodeDaemon {
             this.send({ type: "tunnel_closed", tunnelId, error: (err as Error).message });
           },
         );
+    } else if (msg.type === "term_open") {
+      void this.openTerminal(msg);
+    } else if (msg.type === "term_resize") {
+      this.terminals.resize(msg.termId, msg.cols, msg.rows);
+    } else if (msg.type === "term_close") {
+      const opening = this.openingTerms.get(msg.termId);
+      if (opening) Object.assign(opening, { gone: true, end: msg.end });
+      else this.terminals.detach(msg.termId, msg.end);
     } else if (msg.type === "tunnel_close") {
       this.tunnels.get(msg.tunnelId)?.close();
       this.tunnels.delete(msg.tunnelId);
@@ -549,12 +673,13 @@ export class NodeDaemon {
     const adapter = this.registry[agent.harness];
     if (!adapter) return this.send({ type: "run_failed", runId: run.runId, error: `no headless adapter for ${agent.harness} yet; connect it with wisp-mcp instead` });
 
-    // its VM, when it has one here: it runs inside it, or at least gets its browser
+    // its VM, when it has one here: it runs inside it (started now), or gets its browser (the VM starts on first use)
     let vm: DockerVm | null = null;
     if (run.computer?.kind === "vm") {
       try {
         vm = await this.computers.vm(run.computer);
-        await vm?.ready();
+        if (run.inComputer) await vm?.ready();
+        else await vm?.identityReady();
       } catch (err) {
         if (run.inComputer) return this.send({ type: "run_failed", runId: run.runId, error: `couldn't start ${run.computer.name}: ${(err as Error).message}` });
         vm = null;
@@ -583,7 +708,9 @@ export class NodeDaemon {
     }
 
     // an agent with a VM here works in the folder it shares with the VM, so files go both ways
-    let cwd = (run.computer && this.computers.vmFiles(run.computer)) || path.join(this.cfg.dir, "agents", agentFolder(this.cfg.dir, agent));
+    // on the shared computer each agent has its own working folder in the shared files, which the others can still open
+    const vmFiles = run.computer ? this.computers.vmFiles(run.computer) : null;
+    let cwd = vmFiles ? ((run.computer!.config as VmConfig).shared ? path.join(vmFiles, agentFolder(this.cfg.dir, agent)) : vmFiles) : path.join(this.cfg.dir, "agents", agentFolder(this.cfg.dir, agent));
     fs.mkdirSync(cwd, { recursive: true });
     // coding tasks run in their own checkout of the team repo, on the task's branch
     if (run.workspace) {
@@ -627,7 +754,7 @@ export class NodeDaemon {
       // the VM's Chrome as page-element tools, run inside the VM either way
       if (vm) {
         const browserBin = vm.user === "warren" ? "warren-browser-mcp" : "wisp-browser-mcp";
-        browser = inside ? { command: browserBin, args: [], env: {} } : { command: vm.engine.bin, args: ["exec", "-i", "-u", vm.user, vm.name, browserBin], env: {} };
+        browser = inside ? { command: browserBin, args: [], env: {} } : await this.lazyBrowser(agent.id, run.runId, vm, browserBin);
       }
     } catch (err) {
       this.aborts.delete(run.runId);
@@ -1078,6 +1205,26 @@ export class NodeDaemon {
       this.vmTools.set(vm.name, bundle.hash);
     }
     return { command: "node", args: [file], env: { WISP_URL: await vm.hubUrl(this.cfg.hub), WISP_TOKEN: token, WISP_RUN: runId } };
+  }
+
+  /**
+   * The VM's browser tools for a harness outside it, standing in until first used so a chat reply
+   * doesn't start the computer (see browser-proxy.ts). Without a token of its own (an older hub) it
+   * runs them in the VM straight away.
+   */
+  private async lazyBrowser(agentId: string, runId: string, vm: DockerVm, browserBin: string): Promise<McpServerSpec> {
+    const direct = [vm.engine.bin, "exec", "-i", "-u", vm.user, vm.name, browserBin];
+    const token = await this.harnessToken(agentId);
+    if (!token) {
+      await vm.ready();
+      return { command: direct[0], args: direct.slice(1), env: {} };
+    }
+    const asNode: Record<string, string> = process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {};
+    return {
+      command: process.execPath,
+      args: [BROWSER_BIN],
+      env: { ...asNode, WISP_URL: this.cfg.hub, WISP_TOKEN: token, WISP_RUN: runId, WISP_BROWSER_CMD: JSON.stringify(direct), WISP_BROWSER_TOOLS: path.join(this.cfg.dir, "computers", `browser-tools-${recipeTag()}.json`) },
+    };
   }
 
   private async harnessToken(agentId: string): Promise<string | null> {

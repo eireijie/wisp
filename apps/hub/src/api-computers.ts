@@ -6,8 +6,10 @@ import { ComputerError } from "./computers.ts";
 import { OrgoClient, OrgoError } from "./orgo.ts";
 import { routineSlug } from "./routines.ts";
 import type { Hub } from "./hub.ts";
+import { sessionName } from "./terminals.ts";
 import { VM_SIZES, computerDefaults } from "./policy.ts";
 import { greetNewAgent } from "./greeting.ts";
+import { ADVANCED_KEY, adoptShared, advancedOn, sharedComputer } from "./shared-computer.ts";
 
 export const HARNESS = z.union([z.enum(HARNESS_IDS as [string, ...string[]]), z.string().regex(DEVICE_HARNESS, 'a known harness, or "acp:<name>" declared on a device')]);
 
@@ -281,6 +283,35 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     }
   });
 
+  /** The computers this person can open a terminal on (the Code mod), with what the page needs to open one. */
+  app.get("/api/terminals", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    return store
+      .computers(c.workspaceId)
+      .filter((x) => !hub.terminals.refusal(x, c.actor.id))
+      .map((x) => ({ id: x.id, name: x.name, kind: x.kind, online: computers.online(x), code: x.kind === "device" ? computers.codeKind(x) : null }));
+  });
+
+  /**
+   * A terminal on it (the Code mod): a one-time link to the shell named `session`, for the person
+   * whose machine it is. A device's own screen needs its code, which the device checks.
+   */
+  app.post("/api/computers/:id/terminal", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    const comp = own(c, (req.params as { id: string }).id);
+    if (!comp) return reply.code(404).send({ error: "computer not found" });
+    const body = parse(z.object({ session: z.string().max(60).optional(), code: SCREEN_CODE.optional(), launch: z.enum(HARNESS_IDS as [string, ...string[]]).optional() }), req.body ?? {}, reply);
+    if (!body) return;
+    try {
+      const session = sessionName(body.session);
+      return { session, url: `/ws/terminals/${comp.id}?ticket=${hub.terminals.ticket(comp, c.actor.id, session, body.code, body.launch, body.launch ? hub.terminalCredential(comp, c.actor.id, body.launch) : null)}` };
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
   /** Do one thing on the computer as a person (needs control). Live view uses its socket instead. */
   app.post("/api/computers/:id/act", async (req, reply) => {
     const c = need(req, reply, { member: true });
@@ -463,17 +494,39 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply);
     if (!c) return;
     if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only" });
-    const comp = myComputer(c, reply);
-    if (!comp) return;
+    const borrowing = !!(req.body as { on?: unknown })?.on;
+    // a person's own computer it was allowed (Use my computers) doesn't need one of its own
+    const comp = borrowing ? null : myComputer(c, reply);
+    if (!borrowing && !comp) return;
     const action = parse(ComputerAction, (req.body as { action?: unknown })?.action, reply);
     if (!action) return;
     if (["destroy", "stop", "signin", "fill_login"].includes(action.action))
       return reply.code(403).send({ error: action.action === "signin" ? "people sign harnesses in; use computer_ask_human" : action.action === "fill_login" ? "use login_fill: Wisp fills logins from the password manager" : "only people can stop or remove a computer" });
+    const extra = parse(z.object({ on: z.string().trim().min(1).max(100).optional(), why: z.string().max(2000).optional() }), { on: (req.body as { on?: unknown })?.on, why: (req.body as { why?: unknown })?.why }, reply);
+    if (!extra) return;
     try {
-      return await computers.act(comp, action, c.actor, { requester: h.requesterOf(c) });
+      // one of the person's own computers, when they allowed it (Use my computers)
+      if (extra.on) {
+        const agent = store.agent(c.actor.id)!;
+        const requester = h.requesterOf(c);
+        const screen = hub.deviceUse.use(agent, extra.on, requester, extra.why ?? "");
+        const result = await computers.act(screen, action, c.actor, { requester, borrowed: true });
+        hub.deviceUse.noteUse(hub.runFor(agent.id, req.headers["x-wisp-run"])?.id, screen.nodeId!);
+        return result;
+      }
+      return await computers.act(comp!, action, c.actor, { requester: h.requesterOf(c) });
     } catch (err) {
       return fail(reply, err);
     }
+  });
+
+  /** The person's own computers this agent may use, and how (Use my computers). */
+  app.get("/api/computers/mine/devices", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only" });
+    const agent = store.agent(c.actor.id);
+    return agent ? hub.deviceUse.list(agent) : [];
   });
 
   app.post("/api/computers/mine/help", async (req, reply) => {
@@ -529,7 +582,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     const a = store.approval((req.params as { id: string }).id);
     if (!a || !canSeeApproval(c, a)) return reply.code(404).send({ error: "not found" });
-    const body = parse(z.object({ approve: z.boolean(), note: z.string().max(4000).default(""), always: z.boolean().optional() }), req.body, reply);
+    const body = parse(z.object({ approve: z.boolean(), note: z.string().max(4000).default(""), always: z.boolean().optional(), code: SCREEN_CODE.optional() }), req.body, reply);
     if (!body) return;
     if (a.status !== "pending") return reply.code(409).send({ error: `already ${a.status}` });
     const agent = store.agent(a.agentId);
@@ -545,6 +598,22 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       void hub.logins.decide(a, body.approve, !!body.always).then((verdict) => {
         if (agent && store.channel(a.channelId)) hub.postMessage({ channelId: a.channelId, threadId: a.threadId, author: c.actor, body: `@${agent.handle} ${verdict}${note}`, onBehalfOf: ask.requestedBy ?? c.actor.id });
       });
+      return decided;
+    }
+    if (a.device) {
+      // using a person's own computer is theirs to allow
+      const ask = a.device;
+      const who = store.user(ask.ownerId)?.name ?? "its owner";
+      if (c.actor.id !== ask.ownerId) return reply.code(403).send({ error: `Only ${who} can let agents use ${ask.deviceName}` });
+      let verdict: string;
+      try {
+        verdict = await hub.deviceUse.decide(a, body.approve, body.code);
+      } catch (err) {
+        return fail(reply, err);
+      }
+      const decided = store.decideApproval(a.id, body.approve ? "approved" : "denied", c.actor.id, body.note)!;
+      hub.broadcast(c.workspaceId, { type: "approval", approval: decided }, hub.audience(a.channelId));
+      if (agent && store.channel(a.channelId)) hub.postMessage({ channelId: a.channelId, threadId: a.threadId, author: c.actor, body: `@${agent.handle} ${verdict}${note}` });
       return decided;
     }
     if (a.storage) {
@@ -687,27 +756,45 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
 
   // --- settings -------------------------------------------------------------------------------
 
+  /** Simple (agents share one computer, Wisp places them) or Advanced, and the shared computer if there is one. */
+  const placement = (workspaceId: string) => ({ advanced: advancedOn(store, workspaceId), sharedComputerId: sharedComputer(hub, workspaceId, false)?.id ?? null });
+
+  /** The workspace's shared computer, made (off, as a record) if there isn't one yet: owners' agents switch to it. */
+  app.post("/api/computers/shared", async (req, reply) => {
+    const c = need(req, reply, { owner: true });
+    if (!c) return;
+    const shared = sharedComputer(hub, c.workspaceId);
+    if (!shared) return reply.code(409).send({ error: "None of your devices can run a computer yet. Wisp sets one up once a device can (it needs Docker, or Apple's container on a Mac)." });
+    return computers.view(shared);
+  });
+
   app.get("/api/settings/computers", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;
     const key = store.setting(c.workspaceId, "orgo.apiKey");
-    return { orgo: { configured: !!key, hint: key ? `…${key.slice(-4)}` : null }, defaults: computerDefaults(hub, c.workspaceId) };
+    return { orgo: { configured: !!key, hint: key ? `…${key.slice(-4)}` : null }, defaults: computerDefaults(hub, c.workspaceId), ...placement(c.workspaceId) };
   });
 
   app.put("/api/settings/computers", async (req, reply) => {
     const c = need(req, reply, { owner: true });
     if (!c) return;
     const body = parse(
-      z.object({ orgoApiKey: z.string().trim().max(300).nullable(), vmSize: z.enum(["small", "medium", "large"]), controlIdleMinutes: z.number().int().min(1).max(240) }).partial(),
+      z.object({ orgoApiKey: z.string().trim().max(300).nullable(), vmSize: z.enum(["small", "medium", "large"]), controlIdleMinutes: z.number().int().min(1).max(240), advanced: z.boolean() }).partial(),
       req.body,
       reply,
     );
     if (!body) return;
     if (body.vmSize) store.setSetting(c.workspaceId, "computers.vmSize", body.vmSize);
     if (body.controlIdleMinutes) store.setSetting(c.workspaceId, "computers.controlIdleMinutes", String(body.controlIdleMinutes));
+    // Advanced: owners choose where each agent runs; back to Simple, agents waiting for a computer get the shared one
+    if (body.advanced !== undefined) {
+      store.setSetting(c.workspaceId, ADVANCED_KEY, body.advanced ? "true" : null);
+      if (!body.advanced) adoptShared(hub, c.workspaceId);
+      hub.broadcast(c.workspaceId, { type: "agents_changed" });
+    }
     if (body.orgoApiKey === undefined) {
       const key = store.setting(c.workspaceId, "orgo.apiKey");
-      return { orgo: { configured: !!key, hint: key ? `…${key.slice(-4)}` : null }, defaults: computerDefaults(hub, c.workspaceId) };
+      return { orgo: { configured: !!key, hint: key ? `…${key.slice(-4)}` : null }, defaults: computerDefaults(hub, c.workspaceId), ...placement(c.workspaceId) };
     }
     if (body.orgoApiKey) {
       // check the key before saving it
@@ -719,7 +806,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     }
     store.setSetting(c.workspaceId, "orgo.apiKey", body.orgoApiKey || null);
     for (const comp of store.computers(c.workspaceId).filter((x) => x.kind === "orgo")) computers.changed(comp.id);
-    return { orgo: { configured: !!body.orgoApiKey, hint: body.orgoApiKey ? `…${body.orgoApiKey.slice(-4)}` : null }, defaults: computerDefaults(hub, c.workspaceId) };
+    return { orgo: { configured: !!body.orgoApiKey, hint: body.orgoApiKey ? `…${body.orgoApiKey.slice(-4)}` : null }, defaults: computerDefaults(hub, c.workspaceId), ...placement(c.workspaceId) };
   });
 
   // --- bringing in existing agents ---------------------------------------------------------------

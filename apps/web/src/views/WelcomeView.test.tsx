@@ -3,12 +3,19 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Agent } from "@wisp/core";
 import { api } from "../api.ts";
-import { advanceTailscale, HarnessChoice, makeFirstAgent, NO_NODE, serverAddress, SETUP_LABELS, TailscaleScreen, tailscaleProblem } from "./WelcomeView.tsx";
+import { advanceTailscale, AgentCreated, HarnessChoice, makeFirstAgent, NO_NODE, serverAddress, SETUP_LABELS, TailscaleScreen, tailscaleProblem } from "./WelcomeView.tsx";
 import type { AccessInfo } from "../access.ts";
 import type { DeviceInfo } from "../devices.ts";
 
+
 vi.mock("../api.ts", () => ({ api: vi.fn() }));
 vi.mock("../theme.ts", () => ({ motionReduced: () => false }));
+const view = vi.hoisted(() => ({ advanced: false, computers: [] as unknown[] }));
+vi.mock("../computerMode.ts", () => ({ useComputerMode: () => ({ advanced: view.advanced, sharedComputerId: null, loaded: true }) }));
+vi.mock("../store.ts", async (original) => {
+  const real = await original<typeof import("../store.ts")>();
+  return { ...real, useStore: Object.assign((select: (s: unknown) => unknown) => select({ ...real.useStore.getState(), computers: view.computers }), real.useStore) };
+});
 afterEach(() => vi.mocked(api).mockReset());
 const device: DeviceInfo = { id: "mac", name: "My Mac", mine: true, online: true, agents: [], harnesses: [{ id: "codex", version: null }] };
 
@@ -46,21 +53,20 @@ describe("Wisp setup after the account", () => {
     expect(api).toHaveBeenCalledExactlyOnceWith(
       "POST",
       "/api/agents",
-      expect.objectContaining({ handle: "atlas-2", nodeId: "mac", computerId: null, settings: { headless: true } }),
+      expect.objectContaining({ handle: "atlas-2", nodeId: "mac", useDefaults: true, settings: {} }),
     );
   });
   it("saves the look you gave your agent", async () => {
     vi.mocked(api).mockResolvedValueOnce({ id: "agent" });
     const appearance = { shape: "tall", color: "#e771ff", color2: "#ffd87c", eyes: "dots", mouth: "smile", cheeks: false, hat: "crown", accessory: "none", motion: "float" } as const;
     await makeFirstAgent(device, "codex", "Atlas", [], [], appearance);
-    expect(api).toHaveBeenCalledExactlyOnceWith("POST", "/api/agents", expect.objectContaining({ settings: { headless: true, appearance } }));
+    expect(api).toHaveBeenCalledExactlyOnceWith("POST", "/api/agents", expect.objectContaining({ settings: { appearance } }));
   });
-  it("gives an installed harness a computer without moving its sign-in", async () => {
-    vi.mocked(api).mockResolvedValueOnce({ id: "vm" }).mockResolvedValueOnce({ id: "agent" });
+  it("lets Wisp place an installed harness (the shared computer), without moving its sign-in", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ id: "agent" });
     const ready = { ...device, capabilities: { vm: { ok: true } } } as DeviceInfo;
     await makeFirstAgent(ready, "codex", "Atlas", [], []);
-    expect(api).toHaveBeenNthCalledWith(1, "POST", "/api/computers", expect.objectContaining({ kind: "vm" }));
-    expect(api).toHaveBeenNthCalledWith(2, "POST", "/api/agents", expect.objectContaining({ computerId: "vm", settings: { runIn: "device" } }));
+    expect(api).toHaveBeenCalledExactlyOnceWith("POST", "/api/agents", expect.objectContaining({ nodeId: "mac", useDefaults: true }));
   });
   it("installs a missing npm harness before creating its agent", async () => {
     vi.mocked(api).mockResolvedValue({});
@@ -91,6 +97,20 @@ describe("Wisp setup after the account", () => {
     vi.mocked(api).mockReset().mockResolvedValue({});
     await makeFirstAgent(device, "kimi", "Atlas", [], []);
     expect(api).toHaveBeenNthCalledWith(1, "POST", "/api/nodes/mac/install", { harness: "kimi" });
+  });
+});
+
+describe("the agent's made", () => {
+  const agent = { id: "a1", name: "Atlas", handle: "atlas", harness: "codex", computerId: "c1", settings: {} } as unknown as Agent;
+  const show = (advanced: boolean) => {
+    view.advanced = advanced;
+    view.computers = [{ id: "c1", kind: "vm", name: "Shared computer", nodeId: "mac", config: { shared: true }, agents: ["a1"] }];
+    return renderToStaticMarkup(createElement(AgentCreated, { agent, device: "This Mac", onNext() {} }));
+  };
+  it("says plainly it works on the shared computer, and which device only in Advanced", () => {
+    expect(show(false)).toContain("Uses Codex, on the shared computer.");
+    expect(show(false)).not.toContain("This Mac");
+    expect(show(true)).toContain("Uses Codex, on This Mac.");
   });
 });
 
