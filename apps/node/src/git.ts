@@ -187,3 +187,22 @@ export async function mergeBranch(dir: string, w: { repo: string; branch: string
     await git(root, ["worktree", "remove", "--force", tmp]).catch(() => fs.rmSync(tmp, { recursive: true, force: true }));
   }
 }
+
+/**
+ * Where a task branch lives on this device: the repo, the refs for it and its base, and the
+ * agent's own checkout of it (with its uncommitted work) when there is one.
+ */
+export async function branchHome(dir: string, w: { repo: string; branch: string; base: string }): Promise<{ root: string; branch: string; base: string; checkout: string | null }> {
+  const { root, remote } = await repoRoot(dir, w.repo);
+  const branch = await bestRef(root, remote, w.branch);
+  if (!branch) throw new Error(`branch ${w.branch} isn't on this device yet`);
+  const base = (await bestRef(root, remote, w.base)) ?? (remote && (await hasRef(root, `refs/remotes/origin/${w.base}`)) ? `origin/${w.base}` : null);
+  if (!base) throw new Error(`base branch ${w.base} not found`);
+  const list = await git(root, ["worktree", "list", "--porcelain"]);
+  const checkout =
+    list
+      .split("\n\n")
+      .map((b) => ({ path: b.match(/^worktree (.+)$/m)?.[1], branch: b.match(/^branch (.+)$/m)?.[1] }))
+      .find((b) => b.branch === `refs/heads/${w.branch}`)?.path ?? null;
+  return { root, branch, base, checkout };
+}
