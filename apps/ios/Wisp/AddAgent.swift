@@ -75,6 +75,11 @@ struct AddAgent: View {
       HarnessChoice(id: $0, label: HarnessChoice.label($0), blurb: "Available on a connected device", account: "", protocolName: "acp")
     } + HarnessChoice.all.filter { $0.id == "custom" }
   }
+  /** A harness on the device that's signed in (else one nobody can tell about), for when the hub gives no default. */
+  static func preferredHarness(_ store: Store, node: String?) -> String? {
+    guard let n = store.nodes.first(where: { $0.id == node }) else { return nil }
+    return HarnessPick.preferSignedIn((n.harnesses ?? []).map(\.id)) { n.harnessSignedIn($0) }
+  }
   private var external: Bool { AddAgent.choices(store).first { $0.id == draft.harness }?.protocolName == "mcp" }
   /** more than one person here: who the agent answers is a real choice */
   private var askWho: Bool { store.features.invite || store.otherPeople.count > 0 }
@@ -100,6 +105,10 @@ struct AddAgent: View {
 
         Segments(options: [(false, "Use defaults"), (true, "Customize")], selection: $draft.custom, id: "new-mode")
         if draft.custom { customize } else { defaults }
+        // the AI it would run on isn't signed in on its device: say so, with Sign in, before it's made
+        if !external, let harness = draft.custom ? draft.harness : (store.agentDefaults?.harness ?? AddAgent.preferredHarness(store, node: firstNode)) {
+          HarnessSignInNotice(harness: harness, node: store.nodes.first { $0.id == (draft.custom ? (draft.computer.hasPrefix("vm:") ? String(draft.computer.dropFirst(3)) : firstNode) : (store.agentDefaults?.nodeId ?? firstNode)) })
+        }
 
         if !AgentTemplate.all.isEmpty {
           CardCaption("Start from a template (optional)")
@@ -129,7 +138,7 @@ struct AddAgent: View {
       do { try await store.refreshManagement() } catch { action.error = error.localizedDescription }
       try? await store.refreshSkills()
       try? await store.refreshConnectors()
-      draft.harness = store.agentDefaults?.harness ?? "claude-code"
+      draft.harness = store.agentDefaults?.harness ?? AddAgent.preferredHarness(store, node: firstNode) ?? "claude-code"
       draft.model = store.agentDefaults?.model ?? ""
       if store.agentDefaults?.computer != "none", let node = (nodeId != nil && firstNode == nodeId ? nodeId : nil) ?? store.agentDefaults?.nodeId ?? firstNode { draft.computer = "vm:\(node)" }
     }
@@ -141,7 +150,7 @@ struct AddAgent: View {
     let summary = store.defaultsSummary
     return CardGroup {
       Button { draft.custom = true } label: {
-        RowLabel(title: "Harness it runs on", value: store.agentDefaults?.harness.map(HarnessChoice.label) ?? "Claude Code", leading: { rowIcon("cpu") })
+        RowLabel(title: "Harness it runs on", value: (store.agentDefaults?.harness ?? AddAgent.preferredHarness(store, node: firstNode)).map(HarnessChoice.label) ?? "Claude Code", leading: { rowIcon("cpu") })
       }.buttonStyle(.plain)
       Button { draft.custom = true } label: {
         RowLabel(title: "Model", value: store.agentDefaults?.model ?? "Harness default", leading: { rowIcon("dial.medium") })
@@ -259,7 +268,7 @@ struct AddAgent: View {
         if let start = self.nodeId, firstNode == start { fields["nodeId"] = AnyEncodable(start) }
         // hubs without agent defaults still need a harness and a device
         if store.agentDefaults == nil {
-          fields["harness"] = AnyEncodable("claude-code")
+          fields["harness"] = AnyEncodable(AddAgent.preferredHarness(store, node: firstNode) ?? "claude-code")
           fields["nodeId"] = .nullable(firstNode ?? "")
         }
       }
