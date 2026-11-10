@@ -249,7 +249,23 @@ export const HubToNode = z.discriminatedUnion("type", [
    * named `session` there; keys and screen bytes travel as binary frames with `termId` (see tunnelFrame).
    * A device's own screen asks for its code, as live view does.
    */
-  z.object({ type: z.literal("term_open"), termId: z.string(), computer: ComputerSpec, session: z.string().max(60), cols: z.number().int().min(2).max(1000), rows: z.number().int().min(1).max(500), code: z.string().max(200).optional(), launch: z.string().max(40).optional(), credential: RunCredential.optional(), harnessOn: z.string().max(120).optional() }),
+  z.object({
+    type: z.literal("term_open"),
+    termId: z.string(),
+    computer: ComputerSpec,
+    session: z.string().max(60),
+    cols: z.number().int().min(2).max(1000),
+    rows: z.number().int().min(1).max(500),
+    code: z.string().max(200).optional(),
+    /** a harness's CLI to start in a plain shell (an id from HARNESSES) */
+    launch: z.string().max(40).optional(),
+    /** the model sign-in that CLI uses */
+    credential: RunCredential.optional(),
+    /** a VM's agents run that harness on this device, signed in there: its name */
+    harnessOn: z.string().max(120).optional(),
+    /** the owner took the keyboard: the shell is this agent's own harness session for that thread, resumed */
+    takeover: z.object({ agentId: z.string(), channelId: z.string(), threadId: z.string().nullable() }).optional(),
+  }),
   z.object({ type: z.literal("term_resize"), termId: z.string(), cols: z.number().int().min(2).max(1000), rows: z.number().int().min(1).max(500) }),
   /** stop showing it; `end`: the pane was closed, so the shell stops too */
   z.object({ type: z.literal("term_close"), termId: z.string(), end: z.boolean().optional() }),
@@ -305,6 +321,8 @@ export type ClientEvent =
   /** a deleted message, or a system notice that no longer applies (the "queued until its device reconnects" line once the run starts) */
   | { type: "message_removed"; messageId: string; channelId: string; threadId: string | null }
   | { type: "agent_status"; agentId: string; status: "online" | "busy" | "offline" }
+  /** someone took an agent's keyboard (its runs wait), or handed it back (userId null) */
+  | { type: "keyboard"; agentId: string; userId: string | null }
   /**
    * An agent's run event. `threadId` is the thread it works in (null at the top of the channel) and
    * `threadPath` every thread above it, outermost first, so a parent thread can show who's working in its sub-threads.

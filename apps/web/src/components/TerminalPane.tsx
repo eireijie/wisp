@@ -19,6 +19,8 @@ export interface ShellTarget {
   online: boolean;
   /** a device's own screen asks for its code before a shell opens */
   code: "pin" | "password" | null;
+  /** the device it runs on (a device's own computer, or the one hosting a VM) */
+  nodeId?: string | null;
 }
 
 type Status = { state: "connecting" } | { state: "live" } | { state: "code"; error?: string } | { state: "ended"; text: string } | { state: "lost"; text: string; retry: boolean };
@@ -49,18 +51,26 @@ export function TerminalPane({
   onClose,
   focused,
   onFocus,
-  launch,
+  open,
   title,
+  closeLabel,
+  launch,
+  label,
 }: {
   target: ShellTarget;
   session: string;
   onClose: () => void;
   focused: boolean;
   onFocus: () => void;
+  /** how to get the one-time link; a plain shell on the computer when left out */
+  open?: (code: string | undefined) => Promise<{ url: string }>;
+  title?: string;
+  /** a word on the close button instead of ×, e.g. "Hand back" */
+  closeLabel?: string;
   /** start in this harness's CLI (an id from HARNESSES) instead of a plain shell */
   launch?: string;
-  /** what the header says after the computer's name; the session's name when left out */
-  title?: string;
+  /** what the header says after the name; the session's name when left out */
+  label?: string;
 }) {
   const holder = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal | null>(null);
@@ -145,7 +155,7 @@ export function TerminalPane({
       setStatus({ state: "connecting" });
       let url: string;
       try {
-        ({ url } = await api<{ url: string }>("POST", `/api/computers/${target.id}/terminal`, { session, code: code.current, ...(launch ? { launch } : {}) }));
+        ({ url } = await (open ? open(code.current) : api<{ url: string }>("POST", `/api/computers/${target.id}/terminal`, { session, code: code.current, ...(launch ? { launch } : {}) })));
       } catch (err) {
         if (gone) return;
         const text = (err as Error).message;
@@ -231,12 +241,18 @@ export function TerminalPane({
     >
       <header className="flex h-9 shrink-0 items-center gap-2 border-b border-white/[.06] px-3 text-[12.5px] text-[#a1a1aa]">
         <span className="h-1.5 w-1.5 shrink-0 rounded-full transition-colors" style={{ background: dot }} />
-        <span className="truncate font-medium text-[#f2f2f4]">{target.name}</span>
-        <span className="truncate font-mono text-[11.5px] text-[#6b6b75]">{title ?? session}</span>
+        <span className="truncate font-medium text-[#f2f2f4]">{title ?? target.name}</span>
+        <span className="truncate font-mono text-[11.5px] text-[#6b6b75]">{label ?? session}</span>
         <span className="flex-1" />
-        <button type="button" onClick={close} aria-label="Close terminal" title="Close (ends the shell)" className="-mr-1.5 grid h-7 w-7 place-items-center rounded-md text-[#8e8e96] transition-colors hover:bg-white/[.06] hover:text-[#f2f2f4]">
-          <X size={14} strokeWidth={2} />
-        </button>
+        {closeLabel ? (
+          <button type="button" onClick={close} className="-mr-1 inline-flex h-6 items-center rounded-md border border-white/[.09] bg-[#1d1d21] px-2 text-[11.5px] text-[#f2f2f4] transition-[background-color,transform] hover:bg-[#26262b] active:scale-[.96]">
+            {closeLabel}
+          </button>
+        ) : (
+          <button type="button" onClick={close} aria-label="Close terminal" title="Close (ends the shell)" className="-mr-1.5 grid h-7 w-7 place-items-center rounded-md text-[#8e8e96] transition-colors hover:bg-white/[.06] hover:text-[#f2f2f4]">
+            <X size={14} strokeWidth={2} />
+          </button>
+        )}
       </header>
       <div className="relative min-h-0 flex-1 px-2 pt-1.5">
         <div ref={holder} className="h-full w-full" />
@@ -272,8 +288,8 @@ function Overlay({ status, target, onCode, onRetry }: { status: Status; target: 
           {status.error && <span className="text-[#ff6b6b]">{status.error}</span>}
         </form>
       ) : (
-        <div className="flex flex-col items-center gap-2.5">
-          <span>{status.text}</span>
+        <div className="flex max-w-[340px] flex-col items-center gap-2.5">
+          <span className="text-balance">{status.text}</span>
           {!(status.state === "lost" && status.retry) && (
             <button type="button" onClick={onRetry} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/[.09] bg-[#1d1d21] px-2.5 text-[#f2f2f4] transition-colors hover:bg-[#26262b] active:scale-[.97]">
               <RotateCw size={13} strokeWidth={2} />

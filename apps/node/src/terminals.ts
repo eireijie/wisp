@@ -305,3 +305,22 @@ export class Terminals {
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, Math.floor(Number.isFinite(n) ? n : lo)));
 }
+
+/** The harnesses whose sessions the owner can take over in a terminal, and how each resumes one. */
+const RESUME: Record<string, (id: string) => { file: string; args: string[] }> = {
+  "claude-code": (id) => ({ file: "claude", args: ["--resume", id] }),
+  codex: (id) => ({ file: "codex", args: ["resume", id] }),
+};
+export const TAKEOVER_HARNESSES = new Set(Object.keys(RESUME));
+
+/**
+ * The owner took the keyboard: the agent's own harness session for that thread, resumed in its
+ * folder with its sign-in, so the owner picks up exactly where the agent was. No tmux: the
+ * session ends when it's handed back, so the agent can carry on from it.
+ */
+export function takeoverShell(t: { harness: string; sessionId: string; cwd: string; env: Record<string, string> }): ShellCommand {
+  const resume = RESUME[t.harness];
+  if (!resume) throw new Error("taking the keyboard works with Claude Code and Codex agents for now");
+  const { file, args } = resume(t.sessionId);
+  return { file, args, cwd: t.cwd, env: { ...t.env, TERM: "xterm-256color" } };
+}

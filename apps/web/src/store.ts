@@ -106,6 +106,8 @@ interface State {
   live: Record<string, LiveRun>; // by runId
   computers: ComputerInfo[];
   approvals: Record<string, Approval>;
+  /** agents whose keyboard someone took in Code: agent id → who has it */
+  keyboard: Record<string, string>;
   /** bumps when routines change, so open lists refetch */
   routinesVersion: number;
   /** bumped when an agent's background work or follow-ups change */
@@ -192,6 +194,7 @@ export const useStore = create<State>((set, get) => ({
   live: {},
   computers: [],
   approvals: {},
+  keyboard: {},
   routinesVersion: 0,
   backgroundVersion: 0,
   changesVersion: 0,
@@ -435,6 +438,13 @@ export const useStore = create<State>((set, get) => ({
         agents: s.agents.map((a) => (a.id === e.agentId ? { ...a, status: e.status } : a)),
         live: e.status === "busy" ? s.live : Object.fromEntries(Object.entries(s.live).filter(([, r]) => r.agentId !== e.agentId)),
       }));
+    } else if (e.type === "keyboard") {
+      set((s) => {
+        const keyboard = { ...s.keyboard };
+        if (e.userId) keyboard[e.agentId] = e.userId;
+        else delete keyboard[e.agentId];
+        return { keyboard };
+      });
     } else if (e.type === "computer") {
       const c = e.computer as ComputerInfo;
       set((s) => ({ computers: s.computers.some((x) => x.id === c.id) ? s.computers.map((x) => (x.id === c.id ? c : x)) : [...s.computers, c] }));

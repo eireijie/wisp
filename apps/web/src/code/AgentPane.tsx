@@ -1,14 +1,25 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { Keyboard } from "lucide-react";
 import { harnessLabel, type Agent, type Approval } from "@wisp/core";
 import { api } from "../api.ts";
+import { TerminalPane, type ShellTarget } from "../components/TerminalPane.tsx";
 import { agentColor, cx } from "../components/ui.tsx";
 import { useStore } from "../store.ts";
 import { paneState, useAgentLines, type CodeTask, type LineKind, type PaneState } from "./data.ts";
 
 /**
  * One agent's pane: its steps on this task drawn like its own terminal (Watch), a line to talk
- * to it (Talk, ⌘I), and its requests for your OK right where it asked.
+ * to it (Talk, ⌘I), its requests for your OK right where it asked, and, for the owner of its
+ * device, its own harness session to take over (⌘⇧K) and hand back (⌘⇧H).
  */
+
+/** The harnesses whose session can be taken over (the device resumes it in a terminal). */
+const TAKEOVER = new Set(["claude-code", "codex"]);
+
+/** The agent's own piece of the task, else the whole task. */
+export function pieceOf(task: CodeTask, agentId: string) {
+  return [...task.family].reverse().find((t) => t.toAgentId === agentId && t.threadId && t.channelId) ?? task.root;
+}
 
 export const STATE_COLOR: Record<PaneState, string> = { working: "#4c9dff", needs: "#ffb340", done: "#3fb950", idle: "#8e8e96" };
 export const STATE_LABEL: Record<PaneState, string> = { working: "Working", needs: "Needs you", done: "Done", idle: "Idle" };
@@ -43,6 +54,7 @@ export function AgentPane({
   talking,
   setTalking,
   style,
+  shell,
 }: {
   task: CodeTask;
   agent: Agent;
@@ -51,8 +63,38 @@ export function AgentPane({
   talking: boolean;
   setTalking: (on: boolean) => void;
   style?: CSSProperties;
+  /** the agent's device, when you may open shells there (so you can take its keyboard) */
+  shell?: ShellTarget;
 }) {
   const { lines, writing, runId } = useAgentLines(task, agent);
+  const meId = useStore((s) => s.me?.user.id);
+  const holder = useStore((s) => s.keyboard[agent.id]);
+  const holderName = useStore((s) => (!holder ? null : holder === meId ? "You" : (s.members.find((m) => m.id === holder)?.name ?? "Someone")));
+  const [taking, setTaking] = useState(false);
+  const piece = pieceOf(task, agent.id);
+  const canTake = !!shell && TAKEOVER.has(agent.harness) && !!piece.threadId && (!holder || holder === meId);
+  const mineNow = taking || (!!holder && holder === meId);
+  // handed back somewhere else (another tab, or the hub after you left): back to watching
+  const had = useRef(holder);
+  useEffect(() => {
+    if (had.current === meId && !holder) setTaking(false);
+    had.current = holder;
+  }, [holder, meId]);
+  const handBack = () => {
+    setTaking(false);
+    void api("DELETE", `/api/agents/${agent.id}/keyboard`).catch(() => {});
+  };
+  // ⌘⇧K / ⌘⇧H from the view, for the focused pane
+  useEffect(() => {
+    if (!focused) return;
+    const on = (e: Event) => {
+      const what = (e as CustomEvent<string>).detail;
+      if (what === "take" && canTake && !mineNow) setTaking(true);
+      else if (what === "back" && mineNow) handBack();
+    };
+    window.addEventListener("wisp-code-keyboard", on);
+    return () => window.removeEventListener("wisp-code-keyboard", on);
+  });
   const approvals = useStore((s) => s.approvals);
   const state = paneState(task, agent.id, approvals, !!runId);
   const color = agentColor(agent);
@@ -66,6 +108,22 @@ export function AgentPane({
     const el = scroller.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [lines.length, writing, asks.length, talking]);
+
+  if (mineNow && shell)
+    return (
+      <div style={style} className="grid min-h-0 min-w-0">
+        <TerminalPane
+          target={shell}
+          session={`${agent.handle}, your keyboard`}
+          title={agent.name}
+          closeLabel="Hand back"
+          focused={focused}
+          onFocus={onFocus}
+          onClose={handBack}
+          open={(code) => api<{ url: string }>("POST", `/api/agents/${agent.id}/keyboard`, { taskId: task.root.id, code })}
+        />
+      </div>
+    );
 
   return (
     <section
@@ -82,9 +140,20 @@ export function AgentPane({
           {agent.model ? ` · ${agent.model}` : ""}
         </span>
         <span className={cx("inline-flex items-center gap-1.5 whitespace-nowrap text-[11px]", state === "needs" ? "text-[#ffb340]" : "text-[#a1a1aa]")}>
-          <span className={cx("h-[7px] w-[7px] rounded-full", state === "working" && "m-code-pulse")} style={{ background: STATE_COLOR[state] }} />
-          {STATE_LABEL[state]}
+          <span className={cx("h-[7px] w-[7px] rounded-full", state === "working" && "m-code-pulse")} style={{ background: holder ? "#c08cff" : STATE_COLOR[state] }} />
+          {holder ? `${holderName} has the keyboard` : STATE_LABEL[state]}
         </span>
+        {canTake && (
+          <button
+            type="button"
+            onClick={() => setTaking(true)}
+            aria-label={`Take ${agent.name}'s keyboard`}
+            title={`Take the keyboard (⌘⇧K): ${agent.name}'s session opens here and it waits until you hand it back`}
+            className="-mr-1 grid h-6 w-6 place-items-center rounded-md text-[#8e8e96] transition-colors hover:bg-white/[.06] hover:text-[#f2f2f4]"
+          >
+            <Keyboard size={14} strokeWidth={1.75} />
+          </button>
+        )}
       </header>
       <div
         ref={scroller}
@@ -153,8 +222,7 @@ function Talk({ task, agent, runId, onDone }: { task: CodeTask; agent: Agent; ru
   const lastEsc = useRef(0);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
-  // the agent's own piece of the task, else the whole task's thread
-  const mine = [...task.family].reverse().find((t) => t.toAgentId === agent.id && t.threadId && t.channelId) ?? task.root;
+  const mine = pieceOf(task, agent.id);
   const send = async (e: FormEvent) => {
     e.preventDefault();
     const body = text.trim();

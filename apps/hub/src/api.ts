@@ -1932,6 +1932,71 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return answerReview(reply, await hub.requestReview(t.via, "checks", t.w));
   });
 
+  /**
+   * Take the keyboard (Code mod): the owner of the device an agent works on picks up its harness
+   * session for a coding task (the thread in that task it last ran in) in a terminal. The agent's
+   * runs wait until it's handed back.
+   */
+  app.post("/api/agents/:id/keyboard", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const body = parse(z.object({ taskId: z.string().max(100), code: z.string().min(1).max(200).optional() }), req.body ?? {}, reply);
+    if (!body) return;
+    const agent = store.agent((req.params as { id: string }).id);
+    if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
+    const all = store.tasks(c.workspaceId);
+    const byId = new Map(all.map((t) => [t.id, t]));
+    const rootOf = (id: string) => {
+      let t = byId.get(id);
+      for (let i = 0; t && (t.reviewOf || t.parentId) && i < 50; i++) t = byId.get((t.reviewOf || t.parentId)!) ?? t;
+      return t?.id;
+    };
+    const root = rootOf(body.taskId);
+    const family = root ? all.filter((t) => rootOf(t.id) === root && t.channelId && t.threadId && channelVisible(c, t.channelId)) : [];
+    if (!family.length) return reply.code(404).send({ error: "task not found" });
+    // the thread of this task the agent last worked in: that's the session there is to pick up
+    const threads = family.map((t) => t.threadId!);
+    const last = store.db
+      .prepare(`SELECT channel_id AS channelId, thread_id AS threadId FROM runs WHERE agent_id = ? AND thread_id IN (${threads.map(() => "?").join(",")}) ORDER BY created_at DESC LIMIT 1`)
+      .get(agent.id, ...threads) as { channelId: string; threadId: string } | undefined;
+    if (!last) return reply.code(409).send({ error: `@${agent.handle} hasn't worked on this task yet, so there's no session to pick up` });
+    if (!agent.nodeId) return reply.code(400).send({ error: `@${agent.handle} isn't on a device` });
+    if (hub.runsInComputer(agent)) return reply.code(400).send({ error: `@${agent.handle} works inside its computer; taking the keyboard there isn't ready yet` });
+    if (!["claude-code", "codex"].includes(agent.harness)) return reply.code(400).send({ error: "taking the keyboard works with Claude Code and Codex agents for now" });
+    const comp = store.computers(c.workspaceId).find((x) => x.kind === "device" && x.nodeId === agent.nodeId);
+    if (!comp) return reply.code(400).send({ error: "the agent's device isn't set up as a computer" });
+    const held = hub.keyboard.get(agent.id);
+    if (held && held.userId !== c.actor.id) return reply.code(409).send({ error: `${store.user(held.userId)?.name ?? "Someone"} has @${agent.handle}'s keyboard` });
+    if (store.activeRuns(agent.id).some((r) => store.run(r.id)?.status === "running")) return reply.code(409).send({ error: `@${agent.handle} is working; stop its run first` });
+    try {
+      const url = `/ws/terminals/${comp.id}?ticket=${hub.terminals.ticket(comp, c.actor.id, `take-${agent.handle}`, body.code, { agentId: agent.id, channelId: last.channelId, threadId: last.threadId })}`;
+      hub.takeKeyboard(agent, c.actor.id);
+      return { url, computerId: comp.id };
+    } catch (err) {
+      const e = err as { message: string; status?: number };
+      return reply.code(e.status ?? 400).send({ error: e.message });
+    }
+  });
+
+  /** Hand the keyboard back: the agent's waiting runs go ahead. */
+  app.delete("/api/agents/:id/keyboard", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const agent = store.agent((req.params as { id: string }).id);
+    if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
+    const held = hub.keyboard.get(agent.id);
+    if (held && held.userId !== c.actor.id && c.viewer.role !== "owner") return reply.code(403).send({ error: "only whoever took it can hand it back" });
+    hub.handBackKeyboard(agent.id);
+    return { ok: true };
+  });
+
+  /** Whose keyboard is taken right now, in this organization. */
+  app.get("/api/keyboard", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    return Object.fromEntries([...hub.keyboard].filter(([, k]) => k.workspaceId === c.workspaceId).map(([id, k]) => [id, k.userId]));
+  });
+
   // --- stepped teams ---------------------------------------------------------------
 
   /** A channel's requests going through its team's steps, newest first. */
