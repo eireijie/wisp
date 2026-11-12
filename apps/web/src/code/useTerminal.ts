@@ -45,7 +45,7 @@ const concerns = (m: Message, agentId: string) => (m.author.kind === "agent" && 
  * for it, in every chat you can see), then live steps as its runs stream them. What it's writing
  * shows as one working line.
  */
-export function useAgentTerminal(agent: Agent): { lines: TermLine[]; working: string | null; runId: string | null } {
+export function useAgentTerminal(agent: Agent): { lines: TermLine[]; working: { text: string; writing: boolean } | null; runId: string | null } {
   const style = harnessStyle(agent.harness);
   const nameOf = useNameOf();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -115,6 +115,6 @@ export function useAgentTerminal(agent: Agent): { lines: TermLine[]; working: st
 
   const history = useMemo(() => termFromMessages(messages, agent.id, style, nameOf), [messages, agent.id, style, nameOf]);
   const said = writing.split("\n").filter(Boolean).at(-1)?.slice(-160);
-  const working = running ? (said ? `${style.said}${said}` : workingLine(run?.last?.name ?? null, !!run?.text)) : null;
+  const working = running ? (said ? { text: said, writing: true } : { text: workingLine(run?.last?.name ?? null, !!run?.text), writing: false }) : null;
   return { lines: [...history, ...liveLines].slice(-400), working, runId: run?.runId ?? (running ? runId : null) };
 }
