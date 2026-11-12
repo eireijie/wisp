@@ -106,6 +106,8 @@ interface State {
   live: Record<string, LiveRun>; // by runId
   computers: ComputerInfo[];
   approvals: Record<string, Approval>;
+  /** agents that finished a run since you last looked at them in Code: agent id → when */
+  finished: Record<string, number>;
   /** agents whose keyboard someone took in Code: agent id → who has it */
   keyboard: Record<string, string>;
   /** bumps when routines change, so open lists refetch */
@@ -192,6 +194,7 @@ export const useStore = create<State>((set, get) => ({
   loadingMessages: {},
   removedRoots: {},
   live: {},
+  finished: {},
   computers: [],
   approvals: {},
   keyboard: {},
@@ -368,6 +371,7 @@ export const useStore = create<State>((set, get) => ({
     }
     if (e.type === "message") {
       const m = e.message;
+      for (const tap of messageTaps) tap(m);
       // the agent's reply replaces its live preview
       if (m.author.kind === "agent") {
         set((s) => ({ live: Object.fromEntries(Object.entries(s.live).filter(([, r]) => !(r.agentId === m.author.id && r.channelId === m.channelId))) }));
@@ -434,6 +438,9 @@ export const useStore = create<State>((set, get) => ({
     } else if (e.type === "agent_status") {
       // an agent created in another tab or through the API
       if (!get().agents.some((a) => a.id === e.agentId)) get().refreshAgents();
+      // an agent that was busy and stops has finished something (Code shows it done until you look)
+      const was = get().agents.find((a) => a.id === e.agentId)?.status;
+      if (was === "busy" && e.status !== "busy") set((s) => ({ finished: { ...s.finished, [e.agentId]: Date.now() } }));
       set((s) => ({
         agents: s.agents.map((a) => (a.id === e.agentId ? { ...a, status: e.status } : a)),
         live: e.status === "busy" ? s.live : Object.fromEntries(Object.entries(s.live).filter(([, r]) => r.agentId !== e.agentId)),
@@ -485,6 +492,8 @@ export const useStore = create<State>((set, get) => ({
 /** Views that need every step of a run (Code's agent panes), not the store's short summary. */
 export type RunEvent = Extract<ClientEvent, { type: "run_event" }>;
 export const runTaps = new Set<(e: RunEvent) => void>();
+/** Views that follow new messages anywhere (Code's terminals and its between-agents list). */
+export const messageTaps = new Set<(m: Message) => void>();
 
 /** A channel and each of its threads have independent history and load errors. */
 export const conversationKey = (channelId: string, threadId?: string) => threadId ? `${channelId}/t/${threadId}` : channelId;

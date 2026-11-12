@@ -77,6 +77,14 @@ a.rounded-full,
 .m-code-pulse { animation: m-code-pulse 1.4s ease-in-out infinite; }
 @keyframes m-code-list-in { from { opacity: 0; transform: translateX(-12px); } }
 .m-code-list { animation: m-code-list-in 240ms var(--settle) backwards; }
+@keyframes m-code-spin { to { transform: rotate(360deg); } }
+.m-code-spin { animation: m-code-spin 1s linear infinite; }
+@keyframes m-code-blink { 50% { opacity: 0; } }
+.m-code-cursor { display: inline-block; width: 7px; height: 14px; background: #f2f2f4; vertical-align: -2px; animation: m-code-blink 1s steps(1) infinite; }
+@keyframes m-code-wire-in { from { opacity: 0; transform: translateY(4px); } }
+.m-code-wire { animation: m-code-wire-in 350ms ease backwards; }
+@keyframes m-code-sheet-in { from { opacity: 0; transform: translateY(10px) scale(0.985); } }
+.m-code-sheet { animation: m-code-sheet-in 320ms cubic-bezier(.2,.9,.25,1.05) backwards; }
 /* a sign-in waiting on the person: its dot breathes */
 @keyframes m-wait-pulse { 50% { opacity: 0.3; } }
 .m-wait { animation: m-wait-pulse 1.4s ease-in-out infinite; }
@@ -213,7 +221,8 @@ button[role="switch"]:active:not(:disabled) .m-knob { scale: 1.2 1; }
   .m-badge[data-zero="true"] { transform: none; }
   .m-bubble-me, .m-bubble-them, .m-work, .m-swap, .m-menu, .m-dialog, .m-drawer, .m-palette-card,
   .m-panel, .m-toast, .m-toast-top, .m-chat-layer, .m-pill-in, .m-chip-in, .m-unfold, .m-fade-in, .m-pane, .m-code-line, .m-code-list { animation: m-fade 120ms ease-out backwards !important; }
-  .m-code-pulse { animation: none !important; }
+  .m-code-pulse, .m-code-spin, .m-code-cursor { animation: none !important; }
+  .m-code-wire, .m-code-sheet { animation: m-fade 120ms ease-out backwards !important; }
   .m-wait { animation: none !important; }
   .m-scrim, .m-palette-scrim { animation: m-scrim-in 120ms ease-out backwards !important; }
   .m-menu[data-closing="true"], [data-closing="true"] .m-palette-card { animation: m-fade 120ms ease-out reverse both !important; }

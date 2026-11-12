@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { Agent, AgentEvent, Approval, Message, Team } from "@wisp/core";
+import { useEffect, useMemo, useState } from "react";
+import type { Team } from "@wisp/core";
 import { api } from "../api.ts";
-import { runTaps, useStore, useTeams, type RunEvent } from "../store.ts";
+import { useStore, useTeams } from "../store.ts";
 import type { TaskRow } from "../views/TasksView.tsx";
 
 /**
- * Code's data, built from what Wisp already has: a coding task is a task handed to a team that
- * works in a repo. Its agents are whoever holds a piece of it (the lead, the builders it split the
- * work to, the reviewer), and each agent's pane is drawn from its steps in those tasks' threads.
+ * Code's data about coding work, built from what Wisp already has: a coding task is a task handed
+ * to a team that works in a repo, with a branch for each piece (shown in Changes and Files). Also
+ * the helpers that read a step's tool call for the terminals (terminal.ts).
  */
 
 export type PaneState = "working" | "needs" | "done" | "idle";
@@ -82,17 +82,6 @@ export function useCodeTasks(): { tasks: CodeTask[] | null; error: string | null
   return { tasks, error };
 }
 
-/** The task list's groups, like the design: what needs you, what's working, what finished today. */
-export function groupTasks(tasks: CodeTask[]) {
-  const now = Date.now();
-  return [
-    { label: "Needs you", tasks: tasks.filter((t) => t.state === "needs") },
-    { label: "Working", tasks: tasks.filter((t) => t.state === "working") },
-    { label: "Done today", tasks: tasks.filter((t) => (t.state === "done" || t.state === "idle") && now - Date.parse(t.root.updatedAt) < DAY) },
-    { label: "Earlier", tasks: tasks.filter((t) => (t.state === "done" || t.state === "idle") && now - Date.parse(t.root.updatedAt) >= DAY) },
-  ].filter((g) => g.tasks.length > 0);
-}
-
 /** "eireijie/shop" from a git URL or a path on the device. */
 export function repoName(repo: string | null) {
   if (!repo) return "";
@@ -101,19 +90,12 @@ export function repoName(repo: string | null) {
   return m ? m[1] : clean.split("/").pop() ?? clean;
 }
 
-export type LineKind = "ask" | "read" | "edit" | "run" | "out" | "text" | "status" | "error" | "ok";
-export interface Line {
-  key: string;
-  kind: LineKind;
-  text: string;
-}
-
-const READS = /^(read|view|open|glob|grep|search|ls|list|find|cat|web_?fetch|web_?search|fetch)/i;
-const EDITS = /^(edit|write|multi_?edit|apply_?patch|patch|create|str_replace|notebook)/i;
-const RUNS = /^(bash|shell|exec|run|terminal|command|local_shell|computer_run)/i;
+export const READS = /^(read|view|open|glob|grep|search|ls|list|find|cat|web_?fetch|web_?search|fetch)/i;
+export const EDITS = /^(edit|write|multi_?edit|apply_?patch|patch|create|str_replace|notebook)/i;
+export const RUNS = /^(bash|shell|exec|run|terminal|command|local_shell|computer_run)/i;
 
 /** The few words that say what a step touched: the file, the command, the search. */
-function argOf(input: unknown): string {
+export function argOf(input: unknown): string {
   if (typeof input === "string") return input;
   const i = (input ?? {}) as Record<string, unknown>;
   const cmd = i.command ?? i.cmd;
@@ -129,20 +111,11 @@ function unwrapShell(cmd: string) {
   return m ? m[2].replace(m[1] === '"' ? /\\"/g : /'\\''/g, m[1]) : cmd;
 }
 
-function shortTool(name: string) {
+export function shortTool(name: string) {
   return name.replace(/^mcp__[^_]+__/, "").replace(/^[\w-]+\./, "").replace(/^wisp_/, "");
 }
 
-/** One step as a terminal line, in the agent's own harness's words. */
-export function toolLine(name: string, input: unknown): { kind: LineKind; text: string } {
-  const tool = shortTool(name);
-  const arg = argOf(input).split("\n")[0].slice(0, 200);
-  const kind: LineKind = EDITS.test(tool) ? "edit" : RUNS.test(tool) ? "run" : READS.test(tool) ? "read" : "read";
-  const verb = (tool.charAt(0).toUpperCase() + tool.slice(1)).replace(/_/g, " ");
-  return { kind, text: `● ${verb}${arg ? `  ${arg}` : ""}` };
-}
-
-function outputLines(output: unknown): string[] {
+export function outputLines(output: unknown): string[] {
   // a command's result: what it printed, and how it ended when it failed
   const o = output && typeof output === "object" ? (output as Record<string, unknown>) : null;
   const printed = o ? [o.output, o.stdout, o.formatted_output, o.aggregated_output].find((v) => typeof v === "string") : output;
@@ -152,122 +125,4 @@ function outputLines(output: unknown): string[] {
   const lines = text.split("\n").map((l) => l.trimEnd()).filter(Boolean);
   if (lines.length <= 3) return lines.map((l) => l.slice(0, 200));
   return [...lines.slice(0, 2), `… ${lines.length - 2} more lines`].map((l) => l.slice(0, 200));
-}
-
-/** An agent's earlier work in a thread, from the messages it posted there. */
-export function linesFromMessages(messages: Message[], agentId: string): Line[] {
-  const out: Line[] = [];
-  for (const m of messages) {
-    if (m.author.kind !== "agent" || m.author.id !== agentId || m.deletedAt) continue;
-    m.parts.forEach((p, i) => {
-      if (p.type === "status") return out.push({ key: `${m.id}:${i}`, kind: /fail|error|could not|couldn't/i.test(p.text) ? "error" : "status", text: p.text });
-      if (p.type !== "tool_call") return;
-      const l = toolLine(p.name, p.input);
-      out.push({ key: `${m.id}:${i}`, ...l });
-      if (l.kind === "run" && p.output !== undefined) outputLines(p.output).forEach((t, j) => out.push({ key: `${m.id}:${i}:${j}`, kind: "out", text: `  ${t}` }));
-    });
-    // markdown marks and the @mention that wakes someone aren't part of what it said
-    const said = m.body.replace(/\*\*|__|`/g, "").trim().split("\n").filter(Boolean);
-    if (said.length) out.push({ key: `${m.id}:said`, kind: "text", text: said.length > 2 ? `${said[0]} …` : said.join(" ") });
-  }
-  return out;
-}
-
-/** A live step, as it happens. */
-export function linesFromEvent(runId: string, n: number, e: AgentEvent): Line[] {
-  const key = `${runId}:${n}`;
-  switch (e.type) {
-    case "tool_call":
-      return [{ key, ...toolLine(e.name, e.input) }];
-    case "tool_result":
-      return RUNS.test(shortTool(e.name)) ? outputLines(e.output).map((t, j) => ({ key: `${key}:${j}`, kind: "out" as const, text: `  ${t}` })) : [];
-    case "status":
-      return e.text === "started" ? [] : [{ key, kind: "status", text: `✻ ${e.text}` }];
-    case "error":
-      return [{ key, kind: "error", text: `✕ ${e.message}` }];
-    case "notice":
-      return [{ key, kind: "status", text: e.text }];
-    default:
-      return [];
-  }
-}
-
-/**
- * Everything one agent did on a task: its earlier steps from the threads, then live ones as the
- * hub streams them. Text an agent is writing shows as one line that grows.
- */
-export function useAgentLines(task: CodeTask, agent: Agent | undefined): { lines: Line[]; writing: string; runId: string | null } {
-  const [history, setHistory] = useState<Line[]>([]);
-  const [liveLines, setLive] = useState<Line[]>([]);
-  const [writing, setWriting] = useState("");
-  const [runId, setRunId] = useState<string | null>(null);
-  const counter = useRef(0);
-  const threadKey = task.threads.map((t) => t.threadId).join(",");
-  const version = useStore((s) => s.tasksVersion);
-
-  useEffect(() => {
-    if (!agent) return;
-    let gone = false;
-    Promise.all(
-      task.threads.map((t) =>
-        api<{ messages: Message[] }>("GET", `/api/channels/${t.channelId}/messages?thread=${t.threadId}&limit=200`).then(
-          (r) => r.messages,
-          () => [] as Message[],
-        ),
-      ),
-    ).then((all) => {
-      if (gone) return;
-      const messages = all.flat().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      setHistory(linesFromMessages(messages, agent.id));
-      // finished steps are now in the history; what's still running stays live
-      setLive([]);
-    });
-    return () => {
-      gone = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agent?.id, threadKey, version]);
-
-  useEffect(() => {
-    if (!agent) return;
-    const threads = new Set(task.threads.map((t) => t.threadId));
-    const tap = (e: RunEvent) => {
-      if (e.agentId !== agent.id) return;
-      if (!(e.threadId && threads.has(e.threadId)) && !(e.threadPath ?? []).some((p) => threads.has(p))) return;
-      setRunId(e.runId);
-      const ev = e.event;
-      if (ev.type === "text") return setWriting((w) => (w + ev.text).slice(-400));
-      const add = linesFromEvent(e.runId, counter.current++, ev);
-      if (add.length) {
-        setWriting("");
-        setLive((l) => [...l, ...add].slice(-400));
-      }
-    };
-    runTaps.add(tap);
-    return () => void runTaps.delete(tap);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agent?.id, threadKey]);
-
-  // a run that ended clears what it was writing; its reply comes back through the history
-  const running = useStore((s) => (runId ? !!s.live[runId] : false));
-  useEffect(() => {
-    if (!running) setWriting("");
-  }, [running]);
-
-  const header: Line[] = useMemo(() => {
-    const mine = task.family.filter((t) => t.toAgentId === agent?.id);
-    return mine.map((t) => ({ key: `task:${t.id}`, kind: "ask" as const, text: `> ${t.reviewOf ? "Review: " : ""}${t.title.replace(/^Review: /, "")}` }));
-  }, [task.family, agent?.id]);
-
-  return { lines: [...header, ...history, ...liveLines], writing: running ? writing : "", runId: running ? runId : null };
-}
-
-/** How an agent stands on this task, for its pane's chip and the status line. */
-export function paneState(task: CodeTask, agentId: string, approvals: Record<string, Approval>, liveAgentRuns: boolean): PaneState {
-  const inThreads = new Set(task.threads.map((t) => t.threadId));
-  if (Object.values(approvals).some((a) => a.status === "pending" && a.agentId === agentId && !!a.threadId && inThreads.has(a.threadId))) return "needs";
-  if (liveAgentRuns) return "working";
-  const mine = task.family.filter((t) => t.toAgentId === agentId);
-  if (mine.some((t) => t.status === "open" || t.status === "in_progress")) return "working";
-  return mine.length && mine.every((t) => t.status === "done") ? "done" : "idle";
 }

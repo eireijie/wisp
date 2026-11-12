@@ -1065,6 +1065,47 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return { messages: messages.map((m) => messageView(c, m)), replyCounts: store.replyCounts(messages.filter((m) => m.id !== q.thread).map((m) => m.id)) };
   });
 
+  /**
+   * Code's "between agents": what agents sent each other in a channel, threads included, newest
+   * last. A message counts when an agent wrote it or it was for an agent.
+   */
+  app.get("/api/channels/:id/between", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    const ch = channelVisible(c, (req.params as { id: string }).id);
+    if (!ch) return reply.code(404).send({ error: "channel not found" });
+    const limit = limitParam((req.query as { limit?: string }).limit, 60, 200);
+    const rows = store.db
+      .prepare("SELECT id FROM messages WHERE channel_id = ? AND deleted_at IS NULL AND (author_kind = 'agent' OR to_json LIKE '%\"agent\"%') ORDER BY created_at DESC, rowid DESC LIMIT ?")
+      .all(ch.id, limit) as { id: string }[];
+    const messages = rows.map((r) => store.message(r.id)).filter((m): m is NonNullable<typeof m> => !!m).reverse();
+    return { messages: messages.map((m) => messageView(c, m)) };
+  });
+
+  /** Code's agent terminal: an agent's own messages and the ones for it, across the channels you can see, newest last. */
+  app.get("/api/agents/:id/log", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    const agent = store.agent((req.params as { id: string }).id);
+    if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
+    const limit = limitParam((req.query as { limit?: string }).limit, 80, 200);
+    const rows = store.db
+      .prepare("SELECT id, channel_id FROM messages WHERE deleted_at IS NULL AND ((author_kind = 'agent' AND author_id = ?) OR instr(to_json, ?) > 0) ORDER BY created_at DESC, rowid DESC LIMIT ?")
+      .all(agent.id, JSON.stringify({ kind: "agent", id: agent.id }), limit * 2) as { id: string; channel_id: string }[];
+    const seen = new Map<string, boolean>();
+    const visible = (id: string) => {
+      if (!seen.has(id)) seen.set(id, !!channelVisible(c, id));
+      return seen.get(id)!;
+    };
+    const messages = rows
+      .filter((r) => visible(r.channel_id))
+      .slice(0, limit)
+      .map((r) => store.message(r.id))
+      .filter((m): m is NonNullable<typeof m> => !!m)
+      .reverse();
+    return { messages: messages.map((m) => messageView(c, m)) };
+  });
+
   app.post("/api/channels/:id/messages", async (req, reply) => {
     const c = need(req, reply);
     if (!c) return;
@@ -1810,6 +1851,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
         hop: 1,
         route: task.from.kind === "agent",
         onBehalfOf: requesterOf(c),
+        to: task.from.id === "system" ? [] : [task.from],
       });
       if (body.result) hub.taskReplyPosted(task, message, body.result);
     }
@@ -1940,26 +1982,37 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   app.post("/api/agents/:id/keyboard", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    const body = parse(z.object({ taskId: z.string().max(100), code: z.string().min(1).max(200).optional() }), req.body ?? {}, reply);
+    const body = parse(z.object({ taskId: z.string().max(100).optional(), code: z.string().min(1).max(200).optional() }), req.body ?? {}, reply);
     if (!body) return;
     const agent = store.agent((req.params as { id: string }).id);
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
-    const all = store.tasks(c.workspaceId);
+    // without a task: the session of its latest run in a chat you can see
+    const latest = () => {
+      const runs = store.db.prepare("SELECT channel_id AS channelId, thread_id AS threadId FROM runs WHERE agent_id = ? AND (kind IS NULL OR kind != 'background') ORDER BY created_at DESC LIMIT 50").all(agent.id) as { channelId: string; threadId: string | null }[];
+      return runs.find((r) => channelVisible(c, r.channelId));
+    };
+    const all = body.taskId ? store.tasks(c.workspaceId) : [];
     const byId = new Map(all.map((t) => [t.id, t]));
     const rootOf = (id: string) => {
       let t = byId.get(id);
       for (let i = 0; t && (t.reviewOf || t.parentId) && i < 50; i++) t = byId.get((t.reviewOf || t.parentId)!) ?? t;
       return t?.id;
     };
-    const root = rootOf(body.taskId);
-    const family = root ? all.filter((t) => rootOf(t.id) === root && t.channelId && t.threadId && channelVisible(c, t.channelId)) : [];
-    if (!family.length) return reply.code(404).send({ error: "task not found" });
-    // the thread of this task the agent last worked in: that's the session there is to pick up
-    const threads = family.map((t) => t.threadId!);
-    const last = store.db
-      .prepare(`SELECT channel_id AS channelId, thread_id AS threadId FROM runs WHERE agent_id = ? AND thread_id IN (${threads.map(() => "?").join(",")}) ORDER BY created_at DESC LIMIT 1`)
-      .get(agent.id, ...threads) as { channelId: string; threadId: string } | undefined;
-    if (!last) return reply.code(409).send({ error: `@${agent.handle} hasn't worked on this task yet, so there's no session to pick up` });
+    let last: { channelId: string; threadId: string | null } | undefined;
+    if (body.taskId) {
+      const root = rootOf(body.taskId);
+      const family = root ? all.filter((t) => rootOf(t.id) === root && t.channelId && t.threadId && channelVisible(c, t.channelId)) : [];
+      if (!family.length) return reply.code(404).send({ error: "task not found" });
+      // the thread of this task the agent last worked in: that's the session there is to pick up
+      const threads = family.map((t) => t.threadId!);
+      last = store.db
+        .prepare(`SELECT channel_id AS channelId, thread_id AS threadId FROM runs WHERE agent_id = ? AND thread_id IN (${threads.map(() => "?").join(",")}) ORDER BY created_at DESC LIMIT 1`)
+        .get(agent.id, ...threads) as { channelId: string; threadId: string } | undefined;
+      if (!last) return reply.code(409).send({ error: `@${agent.handle} hasn't worked on this task yet, so there's no session to pick up` });
+    } else {
+      last = latest();
+      if (!last) return reply.code(409).send({ error: `@${agent.handle} hasn't worked yet, so there's no session to pick up` });
+    }
     if (!agent.nodeId) return reply.code(400).send({ error: `@${agent.handle} isn't on a device` });
     if (hub.runsInComputer(agent)) return reply.code(400).send({ error: `@${agent.handle} works inside its computer; taking the keyboard there isn't ready yet` });
     if (!["claude-code", "codex"].includes(agent.harness)) return reply.code(400).send({ error: "taking the keyboard works with Claude Code and Codex agents for now" });

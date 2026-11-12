@@ -87,7 +87,45 @@ const HEART = "#ff8fab";
  * gray and dozing while offline. Animations are CSS (float, blink, moods) plus an SVG hem
  * ripple; all of it switches off with `animate={false}` or when the OS asks for reduced motion.
  */
-export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, tile = false, label, trackPointer = false, interactive = false, ambient = true, speakingLevel }: { look: GhostAppearance; size?: number; mood?: GhostMood; animate?: boolean; wave?: boolean; tile?: boolean; label?: string; trackPointer?: boolean; interactive?: boolean; ambient?: boolean; speakingLevel?: number }) {
+export function Ghost(props: { look: GhostAppearance; size?: number; mood?: GhostMood; animate?: boolean; wave?: boolean; tile?: boolean; label?: string; trackPointer?: boolean; interactive?: boolean; ambient?: boolean; speakingLevel?: number }) {
+  // below 24px a ghost is only its shape, its two colors and its eyes; status shows beside it
+  if ((props.size ?? 40) < MINI_BELOW) return <MiniGhost look={props.look} size={props.size ?? 40} label={props.label} asleep={props.mood === "asleep"} />;
+  return <FullGhost {...props} />;
+}
+
+/** Ghosts smaller than this are drawn as a mini ghost. */
+export const MINI_BELOW = 24;
+
+/** Each shape framed snugly around its body, for the mini size. */
+const MINI_BOX: Record<GhostShape, string> = { classic: "24 14 72 92", round: "18 18 84 84", tall: "14 8 92 100", sheet: "16 12 88 92", wisp: "14 12 92 98" };
+
+/**
+ * A ghost at list size: the body in its two-color gradient and the eyes, nothing else. No hat,
+ * mouth, cheeks, arms, shadow or motion, so it reads cleanly at 15–20px.
+ */
+export function MiniGhost({ look, size, label, asleep = false, ring }: { look: GhostAppearance; size: number; label?: string; asleep?: boolean; /** an outline in this color, for overlapped team icons */ ring?: string }) {
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const kind = look.shape in SHAPES ? look.shape : "classic";
+  const shape = SHAPES[kind];
+  const top = asleep ? GHOST_ASLEEP.color : safeColor(look.color, "#f4f1ff");
+  const bottom = asleep ? GHOST_ASLEEP.color2 : look.color2 ? safeColor(look.color2, top) : shade(top);
+  const [ex1, ex2] = shape.eyes.x;
+  return (
+    <svg width={size} height={size} viewBox={MINI_BOX[kind]} role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true} className="ghost-mini shrink-0">
+      <defs>
+        <linearGradient id={`m${uid}`} gradientUnits="userSpaceOnUse" x1="0" y1={shape.top} x2="0" y2={shape.bottom}>
+          <stop offset="0.08" stopColor={top} />
+          <stop offset="0.95" stopColor={bottom} />
+        </linearGradient>
+      </defs>
+      <path d={shape.body[0]} fill={`url(#m${uid})`} stroke={ring} strokeWidth={ring ? 6 : undefined} paintOrder="stroke" />
+      <ellipse cx={ex1} cy={shape.eyes.y} rx="5.5" ry="7" fill="#1a1020" />
+      <ellipse cx={ex2} cy={shape.eyes.y} rx="5.5" ry="7" fill="#1a1020" />
+    </svg>
+  );
+}
+
+function FullGhost({ look, size = 40, mood = "awake", animate = true, wave, tile = false, label, trackPointer = false, interactive = false, ambient = true, speakingLevel }: { look: GhostAppearance; size?: number; mood?: GhostMood; animate?: boolean; wave?: boolean; tile?: boolean; label?: string; trackPointer?: boolean; interactive?: boolean; ambient?: boolean; speakingLevel?: number }) {
   const reduced = useMotionReduced();
   const animated = animate && !reduced;
   const ambientMotion = animated && ambient;

@@ -1,35 +1,41 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Columns2, Maximize2, MessageSquare, PanelLeft, Plus, SquareTerminal } from "lucide-react";
+import { Maximize2, MessageSquare, PanelLeft, Plus, SquareTerminal } from "lucide-react";
+import type { Agent, Team } from "@wisp/core";
 import { api } from "../api.ts";
 import { href } from "../router.ts";
-import { Menu, agentColor, cx, timeAgo } from "../components/ui.tsx";
-import { TerminalPane, type ShellTarget } from "../components/TerminalPane.tsx";
-import { ShellWorkspace } from "../code/ShellWorkspace.tsx";
+import { Menu, cx } from "../components/ui.tsx";
+import type { ShellTarget } from "../components/TerminalPane.tsx";
+import { ShellWorkspace, type OpenRequest } from "../code/ShellWorkspace.tsx";
 import { useFeatures } from "../features.ts";
-import { useStore } from "../store.ts";
-import { AgentPane, GhostIcon, STATE_COLOR } from "../code/AgentPane.tsx";
-import { NewTaskSheet } from "../code/NewTaskSheet.tsx";
+import { useStore, useTeams } from "../store.ts";
+import { openDm } from "../openDm.ts";
+import { AgentTerminal } from "../code/AgentTerminal.tsx";
+import { Between } from "../code/Between.tsx";
+import { FlowLive } from "../code/FlowLive.tsx";
+import { StartSheet, type Started } from "../code/StartSheet.tsx";
 import { Palette, type PaletteItem } from "../code/Palette.tsx";
 import { ReviewPanel, branchesOf, type ReviewTab } from "../code/ReviewPanel.tsx";
-import { groupTasks, paneState, repoName, useCodeTasks, type CodeTask } from "../code/data.ts";
+import { useCodeTasks } from "../code/data.ts";
+import { Mini, MOD, StateMark, TeamFaces, isMac } from "../code/parts.tsx";
+import { teamState, useAgentStates, type AgentState } from "../code/useTerminal.ts";
 
 /**
- * Code (a mod, on by default): a terminal workspace for coding tasks, in the spirit of tmux.
- * The task list on the left is like tmux's sessions; a task's panes are its agents, each drawn as
- * its own terminal, plus shells you open beside them. "Shells" holds plain terminals on your
- * computers. What's open is remembered on this browser.
+ * Code (a mod, on by default): the advanced view of Wisp. The same agents, teams and chats, shown
+ * as their terminals. Every agent's runs are drawn as its CLI's terminal; a team shows every
+ * member's terminal side by side (or its flow chart) with what they send each other; Shells holds
+ * plain terminals on your computers. What you type under a terminal is a chat message, so it
+ * shows in Chats too.
  */
 
-interface Shell {
-  key: string;
-  computerId: string;
-  session: string;
-}
+type Sel = { kind: "team"; id: string } | { kind: "agent"; id: string } | { kind: "shells" };
+type View = "terms" | "flow";
 
-type Layout = "main" | "cols" | "zoom";
-const SHELLS = "shells";
-/** at most this many shells per task (or in Shells), so it never gets crowded */
-const MAX_SHELLS = 4;
+const selKey = (s: Sel) => (s.kind === "shells" ? "shells" : `${s.kind}:${s.id}`);
+function parseSel(v: unknown): Sel {
+  if (typeof v !== "string") return { kind: "shells" };
+  const [kind, id] = v.split(":");
+  return (kind === "team" || kind === "agent") && id ? { kind, id } : { kind: "shells" };
+}
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -45,47 +51,27 @@ function save(key: string, v: unknown) {
   } catch {}
 }
 
-/** A shell name nobody else's pane on that computer uses: a stem and a number. */
-function newSession(stem: string, computerId: string, all: Shell[]) {
-  const s = stem.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").split("-")[0] || "shell";
-  const taken = new Set(all.filter((p) => p.computerId === computerId).map((p) => p.session));
-  let n = 1;
-  while (taken.has(`${s}-${n}`)) n++;
-  return `${s}-${n}`;
-}
-
-const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-const MOD = isMac ? "⌘" : "Ctrl ";
-
 export function CodeView() {
   const on = useFeatures().code;
   const agents = useStore((s) => s.agents);
-  const approvals = useStore((s) => s.approvals);
-  const live = useStore((s) => s.live);
-  const { tasks, error } = useCodeTasks();
+  const computers = useStore((s) => s.computers);
+  const channels = useStore((s) => s.channels);
+  const teams = useTeams();
+  const states = useAgentStates();
+  const { tasks } = useCodeTasks();
+  const tasksVersion = useStore((s) => s.tasksVersion);
   const [targets, setTargets] = useState<ShellTarget[] | null>(null);
-  const [selected, setSelected] = useState<string>(() => load("wisp.code.task", SHELLS));
-  // shells opened beside a task's agents; Shells itself is the tmux-style workspace (ShellWorkspace), stored on its own
-  const [shells, setShells] = useState<Record<string, Shell[]>>(() => {
-    const { [SHELLS]: _plain, ...rest } = load<Record<string, Shell[]>>("wisp.code.shells", {});
-    return rest;
-  });
+  const [sel, setSelRaw] = useState<Sel>(() => parseSel(load("wisp.code.sel", null)));
+  const [view, setView] = useState<View>(() => load("wisp.code.view", "terms"));
   const [focus, setFocus] = useState<Record<string, string>>(() => load("wisp.code.focus", {}));
-  const [layout, setLayout] = useState<Layout>(() => load("wisp.code.layout", "main"));
-  // on a phone the list opens over the panes, so it starts closed
+  const [zoom, setZoom] = useState(false);
   const [listOpen, setListOpen] = useState<boolean>(() => load("wisp.code.list", true) && (typeof window === "undefined" || window.innerWidth >= 768));
   const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
-  const [talking, setTalking] = useState(false);
-  const [sheet, setSheet] = useState(false);
+  const [sheet, setSheet] = useState<Started | null | false>(false);
   const [palette, setPalette] = useState(false);
-  const [picker, setPicker] = useState(0);
   const [review, setReview] = useState(false);
   const [reviewTab, setReviewTab] = useState<ReviewTab>("changes");
-  const tasksVersion = useStore((s) => s.tasksVersion);
-  // on a smaller screen the task list makes way for Review, so the panes keep their room
-  useEffect(() => {
-    if (review && window.innerWidth < 1280) setListOpen(false);
-  }, [review]);
+  const [openShell, setOpenShell] = useState<OpenRequest | null>(null);
 
   useEffect(() => {
     const r = () => setNarrow(window.innerWidth < 768);
@@ -109,75 +95,75 @@ export function CodeView() {
     api<Record<string, string>>("GET", "/api/keyboard").then((keyboard) => useStore.setState({ keyboard }), () => {});
   }, []);
 
-  useEffect(() => save("wisp.code.task", selected), [selected]);
-  useEffect(() => {
-    save("wisp.code.shells", shells);
-  }, [shells]);
+  useEffect(() => save("wisp.code.sel", selKey(sel)), [sel]);
+  useEffect(() => save("wisp.code.view", view), [view]);
   useEffect(() => save("wisp.code.focus", focus), [focus]);
-  useEffect(() => save("wisp.code.layout", layout), [layout]);
   useEffect(() => {
     if (!narrow) save("wisp.code.list", listOpen);
   }, [listOpen, narrow]);
 
-  const task = tasks?.find((t) => t.root.id === selected) ?? null;
-  // a task that's gone (deleted, or Code lost access) falls back to Shells
+  const team = sel.kind === "team" ? teams.find((t) => t.id === sel.id) : undefined;
+  const agent = sel.kind === "agent" ? agents.find((a) => a.id === sel.id) : undefined;
+  // something that's gone (deleted, or not yours to see) falls back to Shells
   useEffect(() => {
-    if (tasks && selected !== SHELLS && !task) setSelected(SHELLS);
-  }, [tasks, selected, task]);
+    if ((sel.kind === "team" && teams.length && !team) || (sel.kind === "agent" && agents.length && !agent)) setSelRaw({ kind: "shells" });
+  }, [sel, team, agent, teams.length, agents.length]);
 
-  const allShells = useMemo(() => Object.values(shells).flat(), [shells]);
-  const myShells = (shells[selected] ?? []).flatMap((s) => {
-    const target = targets?.find((t) => t.id === s.computerId);
-    return target ? [{ ...s, target }] : [];
-  });
+  // looking at an agent is seeing what it finished
+  const seen = useCallback((ids: string[]) => {
+    const f = useStore.getState().finished;
+    if (ids.some((id) => f[id])) useStore.setState({ finished: Object.fromEntries(Object.entries(f).filter(([id]) => !ids.includes(id))) });
+  }, []);
+  const members = useMemo(() => (team ? team.members.map((m) => agents.find((a) => a.id === m.agentId)).filter((a): a is Agent => !!a) : agent ? [agent] : []), [team, agent, agents]);
+  const finished = useStore((s) => s.finished);
+  useEffect(() => {
+    if (members.length) seen(members.map((a) => a.id));
+  }, [members, finished, seen]);
 
-  // the panes, in order: a task's agents, then its shells
-  const taskAgents = task ? task.agentIds.map((id) => agents.find((a) => a.id === id)).filter((a): a is NonNullable<typeof a> => !!a) : [];
-  const paneIds = [...taskAgents.map((a) => a.id), ...myShells.map((s) => s.key)];
-  const focused = paneIds.includes(focus[selected] ?? "") ? focus[selected]! : (paneIds[0] ?? null);
-  const setFocused = useCallback((id: string) => setFocus((f) => ({ ...f, [selected]: id })), [selected]);
-  const effLayout: Layout = narrow ? "zoom" : layout;
-
-  const addShell = useCallback(
-    (target: ShellTarget, stem?: string) => {
-      const list = shells[selected] ?? [];
-      if (list.length >= MAX_SHELLS) return;
-      const s: Shell = { key: crypto.randomUUID(), computerId: target.id, session: newSession(stem ?? target.name, target.id, allShells) };
-      setShells((all) => ({ ...all, [selected]: [...(all[selected] ?? []), s] }));
-      setFocused(s.key);
+  const setSel = useCallback(
+    (s: Sel) => {
+      setSelRaw(s);
+      setZoom(false);
+      setReview(false);
+      if (narrow) setListOpen(false);
     },
-    [shells, selected, allShells, setFocused],
+    [narrow],
   );
-  const removeShell = (key: string) => setShells((all) => ({ ...all, [selected]: (all[selected] ?? []).filter((s) => s.key !== key) }));
+  const jump = useCallback((agentId: string) => setSel({ kind: "agent", id: agentId }), [setSel]);
 
-  /** ⌘D: a shell beside the focused agent, on its computer; in Shells, the menu of computers */
-  const split = useCallback(() => {
-    const agent = taskAgents.find((a) => a.id === focused) ?? taskAgents[0];
-    const target = agent?.computerId ? targets?.find((t) => t.id === agent.computerId) : undefined;
-    if (task && target) return addShell(target, task.root.title);
-    if (targets?.length === 1) return addShell(targets[0]);
-    setPicker((n) => n + 1);
-  }, [taskAgents, focused, targets, task, addShell]);
+  const paneIds = members.map((a) => a.id);
+  const k = selKey(sel);
+  const focused = paneIds.includes(focus[k] ?? "") ? focus[k]! : (paneIds[0] ?? null);
+  const setFocused = useCallback((id: string) => setFocus((f) => ({ ...f, [k]: id })), [k]);
 
-  const tasksInOrder = useMemo(() => (tasks ? groupTasks(tasks).flatMap((g) => g.tasks) : []), [tasks]);
-  const stepTask = useCallback(
+  // a team that codes in a repo: its latest task, for Changes and Files
+  const codeTask = useMemo(() => (team ? tasks?.find((t) => t.team.id === team.id && branchesOf(t).length > 0) : undefined), [team, tasks]);
+
+  const order: Sel[] = useMemo(() => [...teams.map((t) => ({ kind: "team" as const, id: t.id })), ...agents.map((a) => ({ kind: "agent" as const, id: a.id })), { kind: "shells" as const }], [teams, agents]);
+  const step = useCallback(
     (d: 1 | -1) => {
-      const ids = [SHELLS, ...tasksInOrder.map((t) => t.root.id)];
-      const i = ids.indexOf(selected);
-      setSelected(ids[(i + d + ids.length) % ids.length]);
-      setTalking(false);
+      const i = order.findIndex((s) => selKey(s) === k);
+      setSel(order[(i + d + order.length) % order.length]);
     },
-    [tasksInOrder, selected],
+    [order, k, setSel],
   );
 
-  // the keys from the design; ⌘ shortcuts work everywhere in Code, others stay out of text fields and shells
+  const started = (s: Started) => {
+    setSheet(false);
+    if (s.kind === "shell") {
+      setSel({ kind: "shells" });
+      setOpenShell({ computerId: s.computerId, launch: s.launch, n: Date.now() });
+    } else setSel(s);
+  };
+
+  // the keys: ⌘ shortcuts work everywhere in Code, others stay out of text fields and shells
   const lastEsc = useRef(0);
   useEffect(() => {
     if (!on) return;
-    const k = (e: KeyboardEvent) => {
+    const handler = (e: KeyboardEvent) => {
       if (document.querySelector('[role="dialog"]')) return;
       const mod = isMac ? e.metaKey : e.ctrlKey;
-      const t = e.target as HTMLElement | null;
+      const t = e.target instanceof HTMLElement ? e.target : null;
       const inShell = !!t?.closest(".xterm");
       const typing = !inShell && !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
       const take = (f: () => void) => {
@@ -185,53 +171,42 @@ export function CodeView() {
         e.stopPropagation();
         f();
       };
-      // Shells is the tmux-style workspace, which has its own split, pane and zoom keys
-      const own = !task && (e.key.toLowerCase() === "d" || e.key === "Enter" || /^[1-9]$/.test(e.key));
+      // Shells is the tmux-style workspace, with its own split, pane and zoom keys
+      const own = sel.kind === "shells" && (e.key.toLowerCase() === "d" || e.key === "Enter" || /^[1-9]$/.test(e.key));
       if (mod && own) return;
       if (mod && !e.shiftKey && !e.altKey) {
         const n = Number(e.key);
         if (n >= 1 && n <= 9 && paneIds[n - 1]) return take(() => setFocused(paneIds[n - 1]));
         switch (e.key.toLowerCase()) {
+          case "t":
+          case "n":
+            return take(() => setSheet(null));
           case "k":
             return take(() => setPalette(true));
-          case "n":
-            return take(() => setSheet(true));
           case "b":
             return take(() => setListOpen((v) => !v));
           case "]":
-            return take(() => stepTask(1));
+            return take(() => step(1));
           case "[":
-            return take(() => stepTask(-1));
-          case "d":
-            return take(split);
+            return take(() => step(-1));
           case "i":
-            return task && taskAgents.some((a) => a.id === focused) ? take(() => setTalking(true)) : undefined;
+            return paneIds.length ? take(() => window.dispatchEvent(new CustomEvent("wisp-code-keyboard", { detail: "talk" }))) : undefined;
           case "enter":
-            return take(() => setLayout((l) => (l === "zoom" ? "main" : "zoom")));
+            return paneIds.length > 1 ? take(() => setZoom((z) => !z)) : undefined;
         }
       }
-      if (mod && e.shiftKey && e.key.toLowerCase() === "d") return take(split);
-      if (mod && e.shiftKey && task) {
-        const n = ["Digit1", "Digit2", "Digit3"].indexOf(e.code);
-        if (n >= 0) return take(() => (setReview(true), setReviewTab((["changes", "files", "checks"] as const)[n])));
+      if (mod && e.shiftKey && !e.altKey) {
+        const key = e.key.toLowerCase();
+        if (key === "p") return take(() => setPalette(true));
         // take the focused agent's keyboard, or hand it back
-        const kb = e.key.toLowerCase() === "k" ? "take" : e.key.toLowerCase() === "h" ? "back" : null;
-        if (kb) return take(() => window.dispatchEvent(new CustomEvent("wisp-code-keyboard", { detail: kb })));
-        const act = e.key.toLowerCase() === "b" ? "back" : e.key.toLowerCase() === "m" ? "merge" : null;
-        if (act)
-          return take(() => {
-            setReview(true);
-            setReviewTab("changes");
-            // the panel may be opening: let it mount before it hears what to do
-            setTimeout(() => window.dispatchEvent(new CustomEvent("wisp-code-review", { detail: act })), 50);
-          });
+        const kb = key === "k" ? "take" : key === "h" ? "back" : null;
+        if (kb && paneIds.length) return take(() => window.dispatchEvent(new CustomEvent("wisp-code-keyboard", { detail: kb })));
       }
-      if (e.altKey && !mod && !inShell && !typing && (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      if (e.altKey && !mod && !inShell && !typing && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key) && paneIds.length) {
         const i = paneIds.indexOf(focused ?? "");
         const d = e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 1;
-        if (paneIds.length) return take(() => setFocused(paneIds[(i + d + paneIds.length) % paneIds.length]));
+        return take(() => setFocused(paneIds[(i + d + paneIds.length) % paneIds.length]));
       }
-      if (e.altKey && !mod && (e.key === "1" || e.key === "2" || e.code === "Digit1" || e.code === "Digit2") && !inShell && !typing) return take(() => setLayout(e.code === "Digit2" || e.key === "2" ? "cols" : "main"));
       // esc twice stops the focused agent's current step
       if (e.key === "Escape" && !typing && !inShell) {
         const now = Date.now();
@@ -242,26 +217,22 @@ export function CodeView() {
         lastEsc.current = now;
       }
     };
-    window.addEventListener("keydown", k, true);
-    return () => window.removeEventListener("keydown", k, true);
-  }, [on, paneIds, focused, setFocused, stepTask, split, task, taskAgents]);
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [on, sel.kind, paneIds, focused, setFocused, step]);
 
   const paletteItems: PaletteItem[] = useMemo(() => {
-    const items: PaletteItem[] = [];
-    taskAgents.forEach((a, i) => items.push({ id: `pane:${a.id}`, label: `Go to ${a.name}'s pane`, sub: task?.root.title, keys: `${MOD}${i + 1}`, icon: <GhostIcon color={agentColor(a)} size={13} />, run: () => setFocused(a.id) }));
-    taskAgents.forEach((a) => items.push({ id: `talk:${a.id}`, label: `Talk to ${a.name}`, keys: `${MOD}I`, icon: <MessageSquare size={13} />, run: () => (setFocused(a.id), setTalking(true)) }));
-    taskAgents.forEach((a) => {
-      const t = a.computerId ? targets?.find((x) => x.id === a.computerId) : undefined;
-      if (t) items.push({ id: `shell:${a.id}`, label: `Open a shell on ${a.name}'s computer`, sub: t.name, icon: <SquareTerminal size={13} />, run: () => addShell(t, task?.root.title) });
-    });
-    items.push({ id: "new", label: "New task", keys: `${MOD}N`, icon: <Plus size={13} />, run: () => setSheet(true) });
-    if (task) (targets ?? []).forEach((t) => items.push({ id: `sh:${t.id}`, label: `New shell on ${t.name}`, icon: <SquareTerminal size={13} />, run: () => addShell(t) }));
-    items.push({ id: "shells", label: "Shells", sub: "plain terminals on your computers", icon: <SquareTerminal size={13} />, run: () => setSelected(SHELLS) });
-    (tasks ?? []).forEach((t) => items.push({ id: `task:${t.root.id}`, label: t.root.title, sub: repoName(t.team.repo), icon: <span className="h-[7px] w-[7px] rounded-full" style={{ background: STATE_COLOR[t.state] }} />, run: () => setSelected(t.root.id) }));
-    items.push({ id: "list", label: listOpen ? "Hide the task list" : "Show the task list", keys: `${MOD}B`, icon: <PanelLeft size={13} />, run: () => setListOpen((v) => !v) });
-    items.push({ id: "zoom", label: layout === "zoom" ? "Show all panes" : "Zoom this pane", keys: `${MOD}↵`, icon: <Maximize2 size={13} />, run: () => setLayout((l) => (l === "zoom" ? "main" : "zoom")) });
+    const items: PaletteItem[] = [{ id: "start", label: "Start an agent", keys: `${MOD}T`, icon: <Plus size={13} />, run: () => setSheet(null) }];
+    members.forEach((a, i) => items.push({ id: `pane:${a.id}`, label: `Go to ${a.name}'s terminal`, keys: `${MOD}${i + 1}`, icon: <Mini agent={a} size={13} />, run: () => setFocused(a.id) }));
+    members.forEach((a) => items.push({ id: `talk:${a.id}`, label: `Talk to ${a.name}`, keys: `${MOD}I`, icon: <MessageSquare size={13} />, run: () => (setFocused(a.id), setTimeout(() => window.dispatchEvent(new CustomEvent("wisp-code-keyboard", { detail: "talk" })), 30)) }));
+    teams.forEach((t) => items.push({ id: `team:${t.id}`, label: t.name, sub: "team", icon: <TeamFaces agents={t.members.map((m) => agents.find((a) => a.id === m.agentId))} size={13} ring="#16161a" />, run: () => setSel({ kind: "team", id: t.id }) }));
+    agents.forEach((a) => items.push({ id: `agent:${a.id}`, label: a.name, sub: "agent", icon: <Mini agent={a} size={13} />, run: () => setSel({ kind: "agent", id: a.id }) }));
+    (targets ?? []).forEach((t) => items.push({ id: `sh:${t.id}`, label: `New shell on ${t.name}`, icon: <SquareTerminal size={13} />, run: () => started({ kind: "shell", computerId: t.id }) }));
+    items.push({ id: "list", label: listOpen ? "Hide the sidebar" : "Show the sidebar", keys: `${MOD}B`, icon: <PanelLeft size={13} />, run: () => setListOpen((v) => !v) });
+    if (members.length > 1) items.push({ id: "zoom", label: zoom ? "Show every terminal" : "Zoom this terminal", keys: `${MOD}↵`, icon: <Maximize2 size={13} />, run: () => setZoom((z) => !z) });
     return items;
-  }, [taskAgents, task, targets, tasks, listOpen, layout, setFocused, addShell]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [members, teams, agents, targets, listOpen, zoom, setFocused, setSel]);
 
   if (!on)
     return (
@@ -273,170 +244,158 @@ export function CodeView() {
       </Empty>
     );
 
-  const needs = task ? taskAgents.filter((a) => paneState(task, a.id, approvals, Object.values(live).some((r) => r.agentId === a.id)) === "needs").length : 0;
-  const showList = listOpen;
+  const all = Object.values(states);
+  const needsN = all.filter((s) => s === "needs").length;
+  const workingN = all.filter((s) => s === "working").length;
+  const toggleList = (
+    <button type="button" onClick={() => setListOpen((v) => !v)} aria-label={listOpen ? "Hide the sidebar" : "Show the sidebar"} title={`Sidebar  ${MOD}B`} className="-ml-1.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[#a1a1aa] transition-colors hover:bg-white/[.06] hover:text-[#f2f2f4]">
+      <PanelLeft size={16} strokeWidth={1.8} />
+    </button>
+  );
+  const whereOf = (a: Agent) => {
+    const comp = a.computerId ? computers.find((c) => c.id === a.computerId)?.name : undefined;
+    const device = targets?.find((t) => t.kind === "device" && !!t.nodeId && t.nodeId === a.nodeId)?.name;
+    return comp ?? device ?? "";
+  };
+  const roleOf = (a: Agent) => {
+    const m = team?.members.find((x) => x.agentId === a.id);
+    return m ? (team!.leads.includes(a.id) ? "lead" : (m.role || "").toLowerCase()) : undefined;
+  };
+  const chatTeam = team ? channels.find((c) => c.id === team.channelId)?.settings.team ?? null : null;
+  const shown = zoom && focused ? members.filter((a) => a.id === focused) : members;
 
   return (
     <div className="relative flex h-full min-h-0 bg-[#0c0c0e] text-[#f2f2f4] max-md:pb-[88px]">
-      {showList && (
+      {listOpen && (
         <>
           {narrow && <div className="m-scrim absolute inset-0 z-20 bg-black/50" onClick={() => setListOpen(false)} />}
-          <TaskList
-            tasks={tasks}
-            error={error}
-            selected={selected}
-            narrow={narrow}
-            onPick={(id) => {
-              setSelected(id);
-              setTalking(false);
-              if (narrow) setListOpen(false);
-            }}
-            onNew={() => setSheet(true)}
-          />
+          <Sidebar teams={teams} agents={agents} states={states} sel={sel} narrow={narrow} targets={targets} onPick={setSel} onStart={() => setSheet(null)} onShell={(t) => started({ kind: "shell", computerId: t.id })} />
         </>
       )}
-      {!task ? (
+      {sel.kind === "shells" ? (
         <main className="flex min-w-0 flex-1 flex-col">
           <ShellWorkspace
             embedded
+            open={openShell}
             lead={
               <>
-                <button type="button" onClick={() => setListOpen((v) => !v)} aria-label={showList ? "Hide the task list" : "Show the task list"} title={`Tasks  ${MOD}B`} className="-ml-1.5 grid h-8 w-8 place-items-center rounded-lg text-[#a1a1aa] transition-colors hover:bg-white/[.06] hover:text-[#f2f2f4]">
-                  <PanelLeft size={16} strokeWidth={1.8} />
-                </button>
+                {toggleList}
                 <span className="text-[14px] font-semibold">Shells</span>
               </>
             }
           />
         </main>
       ) : (
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-12 shrink-0 items-center gap-2.5 border-b border-white/[.06] pl-3 pr-3">
-          <button type="button" onClick={() => setListOpen((v) => !v)} aria-label={showList ? "Hide the task list" : "Show the task list"} title={`Tasks  ${MOD}B`} className="grid h-8 w-8 place-items-center rounded-lg text-[#a1a1aa] transition-colors hover:bg-white/[.06] hover:text-[#f2f2f4]">
-            <PanelLeft size={16} strokeWidth={1.8} />
-          </button>
-          <span className="truncate text-[14px] font-semibold">{task ? task.root.title : "Shells"}</span>
-          {task && <span className="hidden truncate font-mono text-[11.5px] text-[#8e8e96] sm:inline">{repoName(task.team.repo)}</span>}
-          <span className="flex-1" />
-          {!narrow && paneIds.length > 1 && (
-            <div role="group" aria-label="Layout" className="flex gap-0.5">
-              {(
-                [
-                  ["main", "Main and stack  ⌥1", <MainIcon key="m" />],
-                  ["cols", "Side by side  ⌥2", <Columns2 key="c" size={15} strokeWidth={1.8} />],
-                  ["zoom", `Zoom  ${MOD}↵`, <Maximize2 key="z" size={14} strokeWidth={1.8} />],
-                ] as const
-              ).map(([id, label, icon]) => (
-                <button key={id} type="button" onClick={() => setLayout(id)} aria-pressed={layout === id} aria-label={label} title={label} className={cx("grid h-6 w-7 place-items-center rounded-[5px] transition-colors", layout === id ? "bg-[#2a2a2f] text-[#f2f2f4]" : "text-[#a1a1aa] hover:text-[#f2f2f4]")}>
-                  {icon}
-                </button>
-              ))}
-            </div>
-          )}
-          {task && branchesOf(task).length > 0 && (
-            <button type="button" onClick={() => setReview((v) => !v)} aria-pressed={review} title={`Review  ${MOD}⇧1`} className={cx("inline-flex h-7 items-center gap-1.5 rounded-[7px] border px-2.5 text-[12.5px] transition-[background-color,border-color,transform] active:scale-[.96]", review ? "border-white/[.18] bg-[#2a2a2f]" : "border-white/[.09] bg-[#1d1d21] hover:bg-[#26262b]")}>
-              Review
-            </button>
-          )}
-          {targets && targets.length > 0 && (myShells.length < MAX_SHELLS) && (
-            <ShellMenu key={picker} open={picker > 0} targets={targets} onPick={(t) => addShell(t, task?.root.title)} label={task ? "Shell" : "New shell"} />
-          )}
-        </header>
-
-        {paneIds.length === 0 ? (
-          <Empty>
-            {task ? (
-              <p className="text-[13px] text-[#a1a1aa]">No agent has picked this up yet.</p>
-            ) : targets === null ? (
-              <p className="text-[12.5px] text-[#8e8e96]">Loading…</p>
-            ) : targets.length === 0 ? (
-              <>
-                <p className="text-[13px] text-[#a1a1aa]">No computers of yours to open a terminal on.</p>
-                <a href={href({ view: "computers", computerId: null })} className="text-[12.5px] text-[#6aa2ff] hover:text-[#9cc2ff]">
-                  Computers
-                </a>
-              </>
-            ) : (
-              <p className="text-[13px] text-[#a1a1aa]">A shell on one of your computers.</p>
-            )}
-          </Empty>
-        ) : (
-          <div className="grid min-h-0 flex-1 gap-2.5 p-2.5" style={gridStyle(effLayout, paneIds.length)}>
-            {paneIds.map((id, i) => {
-              const place = placeOf(effLayout, id, focused, paneIds, i);
-              if (!place) return null;
-              const agent = taskAgents.find((a) => a.id === id);
-              if (agent && task)
-                return <AgentPane key={`${task.root.id}:${id}`} task={task} agent={agent} focused={focused === id} onFocus={() => setFocused(id)} talking={talking} setTalking={setTalking} style={place} shell={targets?.find((t) => t.kind === "device" && !!t.nodeId && t.nodeId === agent.nodeId)} />;
-              const s = myShells.find((x) => x.key === id)!;
-              return (
-                <div key={id} style={place} className="grid min-h-0 min-w-0">
-                  <TerminalPane target={s.target} session={s.session} focused={focused === id} onFocus={() => setFocused(id)} onClose={() => removeShell(id)} />
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* a tmux-style status line: the task, its panes, and what needs you */}
-        {(task || paneIds.length > 0) && (
-          <footer className="flex h-[26px] shrink-0 items-center gap-0.5 overflow-x-auto border-t border-white/[.06] bg-[#121215] px-2 font-mono text-[11.5px] text-[#a1a1aa]">
-            <span className="mr-2 shrink-0 rounded-[3px] bg-[#26262b] px-2 py-px font-semibold text-[#f2f2f4]">{task ? statusName(task) : "shells"}</span>
-            {paneIds.map((id, i) => {
-              const a = taskAgents.find((x) => x.id === id);
-              const st = a && task ? paneState(task, a.id, approvals, Object.values(live).some((r) => r.agentId === a.id)) : null;
-              const name = a ? a.name.toLowerCase() : (myShells.find((x) => x.key === id)?.session ?? "shell");
-              return (
-                <button key={id} type="button" onClick={() => setFocused(id)} className={cx("shrink-0 rounded-[3px] px-[7px] py-px transition-colors", id === focused ? "bg-[#26262b] text-[#f2f2f4]" : st === "needs" ? "text-[#ffb340]" : "hover:text-[#f2f2f4]")}>
-                  {i + 1}:{name}
-                  {id === focused ? "*" : ""}
-                  {st === "needs" ? " !" : ""}
-                </button>
-              );
-            })}
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <header className="flex h-11 shrink-0 items-center gap-2.5 border-b border-white/[.06] pl-3 pr-2.5">
+            {toggleList}
+            <span className="truncate text-[14px] font-semibold">{team?.name ?? agent?.name ?? ""}</span>
+            <span className="hidden truncate text-[12px] text-[#8e8e96] sm:inline">{team ? teamSubtitle(team, agents) : agent ? [harness(agent), whereOf(agent)].filter(Boolean).join(" · ") : ""}</span>
             <span className="flex-1" />
-            {task && <span className={cx("shrink-0", needs > 0 && "text-[#ffb340]")}>{needs === 1 ? "1 needs you" : `${needs} need you`}</span>}
-            {!narrow && <span className="ml-3 shrink-0 text-[#6b6b75]">{MOD}K</span>}
+            {team && (
+              <div role="group" aria-label="View" className="flex gap-0.5 rounded-[7px] bg-[#151518] p-0.5">
+                {(["terms", "flow"] as const).map((v) => (
+                  <button key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v} className={cx("h-6 rounded-[5px] px-[9px] text-[12px] transition-colors", view === v ? "bg-[#2a2a2f] text-[#f2f2f4]" : "text-[#a1a1aa] hover:text-[#f2f2f4]")}>
+                    {v === "terms" ? "Terminals" : "Flow"}
+                  </button>
+                ))}
+              </div>
+            )}
+            {codeTask && (
+              <>
+                <HeadButton on={review && reviewTab === "files"} onClick={() => (setReviewTab("files"), setReview((r) => !(r && reviewTab === "files")))}>
+                  Files
+                </HeadButton>
+                <HeadButton on={review && reviewTab === "changes"} onClick={() => (setReviewTab("changes"), setReview((r) => !(r && reviewTab === "changes")))}>
+                  Changes
+                  <span className="rounded-lg bg-[#26262b] px-[5px] text-[10.5px] text-[#a1a1aa]">{branchesOf(codeTask).length}</span>
+                </HeadButton>
+              </>
+            )}
+            {team ? (
+              <a href={href({ view: "chat", channelId: team.channelId, threadId: null })} className="inline-flex h-7 items-center rounded-[7px] border border-white/[.09] bg-[#1d1d21] px-2.5 text-[12.5px] text-[#f2f2f4] transition-[background-color,transform] hover:bg-[#26262b] active:scale-[.96]">
+                Open chat
+              </a>
+            ) : agent ? (
+              <HeadButton on={false} onClick={() => void openDm(agent.id)}>
+                Open chat
+              </HeadButton>
+            ) : null}
+          </header>
+
+          <div className="flex min-h-0 flex-1">
+            {team && view === "flow" && chatTeam ? (
+              <FlowLive team={chatTeam} agents={agents} states={states} onOpen={jump} />
+            ) : members.length === 0 ? (
+              <Empty>
+                <p className="text-[13px] text-[#a1a1aa]">No agents here yet.</p>
+              </Empty>
+            ) : (
+              <div className="grid min-h-0 min-w-0 flex-1 gap-2.5 p-2.5" style={gridStyle(shown.length)}>
+                {shown.map((a) => (
+                  <AgentTerminal
+                    key={`${k}:${a.id}`}
+                    agent={a}
+                    state={states[a.id] ?? "idle"}
+                    role={team ? roleOf(a) : undefined}
+                    where={whereOf(a)}
+                    focused={focused === a.id}
+                    onFocus={() => setFocused(a.id)}
+                    onJump={jump}
+                    shell={targets?.find((t) => t.kind === "device" && !!t.nodeId && t.nodeId === a.nodeId)}
+                  />
+                ))}
+              </div>
+            )}
+            {team && <Between key={team.channelId} channelId={team.channelId} onJump={jump} />}
+            {review && codeTask && <ReviewPanel key={codeTask.root.id} task={codeTask} tab={reviewTab} setTab={setReviewTab} version={tasksVersion} />}
+          </div>
+
+          <footer className="flex h-7 shrink-0 items-center gap-3.5 overflow-x-auto border-t border-white/[.06] bg-[#0f0f11] px-3.5 text-[11.5px] text-[#a1a1aa]">
+            <span className="shrink-0">{agents.length === 1 ? "1 agent" : `${agents.length} agents`}</span>
+            <span className="shrink-0">{workingN} working</span>
+            <span className={cx("shrink-0", needsN > 0 && "text-[#ffb340]")}>{needsN ? `${needsN} need${needsN === 1 ? "s" : ""} you` : "nothing needs you"}</span>
+            <span className="flex-1" />
+            {!narrow && (
+              <>
+                <span className="shrink-0">
+                  <span className="font-mono text-[#d4d4d8]">{MOD}⇧K</span> take the keyboard
+                </span>
+                <span className="shrink-0">
+                  <span className="font-mono text-[#d4d4d8]">{MOD}K</span> commands
+                </span>
+              </>
+            )}
           </footer>
-        )}
-      </main>
+        </main>
       )}
-      {review && task && <ReviewPanel key={task.root.id} task={task} tab={reviewTab} setTab={setReviewTab} version={tasksVersion} />}
-      {sheet && <NewTaskSheet onClose={() => setSheet(false)} onStarted={(id) => (setSheet(false), id && setSelected(id))} />}
+      {sheet !== false && <StartSheet targets={targets} initial={sheet ?? (team ? { kind: "team", id: team.id } : agent ? { kind: "agent", id: agent.id } : null)} onClose={() => setSheet(false)} onStarted={started} />}
       {palette && <Palette items={paletteItems} onClose={() => setPalette(false)} />}
     </div>
   );
 }
 
-function statusName(task: CodeTask) {
-  return task.root.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").split("-").slice(0, 2).join("-") || "task";
+const harness = (a: Agent) => ({ codex: "Codex", "claude-code": "Claude Code", gemini: "Gemini CLI" })[a.harness as "codex"] ?? a.harness;
+
+function teamSubtitle(team: Team, agents: Agent[]) {
+  const n = team.members.length;
+  const lead = team.leadId ? agents.find((a) => a.id === team.leadId)?.name : undefined;
+  return `${n === 1 ? "1 agent" : `${n} agents`}${lead ? ` · ${lead} leads` : ""}`;
 }
 
-function MainIcon() {
+/** Every member side by side: up to three across, four as a square. */
+function gridStyle(n: number): CSSProperties {
+  if (n <= 1) return { gridTemplateColumns: "minmax(0,1fr)", gridTemplateRows: "minmax(0,1fr)" };
+  const cols = n === 4 ? 2 : Math.min(n, 3);
+  return { gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gridTemplateRows: `repeat(${Math.ceil(n / cols)}, minmax(0,1fr))` };
+}
+
+function HeadButton({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d="M12 4v16M12 12h9" />
-    </svg>
+    <button type="button" onClick={onClick} aria-pressed={on} className={cx("inline-flex h-7 items-center gap-1.5 rounded-[7px] border px-2.5 text-[12.5px] transition-[background-color,border-color,transform] active:scale-[.96]", on ? "border-white/[.18] bg-[#2a2a2f]" : "border-white/[.09] bg-[#1d1d21] hover:bg-[#26262b]")}>
+      {children}
+    </button>
   );
-}
-
-function gridStyle(layout: Layout, n: number): CSSProperties {
-  if (layout === "zoom" || n === 1) return { gridTemplateColumns: "minmax(0,1fr)", gridTemplateRows: "minmax(0,1fr)" };
-  if (layout === "cols") {
-    const cols = Math.min(n, 3);
-    return { gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gridTemplateRows: `repeat(${Math.ceil(n / cols)}, minmax(0,1fr))` };
-  }
-  return { gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr)", gridTemplateRows: `repeat(${n - 1}, minmax(0,1fr))` };
-}
-
-/** Where a pane sits: the focused one big on the left and the rest stacked, side by side, or zoomed. */
-function placeOf(layout: Layout, id: string, focused: string | null, ids: string[], i: number): CSSProperties | null {
-  if (layout === "zoom" || ids.length === 1) return id === focused || (!focused && i === 0) ? { gridColumn: 1, gridRow: 1 } : null;
-  if (layout === "cols") return {};
-  if (id === focused) return { gridColumn: 1, gridRow: `1 / span ${ids.length - 1}` };
-  const rest = ids.filter((x) => x !== focused);
-  return { gridColumn: 2, gridRow: rest.indexOf(id) + 1 };
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
@@ -450,81 +409,67 @@ function Empty({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ShellMenu({ targets, onPick, label, open }: { targets: ShellTarget[]; onPick: (t: ShellTarget) => void; label: string; open: boolean }) {
-  const opened = useRef(false);
-  return (
-    <Menu
-      align="right"
-      trigger={(_, toggle) => {
-        // ⌘D with no obvious computer opens this menu
-        if (open && !opened.current) {
-          opened.current = true;
-          queueMicrotask(toggle);
-        }
-        return (
-          <button type="button" onClick={toggle} title={`New shell  ${MOD}D`} className="inline-flex h-7 items-center gap-1.5 rounded-[7px] border border-white/[.09] bg-[#1d1d21] px-2.5 text-[12.5px] text-[#f2f2f4] transition-[background-color,transform] hover:bg-[#26262b] active:scale-[.96]">
-            <Plus size={14} strokeWidth={2} />
-            {label}
-          </button>
-        );
-      }}
-      items={targets.map((t) => ({ label: t.online ? t.name : `${t.name} (offline)`, icon: <SquareTerminal size={15} strokeWidth={1.8} />, onSelect: () => onPick(t) }))}
-    />
+/** Teams, Agents and Shells, each with its live status. */
+function Sidebar({ teams, agents, states, sel, narrow, targets, onPick, onStart, onShell }: { teams: Team[]; agents: Agent[]; states: Record<string, AgentState>; sel: Sel; narrow: boolean; targets: ShellTarget[] | null; onPick: (s: Sel) => void; onStart: () => void; onShell: (t: ShellTarget) => void }) {
+  const k = selKey(sel);
+  const row = (on: boolean) => cx("flex h-8 w-full items-center gap-[9px] rounded-[7px] px-2 text-left transition-colors", on ? "bg-white/[.075]" : "hover:bg-white/[.045]");
+  const plus = (label: string, onClick?: () => void) => (
+    <button type="button" onClick={onClick} aria-label={label} title={label} className="grid h-7 w-7 place-items-center rounded-[7px] text-[#a1a1aa] transition-colors hover:bg-white/[.07] hover:text-[#f2f2f4]">
+      <Plus size={15} strokeWidth={2} />
+    </button>
   );
-}
-
-function TaskList({ tasks, error, selected, narrow, onPick, onNew }: { tasks: CodeTask[] | null; error: string | null; selected: string; narrow: boolean; onPick: (id: string) => void; onNew: () => void }) {
-  const agents = useStore((s) => s.agents);
-  const groups = tasks ? groupTasks(tasks) : [];
   return (
-    <aside aria-label="Coding tasks" className={cx("m-code-list flex w-[244px] shrink-0 flex-col border-r border-white/[.06] bg-[#0f0f11]", narrow && "absolute inset-y-0 left-0 z-30 shadow-2xl")}>
-      <div className="flex h-12 shrink-0 items-center justify-between pl-4 pr-2">
-        <span className="text-[14px] font-semibold">Code</span>
-        <button type="button" onClick={onNew} aria-label="New task" title={`New task  ${MOD}N`} className="grid h-8 w-8 place-items-center rounded-lg text-[#a1a1aa] transition-colors hover:bg-white/[.06] hover:text-[#f2f2f4]">
-          <Plus size={16} strokeWidth={2} />
-        </button>
+    <aside aria-label="Teams, agents and shells" className={cx("m-code-list flex w-[248px] shrink-0 flex-col overflow-y-auto border-r border-white/[.06] bg-[#0f0f11]", narrow && "absolute inset-y-0 left-0 z-30 shadow-2xl")}>
+      <div className="flex h-11 shrink-0 items-center justify-between pl-4 pr-2">
+        <span className="text-[12px] font-semibold text-[#8e8e96]">Teams</span>
+        {plus(`Start  ${MOD}T`, onStart)}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3">
-        <button type="button" onClick={() => onPick(SHELLS)} className={cx("flex items-center gap-2 rounded-[7px] px-2 py-2 text-left text-[13px] transition-colors", selected === SHELLS ? "bg-white/[.07]" : "hover:bg-white/[.04]")}>
-          <SquareTerminal size={14} strokeWidth={1.8} className="text-[#8e8e96]" />
-          <span className="font-medium">Shells</span>
-        </button>
-        {error && !tasks && <div className="px-2 py-3 text-[12px] text-[#8e8e96]">{error}</div>}
-        {tasks && tasks.length === 0 && (
-          <button type="button" onClick={onNew} className="mt-3 rounded-[7px] border border-dashed border-white/[.1] px-3 py-3 text-left text-[12.5px] text-[#8e8e96] transition-colors hover:border-white/20 hover:text-[#f2f2f4]">
-            Start a coding task for a team that works in a repo.
+      <div className="flex flex-col gap-px px-2">
+        {teams.length === 0 && <div className="px-2 pb-1 text-[12px] text-[#71717a]">No teams yet.</div>}
+        {teams.map((t) => {
+          const st = teamState(t.members.map((m) => states[m.agentId] ?? "idle"));
+          return (
+            <button key={t.id} type="button" onClick={() => onPick({ kind: "team", id: t.id })} aria-current={k === `team:${t.id}` ? "true" : undefined} className={row(k === `team:${t.id}`)}>
+              <span className="flex w-[34px] shrink-0">
+                <TeamFaces agents={t.members.map((m) => agents.find((a) => a.id === m.agentId))} />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{t.name}</span>
+              <span className={cx("shrink-0 text-[11px]", st === "needs" ? "font-semibold text-[#ffb340]" : "text-[#8e8e96]")}>{st === "needs" ? "Needs you" : st === "working" ? "Working" : st === "done" ? "Done" : "Idle"}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-1.5 flex h-9 shrink-0 items-center border-t border-white/[.05] px-4 pt-3">
+        <span className="text-[12px] font-semibold text-[#8e8e96]">Agents</span>
+      </div>
+      <div className="flex flex-col gap-px px-2">
+        {agents.length === 0 && <div className="px-2 pb-1 text-[12px] text-[#71717a]">No agents yet.</div>}
+        {agents.map((a) => (
+          <button key={a.id} type="button" onClick={() => onPick({ kind: "agent", id: a.id })} aria-current={k === `agent:${a.id}` ? "true" : undefined} className={row(k === `agent:${a.id}`)}>
+            <Mini agent={a} size={20} />
+            <span className="min-w-0 flex-1 truncate text-[13px]">{a.name}</span>
+            <StateMark state={states[a.id] ?? "idle"} />
           </button>
-        )}
-        {groups.map((g) => (
-          <div key={g.label} className="flex flex-col gap-0.5">
-            <div className="flex justify-between px-2 pb-1 pt-3 text-[11px] text-[#8e8e96]">
-              <span>{g.label}</span>
-              <span>{g.tasks.length}</span>
-            </div>
-            {g.tasks.map((t) => (
-              <button
-                key={t.root.id}
-                type="button"
-                onClick={() => onPick(t.root.id)}
-                className={cx("flex w-full flex-col gap-[3px] rounded-[7px] p-2 text-left transition-colors", selected === t.root.id ? "bg-white/[.07]" : "hover:bg-white/[.04]")}
-              >
-                <div className="flex w-full items-center gap-2">
-                  <span className={cx("h-[7px] w-[7px] shrink-0 rounded-full", t.state === "working" && "m-code-pulse")} style={{ background: STATE_COLOR[t.state] }} />
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{t.root.title}</span>
-                  <span className="shrink-0 text-[11px] text-[#8e8e96]">{timeAgo(t.root.updatedAt)}</span>
-                </div>
-                <div className="flex w-full items-center gap-1.5 pl-[15px]">
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[#8e8e96]">{repoName(t.team.repo)}</span>
-                  <span className="flex -space-x-1">
-                    {t.agentIds.slice(0, 4).map((id) => (
-                      <GhostIcon key={id} color={agentColor(agents.find((a) => a.id === id))} size={12} />
-                    ))}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
         ))}
+      </div>
+
+      <div className="mt-1.5 flex h-9 shrink-0 items-center justify-between border-t border-white/[.05] pl-4 pr-2 pt-3">
+        <span className="text-[12px] font-semibold text-[#8e8e96]">Shells</span>
+        {targets && targets.length > 0 && (
+          <Menu
+            align="left"
+            trigger={(_, toggle) => plus("New shell", toggle)}
+            items={targets.map((t) => ({ label: t.online ? t.name : `${t.name} (offline)`, icon: <SquareTerminal size={15} strokeWidth={1.8} />, onSelect: () => onShell(t) }))}
+          />
+        )}
+      </div>
+      <div className="flex flex-col gap-px px-2 pb-3">
+        <button type="button" onClick={() => onPick({ kind: "shells" })} aria-current={k === "shells" ? "true" : undefined} className={row(k === "shells")}>
+          <span className="w-[18px] text-center font-mono text-[12px] text-[#8e8e96]">$</span>
+          <span className="min-w-0 flex-1 truncate text-[13px]">Your shells</span>
+          <span className="font-mono text-[11px] text-[#71717a]">{targets ? `${targets.filter((t) => t.online).length} online` : ""}</span>
+        </button>
       </div>
     </aside>
   );

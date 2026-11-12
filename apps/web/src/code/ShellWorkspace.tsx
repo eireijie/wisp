@@ -54,13 +54,20 @@ const KEYS: [string, string][] = [
 ];
 
 /** `lead`: what the header starts with. `embedded`: inside a page that already keeps clear of the phone's tab bar. */
-export function ShellWorkspace(props: { lead?: ReactNode; embedded?: boolean }) {
+export function ShellWorkspace(props: { lead?: ReactNode; embedded?: boolean; open?: OpenRequest | null }) {
   const workspaceId = useStore((s) => s.me?.workspace.id) ?? "none";
   // a workspace of its own each, started afresh when you switch
   return <Shells key={workspaceId} store={`${STORE}:${workspaceId}`} {...props} />;
 }
 
-function Shells({ lead, embedded = false, store }: { lead?: ReactNode; embedded?: boolean; store: string }) {
+/** Open a new tab on this computer (a shell, or a harness's CLI when `launch` is set); `n` makes each request new. */
+export interface OpenRequest {
+  computerId: string;
+  launch?: string;
+  n: number;
+}
+
+function Shells({ lead, embedded = false, store, open }: { lead?: ReactNode; embedded?: boolean; store: string; open?: OpenRequest | null }) {
   const on = useFeatures().code;
   const [targets, setTargets] = useState<ShellTarget[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +180,20 @@ function Shells({ lead, embedded = false, store }: { lead?: ReactNode; embedded?
     const t: Tab = { id: crypto.randomUUID(), root: leaf, focus: leaf.key };
     setWs((w) => ({ tabs: [...w.tabs, t], active: t.id }));
   };
+
+  // a shell or CLI started from Code's start sheet opens in a tab of its own
+  const opened = useRef(0);
+  useEffect(() => {
+    if (!open || open.n === opened.current || !targets) return;
+    opened.current = open.n;
+    const target = targets.find((t) => t.id === open.computerId);
+    if (!target) return;
+    if (!tab.root) {
+      const leaf = leafFor(target, open.launch);
+      changeTab(tab.id, (t) => ({ ...t, root: leaf, focus: leaf.key, zoom: false }));
+    } else newTab(target, open.launch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, targets]);
 
   const closePane = (key: string) => setWs((w) => dropPane(w, key));
 
