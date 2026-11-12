@@ -308,7 +308,18 @@ describe("harness commands on the device", () => {
 
   it("reads an ACP agent's announced commands", async () => {
     const { acpCommands } = await import("../src/acp.ts");
-    expect(acpCommands([{ name: "model", description: "Switch models", input: { hint: "name" } }, { name: "" }])).toEqual([{ name: "model", description: "Switch models", hint: "name", kind: "command", via: "raw" }]);
+    expect(acpCommands([{ name: "tools", description: "List tools", input: { hint: "name" } }, { name: "" }])).toEqual([{ name: "tools", description: "List tools", hint: "name", kind: "command", via: "raw" }]);
+    // commands Wisp has its own of, or that need a running turn, are left out of chat
+    expect(acpCommands(["help", "reset", "compress", "model", "context", "steer", "queue", "version"].map((name) => ({ name }))).map((c) => c.name)).toEqual(["help", "version"]);
     expect(acpCommands(null)).toEqual([]);
+  });
+});
+
+describe("Claude Code /compact", () => {
+  it("says how far the chat shrank from the compact_boundary line", async () => {
+    const { claudeCompactNotice } = await import("../src/claude-code.ts");
+    expect(claudeCompactNotice({ type: "system", subtype: "compact_boundary", compact_metadata: { pre_tokens: 84000, post_tokens: 22100 } })).toBe("Compacted: 84k → 22.1k tokens");
+    expect(claudeCompactNotice({ type: "system", subtype: "compact_boundary", compact_metadata: { pre_tokens: 84000 } })).toBe("Compacted (it was 84k tokens).");
+    expect(claudeCompactNotice({ type: "system", subtype: "init" })).toBeNull();
   });
 });

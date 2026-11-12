@@ -839,7 +839,7 @@ export class Store {
 
   // --- messages -------------------------------------------------------------
 
-  insertMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; conversationId?: string | null; contextId?: string | null }): Message {
+  insertMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; conversationId?: string | null; contextId?: string | null; startsChat?: boolean }): Message {
     const msg: Message = { id: id("msg"), channelId: m.channelId, threadId: m.threadId ?? null, author: m.author, body: m.body, parts: m.parts ?? [], hop: m.hop ?? 0, createdAt: now(), ...(m.replyToId ? { replyToId: m.replyToId } : {}) };
     // the top of a DM or team splits into chats after a quiet break; threads don't
     let contextId = m.contextId ?? null;
@@ -849,7 +849,8 @@ export class Store {
       // a reply to an earlier request stays in that request's chat, unless someone has written in a
       // newer chat since: then it lands in the chat going on now and brings its own back with it
       const current = latest && (latest.conversationId || latest.id);
-      if (m.conversationId && (!latest || current === m.conversationId)) msg.conversationId = m.conversationId;
+      if (m.startsChat) msg.conversationId = msg.id;
+      else if (m.conversationId && (!latest || current === m.conversationId)) msg.conversationId = m.conversationId;
       else {
         msg.conversationId = natural;
         if (m.conversationId) contextId = m.conversationId;

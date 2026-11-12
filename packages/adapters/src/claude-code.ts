@@ -114,6 +114,8 @@ export const claudeCode: HarnessAdapter = {
           onEvent(e);
         }
         if (m.type === "system" && m.subtype === "init") init = m;
+        const compacted = claudeCompactNotice(m);
+        if (compacted) onEvent({ type: "notice", text: compacted });
         if (m.type === "assistant" && m.message?.usage) lastAssistant = m;
         if (m.type === "rate_limit_event") plan = claudePlan(m.rate_limit_info) ?? plan;
         if (m.type === "result") {
@@ -150,6 +152,17 @@ export const claudeCode: HarnessAdapter = {
  * The window comes from the final result's per-model usage. The final result's `usage` is the
  * sum over every model call in the run, which is what the run cost. Exported for tests.
  */
+/** "Compacted: 84k → 22k tokens" from the `compact_boundary` line a /compact run streams, else null. Exported for tests. */
+export function claudeCompactNotice(m: any): string | null {
+  if (m?.type !== "system" || m.subtype !== "compact_boundary") return null;
+  const meta = m.compact_metadata ?? m.compactMetadata ?? {};
+  const pre = Number(meta.pre_tokens ?? meta.preTokens);
+  const post = Number(meta.post_tokens ?? meta.postTokens);
+  const k = (n: number) => (n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n));
+  if (pre > 0 && post > 0) return `Compacted: ${k(pre)} → ${k(post)} tokens`;
+  return pre > 0 ? `Compacted (it was ${k(pre)} tokens).` : "Compacted.";
+}
+
 export function claudeUsage(lastAssistant: any, result: any): Extract<AgentEvent, { type: "usage" }> | null {
   const u = lastAssistant?.message?.usage;
   // an error Claude Code writes itself (not signed in, say) names "<synthetic>" as its model
