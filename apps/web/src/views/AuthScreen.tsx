@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { SetupStage } from "../components/SetupStage.tsx";
+import { SetupShell } from "../components/SetupShell.tsx";
 import { Check } from "lucide-react";
 import { api } from "../api.ts";
 import { AuthButton, AuthError, AuthField, AuthHero, AuthInput, AuthLink, AuthPage } from "../components/auth.tsx";
@@ -228,9 +228,9 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
   );
   // the first run's account screen stands on the setup stage, with the wisp beside it
   return needsSetup ? (
-    <SetupStage scene={{ name: "account" }}>
-      <div className="setup-rise">{page}</div>
-    </SetupStage>
+    <SetupShell at={0} stepKey="account" line="Hi. Make your account first. It's how you sign in to Wisp from any device.">
+      <div className="ob-narrow">{page}</div>
+    </SetupShell>
   ) : (
     <AuthPage>{page}</AuthPage>
   );

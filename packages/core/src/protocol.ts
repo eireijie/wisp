@@ -299,6 +299,12 @@ export const HubToNode = z.discriminatedUnion("type", [
   z.object({ type: z.literal("connections_keep"), connectionIds: z.array(z.string()), computers: z.array(ComputerSpec) }),
   /** open a harness's config file in the device's own editor; answered with a result ({ path }) */
   z.object({ type: z.literal("harness_open_config"), requestId: z.string(), harness: z.string().max(60), account: z.string().max(64).optional() }),
+  /**
+   * First-run memory import: run this harness once, read-only, in the device owner's home folder,
+   * with Wisp's memory prompt (the device builds it itself; the hub sends no prompt). Answered with
+   * a result ({ answer }). `credential`: the person's own model connection for it, when they have one.
+   */
+  z.object({ type: z.literal("memory_ask"), requestId: z.string(), harness: z.enum(["claude-code", "codex"]), credential: RunCredential.optional(), timeoutMs: z.number().int().positive().max(15 * 60_000).optional() }),
 ]);
 export type HubToNode = z.infer<typeof HubToNode>;
 

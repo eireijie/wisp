@@ -7,6 +7,8 @@ import { obsidianLink, onHubMachine, type MemoryStorage } from "../../obsidian.t
 import { Card, OwnersOnly, PageHeader, Row, Section } from "./parts.tsx";
 import { MemoryRules } from "./workspace.tsx";
 import { MoreOptions } from "../../components/MoreOptions.tsx";
+import { MemoryImport, type Askable } from "../../components/MemoryImport.tsx";
+import { useDevices } from "../../devices.ts";
 
 const Code = ({ children }: { children: ReactNode }) => <code className="rounded bg-code px-1 py-0.5 text-[12px] break-all">{children}</code>;
 
@@ -23,6 +25,7 @@ export function MemoryPage() {
     <>
       <PageHeader title="Memory" />
       <MemoryRules />
+      <ImportFromAI />
       {storage && (
         <MoreOptions about="use another notes app (Obsidian) and sync">
           {isOwner && <Location storage={storage} reload={load} />}
@@ -250,6 +253,76 @@ function ObsidianSteps({ storage, reload }: { storage: MemoryStorage; reload: ()
           </div>
         )}
       </div>
+    </Section>
+  );
+}
+
+/** Bring what another AI knows about you into one agent's notes: the same step as first-run setup. */
+function ImportFromAI() {
+  const agents = useStore((s) => s.agents);
+  const me = useStore((s) => s.me);
+  const devices = useDevices();
+  const mine = agents.filter((a) => a.settings.createdBy === me?.user.id || me?.role === "owner");
+  const [agentId, setAgentId] = useState("");
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const agent = mine.find((a) => a.id === agentId) ?? mine[0];
+  if (!agent) return null;
+  const askable: Askable[] = (devices ?? []).filter((d) => d.mine && d.online).flatMap((d) => ["claude-code", "codex"].filter((h) => d.harnesses?.some((x) => x.id === h)).map((harness) => ({ harness, nodeId: d.id, device: d.name })));
+  return (
+    <Section title="Import from another AI" description="Give an agent what Claude, ChatGPT or another AI already knows about you.">
+      {!open ? (
+        <Card>
+          <Row label="Import into" hint={done}>
+            <div className="flex items-center gap-2">
+              {mine.length > 1 && (
+                <select className="h-9 rounded-lg border border-line bg-card px-2 text-[13.5px]" aria-label="Agent" value={agent.id} onChange={(e) => setAgentId(e.target.value)}>
+                  {mine.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <Button
+                onClick={() => {
+                  setDone(null);
+                  setOpen(true);
+                }}
+              >
+                {mine.length > 1 ? "Start" : `Import into ${agent.name}`}
+              </Button>
+            </div>
+          </Row>
+        </Card>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <MemoryImport
+            agentName={agent.name}
+            askable={askable}
+            saveLabel={`Save to ${agent.name}'s memory`}
+            skipLabel="Cancel"
+            busy={busy}
+            onSkip={() => setOpen(false)}
+            onSave={async (lines) => {
+              setBusy(true);
+              setError(null);
+              try {
+                const r = await api<{ saved: number }>("POST", `/api/agents/${agent.id}/memory-import`, { lines: lines.map((l) => ({ heading: l.heading, text: l.text })) });
+                setDone(`${r.saved} saved to ${agent.name}'s notes.`);
+                setOpen(false);
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+          {error && <p className="text-[13px] text-bad">{error}</p>}
+        </div>
+      )}
     </Section>
   );
 }

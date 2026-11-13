@@ -29,7 +29,7 @@ import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
 import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
 import { spawnSection } from "./spawn.ts";
-import { recordSetupReply, setupChat, setupSection } from "./greeting.ts";
+import { greetingPrompt, greetingWritten, recordSetupReply, setupChat, setupSection } from "./greeting.ts";
 import { foldTeams } from "./fold-teams.ts";
 import { TeamFlows } from "./team-flows.ts";
 import type { RunKind, Store } from "./store.ts";
@@ -729,7 +729,7 @@ export class Hub {
         collect(live, msg.event);
         this.live.set(run.id, live);
         // a background check works quietly: nothing shows in the DM unless it messages the person
-        if (!run.kind) this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, ...this.whereRuns(run), event: msg.event }, this.audience(run.channelId));
+        if (!run.kind || run.kind === "greet") this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, ...this.whereRuns(run), event: msg.event }, this.audience(run.channelId));
         return;
       }
       case "run_done":
@@ -787,6 +787,10 @@ export class Hub {
       store.setRunStatus(run.id, "finalText" in result ? "done" : "failed", "error" in result ? result.error : undefined);
       this.autoMemory.finished(run.id);
       if (agent && run.requestedBy) this.background.warnIfClimbing(agent.workspaceId, run.requestedBy);
+    } else if (run.kind === "greet") {
+      // its own hello, or Wisp's when it couldn't write one: either way the person gets a hello
+      store.setRunStatus(run.id, "finalText" in result ? "done" : "failed", "error" in result ? result.error : undefined);
+      if (!gone) greetingWritten(this, run, "finalText" in result ? result.finalText.trim() || live.text.trim() : null);
     } else if (run.kind === "background") {
       store.setRunStatus(run.id, "finalText" in result ? "done" : "failed", "error" in result ? result.error : undefined);
       this.background.finished(run, "finalText" in result ? result.finalText.trim() || live.text.trim() : `The check failed: ${result.error}`);
@@ -1300,11 +1304,11 @@ export class Hub {
     this.store.setRunStatus(run.id, "running");
     this.broadcast(conn.workspaceId, { type: "agent_status", agentId: agent.id, status: "busy" });
     if (run.kind === "background") this.background.started(run);
-    else if (run.kind !== "memory") this.dropWaitingNotice(run, agent);
+    else if (!run.kind) this.dropWaitingNotice(run, agent);
     // working again, so an earlier "needs you on my computer" no longer stands
     if (agent.computerId) this.computers.dropHelp(agent.computerId, agent.id);
     // lets browsers show "Nova: thinking" right away, before the harness streams anything
-    if (!run.kind) this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: agent.id, channelId: run.channelId, ...this.whereRuns(run), event: { type: "status", text: "started" } }, this.audience(run.channelId));
+    if (!run.kind || run.kind === "greet") this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: agent.id, channelId: run.channelId, ...this.whereRuns(run), event: { type: "status", text: "started" } }, this.audience(run.channelId));
     this.buildPrompt(agent.id, run.channelId, run.threadId, run.triggerMessageId, run).then(
       async (prompt) => {
         // sign-ins to remote connectors that are about to expire are refreshed first
@@ -1323,11 +1327,11 @@ export class Hub {
         const inComputer = this.runsInComputer(agent);
         const connectors = this.connectors.specsFor(agent.id);
         // every background check (and memory pass) starts a new session (its prompt carries what it needs), on the model the person picked for checks
-        const bg = run.kind && run.requestedBy ? this.store.background(agent.id, run.requestedBy) : undefined;
+        const bg = (run.kind === "background" || run.kind === "memory") && run.requestedBy ? this.store.background(agent.id, run.requestedBy) : undefined;
         const sent = credential ? (this.credentialFor(agent) ?? credential) : null;
         const fallback = sent && !agent.model ? await this.connectionDefaultModel(agent, sent.connectionId) : undefined;
         // a memory pass is light work: low effort unless the person picked an effort for background work
-        const effort = bg?.effort ?? (!run.kind ? this.voiceEffort(agent, run.triggerMessageId) : run.kind === "memory" ? this.lowEffort(agent) : undefined);
+        const effort = bg?.effort ?? (!run.kind ? this.voiceEffort(agent, run.triggerMessageId) : run.kind === "memory" || run.kind === "greet" ? this.lowEffort(agent) : undefined);
         const threadId = run.kind === "background" ? BACKGROUND_THREAD : run.kind === "memory" ? MEMORY_THREAD : run.threadId;
         this.send(conn, {
           type: "run",
@@ -1702,6 +1706,7 @@ export class Hub {
   ): Promise<string> {
     const { store } = this;
     if (run?.kind === "memory" && run.id) return this.autoMemory.prompt({ id: run.id, agentId });
+    if (run?.kind === "greet") return greetingPrompt(this, agentId, run.requestedBy ?? null);
     const agent = store.agent(agentId)!;
     const channel = store.channel(channelId)!;
     // a background check has no message that woke it; it gets its own section instead

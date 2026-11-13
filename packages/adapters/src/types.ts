@@ -52,6 +52,11 @@ export interface RunInput {
    * Anything but `true` keeps them out: only Wisp's own tools and the run's connectors load.
    */
   ownPlugins?: boolean;
+  /**
+   * Let the harness read the person's own memory as it would on its own: their user-level
+   * instructions (~/.claude/CLAUDE.md) and its saved memories. Only for the one-off memory import.
+   */
+  ownMemory?: boolean;
   /** Harness-specific extras from the device's config. */
   options?: Record<string, string>;
   /**

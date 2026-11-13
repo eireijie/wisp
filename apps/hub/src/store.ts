@@ -3,7 +3,8 @@ import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
 /** Runs nobody wrote a message for: a background check, or a memory pass after recent work. Both count against the background allowance. */
-export type RunKind = "background" | "memory";
+/** `greet`: a new agent writing its own first hello (greeting.ts); posted like a reply, as the setup's first message. */
+export type RunKind = "background" | "memory" | "greet";
 
 export interface PushPrefs {
   dms?: boolean;

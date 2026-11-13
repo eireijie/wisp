@@ -2,12 +2,14 @@ import { migrateHome } from "./migrate-home.ts";
 import { migrateServices } from "./migrate-services.ts";
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { CONNECTOR_CATALOG, HARNESSES, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, withArticle, TERM_PREFIX, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunCredential, type RunRequest, type VmConfig, signInProblem } from "@wisp/core";
 import { HARNESS_SPECS, HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
 import { WispClient, WispError } from "@wisp/sdk";
+import { MEMORY_ANSWER_MAX, memoryPrompt } from "@wisp/core/src/memory-import.ts";
 import { branchDiff, branchFiles, runChecks } from "./review.ts";
 import { runUpdate, version } from "@wisp/update";
 import { ComputerHost, type Tunnel } from "./computers/index.ts";
@@ -653,6 +655,12 @@ export class NodeDaemon {
         (result) => this.send({ type: "result", requestId: msg.requestId, ok: true, result }),
         (err) => this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message }),
       );
+    } else if (msg.type === "memory_ask") {
+      if (this.local.paused) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name} is paused` });
+      this.askForMemory(msg).then(
+        (answer) => this.send({ type: "result", requestId: msg.requestId, ok: true, result: { answer } }),
+        (err) => this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message }),
+      );
     } else if (msg.type === "run") {
       if (this.local.paused) return this.send({ type: "run_failed", runId: msg.run.runId, error: `${this.cfg.name} is paused; ask again once someone resumes it there` });
       // one run at a time per agent so its harness session stays consistent
@@ -909,6 +917,74 @@ export class NodeDaemon {
         if (left > 0) this.runningHere.set(agent.id, left);
         else this.runningHere.delete(agent.id);
       }
+    }
+  }
+
+  /**
+   * First-run memory import: run the harness once, read-only, in the owner's home folder, where it
+   * sees their own CLAUDE.md / AGENTS.md and saved memories, with Wisp's memory prompt. Only the
+   * final answer goes back. On the person's model connection when the hub sent one, else the
+   * harness's own sign-in here.
+   */
+  private async askForMemory(msg: Extract<HubToNode, { type: "memory_ask" }>): Promise<string> {
+    const label = harnessLabel(msg.harness);
+    const adapter = this.registry[msg.harness];
+    if (!adapter) throw new Error(`${label} isn't installed on ${this.cfg.name}`);
+    const cred = msg.credential && credentialSupport(msg.harness, msg.credential.provider, msg.credential.kind) ? msg.credential : undefined;
+    const account = this.accounts.accountOf("", msg.harness);
+    let credential: PreparedCredential | null = null;
+    let used: string | null = null;
+    if (cred) {
+      used = safeId(cred.connectionId);
+      this.keepConnections?.add(used);
+      this.connectionsInUse.set(used, (this.connectionsInUse.get(used) ?? 0) + 1);
+      try {
+        credential = await prepareCredential(msg.harness, cred, { fs: localCredentialFs, baseHome: this.accounts.dir(msg.harness, account), connectionHome: path.join(this.cfg.dir, "connections", used, msg.harness) });
+      } catch (err) {
+        this.connectionDone(used);
+        throw new Error(`couldn't use the ${providerLabel(cred.provider)} connection: ${(err as Error).message}`);
+      }
+    }
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort("timeout"), msg.timeoutMs ?? 10 * 60_000);
+    // Claude Code in plan mode may hand its answer over as a plan instead of a reply
+    let plan = "";
+    this.log(`asking ${label} what it knows, for the memory import`);
+    try {
+      const result = await adapter.run(
+        {
+          prompt: memoryPrompt(),
+          cwd: this.cfg.discoverHome ?? os.homedir(),
+          model: credential ? (cred?.model ?? null) : null,
+          access: "read-only",
+          ownPlugins: false,
+          ownMemory: true,
+          env: { ...this.accounts.env(msg.harness, account), ...(credential?.env ?? {}) },
+          connection: credential && cred ? { provider: cred.provider, kind: cred.kind } : undefined,
+          signal: abort.signal,
+          options: this.cfg.harnessOptions?.[msg.harness],
+        },
+        (e) => {
+          if (e.type === "tool_call" && e.name === "ExitPlanMode" && typeof (e.input as { plan?: unknown })?.plan === "string") plan = (e.input as { plan: string }).plan;
+        },
+      );
+      const text = (plan.length > result.finalText.trim().length ? plan : result.finalText).trim();
+      if (!text) throw new Error(`${label} didn't answer`);
+      return text.slice(0, MEMORY_ANSWER_MAX);
+    } catch (err) {
+      if (abort.signal.aborted) throw new Error("It took too long");
+      const message = (err as Error).message;
+      if (!credential && signInProblem(msg.harness, message)) throw new Error(`${label} isn't signed in on ${this.cfg.name}`);
+      if (/\bENOENT\b/.test(message)) throw new Error(`${label} isn't installed on ${this.cfg.name}`);
+      throw err;
+    } finally {
+      clearTimeout(timer);
+      // a sign-in it renewed goes back to the hub, as a terminal's does
+      if (credential && cred) {
+        const renewed = await credential.refreshed().catch(() => null);
+        if (renewed) this.send({ type: "credential_refreshed", connectionId: cred.connectionId, terminal: true, secret: renewed });
+      }
+      this.connectionDone(used);
     }
   }
 
