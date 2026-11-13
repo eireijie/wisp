@@ -83,6 +83,7 @@ import { agentDefaults } from "./agent-defaults.ts";
 import { advancedOn, simplePlacement } from "./shared-computer.ts";
 import { spawnRight } from "./spawn.ts";
 import { greetNewAgent, registerSetupApi } from "./greeting.ts";
+import { registerOnboardingApi } from "./api-onboarding.ts";
 import { workspaceFeatures } from "./features.ts";
 import type { SetupCode } from "./setup-code.ts";
 import { VM_SIZES, computerDefaults } from "./policy.ts";
@@ -1225,12 +1226,14 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
         soul: z.string().max(50_000).optional(),
         /** fill in harness, model, device and computer from Settings' defaults where they aren't given */
         useDefaults: z.boolean().optional(),
+        /** "later": no hello yet; POST /api/agents/:id/greet says it (first-run setup, after the memory import) */
+        greet: z.literal("later").optional(),
       }),
       req.body,
       reply,
     );
     if (!body) return;
-    const { useDefaults, ...fields } = body;
+    const { useDefaults, greet, ...fields } = body;
     const defaults = useDefaults ? agentDefaults(store, c.workspaceId) : null;
     if (defaults) {
       fields.harness ??= defaults.harness ?? undefined;
@@ -1286,7 +1289,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     await vaultOf(c).write(soulPath(agent.id), body.soul ?? soulTemplate(agent.name, agent.handle), commitAuthor(c), `Create soul for @${agent.handle}`);
     await hub.ensureBuiltinSkills([agent.id]);
     // it speaks first: hello, then a few questions to get to know whoever made it
-    greetNewAgent(hub, agent, c.actor.kind === "user" ? c.actor.id : null);
+    if (greet !== "later") greetNewAgent(hub, agent, c.actor.kind === "user" ? c.actor.id : null);
     hub.broadcast(c.workspaceId, { type: "agents_changed" });
     return agentView(store.agent(agent.id)!);
   });
@@ -2641,6 +2644,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerVoiceApi(app, hub, { need });
   registerBackgroundApi(app, hub, { need, parse, requesterOf });
   registerSetupApi(app, hub, { need, parse });
+  registerOnboardingApi(app, hub, { need, parse });
   registerWatchesApi(app, hub, { need, parse, requesterOf });
   registerLeadApi(app, hub, { need, parse });
   registerUpdateApi(app, hub, { need });

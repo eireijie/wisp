@@ -1,65 +1,131 @@
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from "react";
-import { Bot, Check, Copy, ExternalLink, Loader2, Monitor, Shuffle } from "lucide-react";
-import { HARNESSES, harnessLabel, preferSignedIn, providerLabel, runsInVm, type Agent, type HarnessLogin, type HarnessSettings, type ModelProvider } from "@wisp/core";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 import { api } from "../api.ts";
 import { awayEnabled, enableTailscale } from "../components/Access.tsx";
 import { onPublicAddress, skipAccess, useAccess, useAccessStore, type AccessInfo } from "../access.ts";
 import { completeSetupStep, nextStep, setDismissed, STEPS, useOnboarding, type StepId } from "../onboarding.ts";
-import { isSharedComputer, usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
-import { useComputerMode } from "../computerMode.ts";
-import { useStore, type ComputerInfo } from "../store.ts";
-import { go, href } from "../router.ts";
+import { usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
+import { useStore } from "../store.ts";
+import { go } from "../router.ts";
 import { canApproveJoin, unavailable } from "../join.ts";
 import { AddDeviceContent } from "../components/AddDevice.tsx";
 import { AuthButton, AuthInput, AuthLink } from "../components/auth.tsx";
 import { PhonePairing } from "./settings/mobile.tsx";
-import { CopyBlock, Field, Input, cx } from "../components/ui.tsx";
-import { GHOST_PALETTES, GHOST_WHITE, randomAppearance, type GhostAppearance } from "@wisp/core/src/appearance.ts";
-import { SHAPES } from "../components/Ghost.tsx";
-import { HarnessLogo } from "../components/HarnessLogo.tsx";
-import { CodeTiles, RowState, SetupStage, WHITE_WISP, type StageScene } from "../components/SetupStage.tsx";
-import type { HarnessesResponse } from "./settings/harnesses.tsx";
-import { freeHandle } from "./CreateAgent.tsx";
-import { signInFor } from "./needs-sign-in.ts";
-import { canReadClipboard, pasteHereLine, readClipboard } from "../harness-signin.ts";
-import { ConnectModel } from "../components/ConnectModel.tsx";
-import { readyConnection, signInProvider, useConnections } from "../models.ts";
+import { cx } from "../components/ui.tsx";
+import type { GhostAppearance } from "@wisp/core/src/appearance.ts";
+import { RowState, WHITE_WISP, type StageScene } from "../components/SetupStage.tsx";
+import { SetupShell, StepHead } from "../components/SetupShell.tsx";
+import type { GhostMood } from "../components/Ghost.tsx";
+import { MemoryImport, type Askable } from "../components/MemoryImport.tsx";
+import type { MemoryLine } from "@wisp/core/src/memory-import.ts";
+import { ConnectStep, type Powered } from "./onboarding/ConnectStep.tsx";
+import { NameStep } from "./onboarding/NameStep.tsx";
+import { SetupProgress } from "./onboarding/SetupProgress.tsx";
+export { makeFirstAgent } from "./onboarding/firstAgent.ts";
 
 export const SETUP_LABELS: Record<StepId, string> = { anywhere: "Away from home", address: "Your address", agent: "Make your first agent", devices: "Add your devices" };
 
+type Screen = "anywhere" | "address" | "connect" | "name" | "memory" | "setup" | "devices";
+/** Where each screen sits on the five-dot track (0: before it) and what the wisp says there. */
+const SCREENS: Record<Screen, { at: number; line: (name: string) => string; mood?: GhostMood }> = {
+  anywhere: { at: 0, line: () => "Want to reach me when you're out?" },
+  address: { at: 0, line: () => "This is where I live." },
+  connect: { at: 1, line: () => "Pick the AI I run on. You only sign in once." },
+  name: { at: 2, line: () => "What should I be called?" },
+  memory: { at: 3, line: () => "Tell me what you're working on and I'll pick up from there." },
+  setup: { at: 4, line: () => "Moving into my computer…", mood: "working" },
+  devices: { at: 5, line: (n) => `Say hi to ${n} from your phone too.` },
+};
+
 /**
  * The rest of setup, once the server runs and the account exists: reach it from outside your home,
- * its address, your first agent, your phone. Everything here is one plain screen at a time.
+ * its address, then the five steps to your first agent: connect your AI once, name it, bring what
+ * your AI already knows, set it up, and meet it in its chat.
  */
 export function WelcomeView({ intro }: { intro?: boolean }) {
   const me = useStore((s) => s.me)!;
   const agents = useStore((s) => s.agents);
   const { done } = useOnboarding(3000);
   const devices = useDevices(3000);
-  const [screen, setScreen] = useState<StepId>(() => (intro ? (onPublicAddress() ? "address" : "anywhere") : (nextStep(done) ?? "anywhere")));
-  // the agent's look, once you start making it; the wisp keeps it for the rest of setup
-  const [look, setLook] = useState<GhostAppearance | null>(() => agents[0]?.settings.appearance ?? null);
-  const [scene, setScene] = useState<StageScene>({ name: screen === "agent" ? "look" : screen === "devices" ? "phone" : screen });
+  const [screen, setScreen] = useState<Screen>(() => {
+    if (intro) return onPublicAddress() ? "address" : "anywhere";
+    const next = nextStep(done) ?? "anywhere";
+    return next === "agent" ? "connect" : next;
+  });
+  const usable = usableDevices(devices ?? []).filter((d) => d.online && !d.paused);
+  const device = usable.find((d) => d.mine) ?? usable[0];
+  const [ready, setReady] = useState<Powered[]>([]);
+  const [harness, setHarness] = useState("");
+  const [name, setName] = useState("Atlas");
+  const [look] = useState<GhostAppearance>(() => agents[0]?.settings.appearance ?? START_LOOK);
+  const [lines, setLines] = useState<MemoryLine[]>([]);
+  const powered = ready.find((r) => r.harness === harness) ?? ready[0];
   const advance = (step: StepId) => {
     completeSetupStep(me.workspace.id, step);
-    setScreen(STEPS[STEPS.indexOf(step) + 1] ?? "devices");
+    const next = STEPS[STEPS.indexOf(step) + 1] ?? "devices";
+    setScreen(next === "agent" ? "connect" : next);
   };
-  const finish = () => {
+  const finish = (channelId?: string | null) => {
+    completeSetupStep(me.workspace.id, "agent");
     completeSetupStep(me.workspace.id, "devices");
     setDismissed(true);
-    go({ view: "dashboard" });
+    go(channelId ? { view: "chat", channelId, threadId: null } : { view: "dashboard" });
   };
-  // the step's own Back wins; otherwise the screen before, unless going there would redo something
-  const before = STEPS[STEPS.indexOf(screen) - 1];
-  const canGoBack = !!before && !(screen === "address" && onPublicAddress()) && !(screen === "devices" && agents.length > 0);
+  // Back goes to the screen before, unless that would redo something done
+  const back: Partial<Record<Screen, Screen>> = { address: "anywhere", name: "connect", memory: "name" };
+  const before = back[screen];
+  const canGoBack = !!before && !(screen === "address" && onPublicAddress());
+  const s = SCREENS[screen];
+  const preAgent = screen === "anywhere" || screen === "address";
+  // the steps before the agent were made for a narrow panel; they keep that width in the middle
+  const narrow = (node: ReactNode) => <div className="ob-narrow">{node}</div>;
   return (
-    <SetupStage scene={{ look: look ?? undefined, ...scene, onBack: scene.onBack === undefined ? (canGoBack ? () => setScreen(before) : undefined) : scene.onBack }}>
-      {screen === "anywhere" && <AwayStep key={screen} onScene={setScene} onDone={() => advance("anywhere")} />}
-      {screen === "address" && <AddressStep key={screen} onScene={setScene} onNext={() => advance("address")} />}
-      {screen === "agent" && <AgentStep key={screen} look={look ?? START_LOOK} setLook={setLook} devices={devices} onScene={setScene} onNext={() => advance("agent")} />}
-      {screen === "devices" && <PhoneStep key={screen} onScene={setScene} onFinish={finish} />}
-    </SetupStage>
+    <SetupShell at={s.at} line={s.line(name.trim() || "your agent")} look={preAgent ? undefined : look} mood={s.mood} stepKey={screen} onBack={canGoBack ? () => setScreen(before!) : null}>
+      {screen === "anywhere" && narrow(<AwayStep onScene={() => {}} onDone={() => advance("anywhere")} />)}
+      {screen === "address" && narrow(<AddressStep onScene={() => {}} onNext={() => advance("address")} />)}
+      {screen === "connect" && (
+        <ConnectStep
+          device={device}
+          onNext={(r) => {
+            setReady(r);
+            if (!r.some((x) => x.harness === harness)) setHarness(r[0]?.harness ?? "");
+            setScreen("name");
+          }}
+          onSkip={() => advance("agent")}
+        />
+      )}
+      {screen === "name" && powered && <NameStep name={name} setName={setName} look={look} ready={ready} harness={powered.harness} setHarness={setHarness} onBack={() => setScreen("connect")} onNext={() => setScreen("memory")} />}
+      {screen === "memory" && (
+        <>
+          <StepHead title="Bring what your AI already knows" sub={`${name.trim()} starts out knowing your projects, how you work and what you're in the middle of.`} />
+          <MemoryImport
+            agentName={name.trim()}
+            askable={askableOn(device, ready)}
+            saveLabel={`Save to ${name.trim()}'s memory`}
+            onSave={(l) => {
+              setLines(l);
+              setScreen("setup");
+            }}
+            onSkip={() => {
+              setLines([]);
+              setScreen("setup");
+            }}
+          />
+        </>
+      )}
+      {screen === "setup" && device && powered && <SetupProgress device={device} powered={powered} name={name.trim()} look={look} lines={lines} onBack={() => setScreen("memory")} onDone={(_, channelId) => finish(channelId)} />}
+      {screen === "devices" && narrow(<PhoneStep onScene={() => {}} onFinish={() => finish()} />)}
+    </SetupShell>
   );
+}
+
+/** Claude Code or Codex on the person's computer, signed in through Wisp, can be asked for them. */
+export function askableOn(device: DeviceInfo | undefined, ready: Powered[]): Askable[] {
+  if (!device?.mine) return [];
+  // the hub asks with the person's connection when there is one, else the device's own sign-in
+  const here = ["claude-code", "codex"].filter((id) => device.harnesses?.some((h) => h.id === id));
+  const connected = (id: string) => ready.some((r) => r.harness === id && r.connectionId);
+  return [...here.filter(connected), ...here.filter((id) => !connected(id))].map((harness) => ({ harness, nodeId: device.id, device: device.name }));
 }
 
 /** What the white wisp turns into when you start making your agent. */
@@ -186,648 +252,6 @@ function PhoneStep({ onScene, onFinish }: { onScene: (s: StageScene) => void; on
 
 /** The device's message when it has no Node.js (see NO_NODE in the node package). */
 export const NO_NODE = /Node\.js isn't installed on this computer/;
-
-/**
- * Make the first agent: on the model connection Wisp keeps for it when there is one (the hub hands
- * it to each run, wherever the agent works), else on the harness's own sign-in where it runs.
- * Installs a new harness on the device when requested.
- */
-export async function makeFirstAgent(device: DeviceInfo, harness: string, name: string, agents: Agent[], computers: ComputerInfo[], appearance?: GhostAppearance, connectionId?: string) {
-  const installed = device.harnesses?.some((h) => h.id === harness);
-  const canVm = device.role !== "headless" && device.role !== "screen" && !!device.capabilities?.vm.ok;
-  const inVm = !installed && runsInVm(harness) && canVm;
-  if (!installed && !inVm) {
-    await api("POST", `/api/nodes/${device.id}/install`, { harness });
-    await api("POST", `/api/nodes/${device.id}/refresh`).catch(() => {});
-  }
-  const common = {
-    name,
-    handle: freeHandle(
-      name,
-      agents.map((a) => a.handle),
-    ),
-    harness,
-    nodeId: device.id,
-  };
-  const look = { ...(appearance ? { appearance } : {}), ...(connectionId ? { connectionId } : {}) };
-  if (inVm) {
-    // an AI that only runs inside a computer gets one of its own, with the AI in it
-    let computer = computers.find((c) => c.kind === "vm" && c.nodeId === device.id && !c.agents.length);
-    if (!computer) computer = await api<ComputerInfo>("POST", "/api/computers", { kind: "vm", nodeId: device.id, name: `${name}'s desk`, cpus: 2, memoryGb: 4 });
-    return api<Agent>("POST", "/api/agents", { ...common, computerId: computer.id, settings: { runIn: "computer", ...look } });
-  }
-  // otherwise Wisp places it: the AI stays beside its sign-in, and it works on the shared computer
-  return api<Agent>("POST", "/api/agents", { ...common, useDefaults: true, settings: look });
-}
-
-export type SkipResult = { kept: Agent } | { kept: null; reason: "nothing-to-keep" } | { kept: null; reason: "failed"; message: string };
-
-/**
- * "Skip for now" on the agent step must not lose the agent the person just named: make it now
- * (without waiting for a sign-in; the Inbox says what it still needs) and only then move on.
- * With no computer or no name there is nothing to make; a failure is reported, never swallowed.
- */
-export async function skipKeepingAgent(o: { device: DeviceInfo | undefined; harness: string; name: string; agents: Agent[]; computers: ComputerInfo[]; look: GhostAppearance; connectionId?: string; make?: typeof makeFirstAgent }): Promise<SkipResult> {
-  if (!o.device || !o.name.trim()) return { kept: null, reason: "nothing-to-keep" };
-  try {
-    return { kept: await (o.make ?? makeFirstAgent)(o.device, o.harness, o.name.trim(), o.agents, o.computers, o.look, o.connectionId) };
-  } catch (e) {
-    return { kept: null, reason: "failed", message: (e as Error).message || "something went wrong" };
-  }
-}
-
-/** The AI that powers your first agent, signing in to it, and making the agent. */
-function AgentStep({ look, setLook, devices, onScene, onNext }: { look: GhostAppearance; setLook: (l: GhostAppearance) => void; devices: DeviceInfo[] | null; onScene: (s: StageScene) => void; onNext: () => void }) {
-  const agents = useStore((s) => s.agents);
-  const computers = useStore((s) => s.computers);
-  const usable = usableDevices(devices ?? []).filter((d) => d.online && !d.paused);
-  const [deviceId, setDeviceId] = useState("");
-  const device = usable.find((d) => d.id === deviceId) ?? usable.find((d) => d.mine) ?? usable[0];
-  const [name, setName] = useState("Atlas");
-  const [harness, setHarness] = useState("");
-  const [view, setView] = useState<"look" | "harness">("look");
-  // signing in from the Make button: make the agent as soon as that's done
-  const [makeAfterSignIn, setMakeAfterSignIn] = useState(false);
-  /** Wisp can't tell whether this AI is signed in, and the person says it is */
-  const [unknownOk, setUnknownOk] = useState(false);
-  const [settings, setSettings] = useState<HarnessSettings[]>([]);
-  const [signingIn, setSigningIn] = useState<HarnessSettings | null>(null);
-  const [created, setCreated] = useState<Agent | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Claude Code and Codex sign in once, to Wisp: the hub keeps the connection and hands it to each
-  // run. A sign-in the device's own CLI reports isn't trusted (on a Mac it says yes for a login that
-  // has expired), so only a connection counts as "Connected".
-  const { connections, reload: reloadConnections } = useConnections();
-  const [connecting, setConnecting] = useState<ModelProvider | null>(null);
-  const connected = (id: string) => (connections ? readyConnection(id, connections) : undefined);
-  const loadSettings = async () => {
-    if (!device) return;
-    const data = await api<HarnessesResponse>("GET", `/api/nodes/${device.id}/harness-settings`);
-    setSettings(data.harnesses);
-    return data.harnesses;
-  };
-  useEffect(() => {
-    setSettings([]);
-    setHarness("");
-    setError(null);
-    setCreated(null);
-    if (!device) return;
-    let alive = true;
-    const load = () =>
-      api<HarnessesResponse>("GET", `/api/nodes/${device.id}/harness-settings`).then(
-        (data) => {
-          if (alive) setSettings(data.harnesses);
-        },
-        () => {},
-      );
-    void load();
-    const timer = setInterval(load, 5000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [device?.id]);
-  const installed = device?.harnesses ?? [];
-  const account = (s: HarnessSettings) => s.accounts.find((a) => a.isDefault) ?? s.accounts[0];
-  // one that's signed in first: a harness that would fail its first reply is never preselected over one that works
-  const selected =
-    harness ||
-    preferSignedIn(
-      installed.map((h) => h.id),
-      (id) => {
-        if (connected(id)) return true;
-        const s = settings.find((x) => x.harness === id);
-        return s ? account(s)?.signedIn : undefined;
-      },
-    ) ||
-    "kimi";
-  const pick = (id: string) => {
-    setHarness(id);
-    setUnknownOk(false);
-    setError(null);
-  };
-  const create = async (connectionId = connected(selected)?.id) => {
-    if (!device) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const agent = await makeFirstAgent(device, selected, name.trim(), agents, computers, look, connectionId);
-      setCreated(agent);
-      setLook(look);
-      await Promise.allSettled([useStore.getState().refreshAgents(), useStore.getState().refreshComputers()]);
-      // on a connection it needs no sign-in of its own where it runs
-      if (!connectionId && agent.settings.runIn !== "computer" && !unknownOk) {
-        // read what the device says now: an AI that was just installed isn't in the list from before
-        const fresh = await loadSettings().catch(() => undefined);
-        const s = signInFor(fresh ?? settings, selected);
-        if (s && device.mine) setSigningIn(s);
-      }
-    } catch (e) {
-      setError(unavailable(e, "Agent setup"));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const [skipArmed, setSkipArmed] = useState(false);
-  const skip = async () => {
-    if (skipArmed) return onNext();
-    setBusy(true);
-    const r = await skipKeepingAgent({ device, harness: selected, name, agents, computers, look, connectionId: connected(selected)?.id });
-    setBusy(false);
-    if (r.kept) {
-      await Promise.allSettled([useStore.getState().refreshAgents(), useStore.getState().refreshComputers()]);
-      return onNext();
-    }
-    if (r.reason === "failed") {
-      setError(`Couldn't set up ${name.trim()} yet: ${r.message}. Press Skip for now again to go on without it; you can make it later from Agents.`);
-      setSkipArmed(true);
-      return;
-    }
-    onNext();
-  };
-  const displayName = name.trim() || "Atlas";
-  const tag = created?.handle ?? freeHandle(displayName, agents.map((a) => a.handle));
-  useEffect(() => {
-    if (created && !signingIn) return onScene({ name: "made", look, tag, badge: created.harness, onBack: null });
-    if (signingIn || connecting) return onScene({ name: "signin", look, badge: selected, onBack: null });
-    if (view === "harness") return onScene({ name: "harness", look, tag, badge: selected, onBack: () => setView("look") });
-    onScene({ name: "look", look, tag });
-  }, [view, !!signingIn, !!connecting, !!created, look, tag, selected]);
-  if (connecting) {
-    return (
-      <>
-        <Thread title={`Sign in to ${providerLabel(connecting)}`}>
-          <ConnectModel
-            provider={connecting}
-            big
-            onDone={(connectionId) => {
-              setConnecting(null);
-              reloadConnections();
-              if (connectionId) void create(connectionId);
-            }}
-          />
-        </Thread>
-        <Actions>
-          <AuthLink className="self-center" onClick={() => setConnecting(null)}>
-            Not now
-          </AuthLink>
-        </Actions>
-      </>
-    );
-  }
-  if (signingIn && device && account(signingIn)) {
-    return (
-      <HarnessSignInChat
-        device={device}
-        settings={signingIn}
-        account={account(signingIn)}
-        onClose={() => {
-          setSigningIn(null);
-          setMakeAfterSignIn(false);
-        }}
-        onDone={() => {
-          setSigningIn(null);
-          void loadSettings().catch(() => {});
-          if (makeAfterSignIn) {
-            setMakeAfterSignIn(false);
-            void create();
-          }
-        }}
-      />
-    );
-  }
-  if (created) {
-    const settingsNow = settings.find((s) => s.harness === created.harness);
-    return <AgentCreated agent={created} device={device?.name} onSignIn={device?.mine && settingsNow && account(settingsNow) ? () => setSigningIn(settingsNow) : undefined} onNext={onNext} />;
-  }
-  if (view === "look") {
-    return (
-      <>
-        <Thread title="Create your agent" sub="Name it and make it yours.">
-          <Field label="Name">
-            <Input className="h-[42px]! rounded-lg! bg-card!" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
-          </Field>
-          <LookPicker look={look} onChange={setLook} />
-        </Thread>
-        <Actions>
-          <SetupButton variant="secondary" onClick={() => setLook(randomAppearance())}>
-            <Shuffle size={16} />
-            Shuffle
-          </SetupButton>
-          <SetupButton disabled={!name.trim()} onClick={() => setView("harness")}>
-            Continue
-          </SetupButton>
-        </Actions>
-      </>
-    );
-  }
-  const current = settings.find((s) => s.harness === selected);
-  const signedIn = current ? account(current)?.signedIn : undefined;
-  const provider = signInProvider(selected);
-  // signs in to Wisp: once, before the agent is made, so its first message works wherever it runs
-  const needsConnect = !!provider && !!connections && !connected(selected);
-  const needsSignIn = !provider && !!device?.mine && !!current && !!account(current) && signedIn !== true && !(signedIn === null && unknownOk);
-  const connect = async () => {
-    if (!provider || !device) return;
-    setError(null);
-    // Wisp signs in with the harness on one of your devices, so a new one is installed first
-    if (!installed.some((h) => h.id === selected) && !runsInVm(selected)) {
-      setBusy(true);
-      try {
-        await api("POST", `/api/nodes/${device.id}/install`, { harness: selected });
-        await api("POST", `/api/nodes/${device.id}/refresh`).catch(() => {});
-      } catch (e) {
-        setError(unavailable(e, `Installing ${harnessLabel(selected)}`));
-        return;
-      } finally {
-        setBusy(false);
-      }
-    }
-    setConnecting(provider);
-  };
-  const noNode = !!error && NO_NODE.test(error);
-  const notInstalled = HARNESSES.filter((h) => h.protocol !== "mcp" && (h.install?.npm || (runsInVm(h.id) && device?.capabilities?.vm.ok)) && !installed.some((i) => i.id === h.id));
-  const isInstalled = installed.some((h) => h.id === selected);
-  return (
-    <>
-      <Thread title={`What powers ${displayName}?`} sub="You can change this later.">
-        {usable.length > 1 && (
-          <label className="self-start flex items-center gap-3 text-sm text-muted">
-            Computer
-            <select className="rounded-xl border border-line bg-card p-2 text-ink" value={device?.id} onChange={(e) => setDeviceId(e.target.value)}>
-              {usable.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <div role="radiogroup" aria-label="Agent app" className="grid grid-cols-2 gap-2">
-          {installed.map((h) => {
-            const s = settings.find((s) => s.harness === h.id);
-            const state = s ? account(s)?.signedIn : undefined;
-            const body = signInProvider(h.id) ? (connected(h.id) ? "Connected" : connections ? "Needs sign-in" : "On this computer") : state === true ? "Signed in" : state === false ? "Needs sign-in" : state === null ? "Sign-in unknown" : "On this computer";
-            return <HarnessChoice key={h.id} title={harnessLabel(h.id)} body={body} selected={selected === h.id} onClick={() => pick(h.id)} icon={<HarnessLogo harness={h.id} size={24} />} />;
-          })}
-          {notInstalled.map((h) => (
-            <HarnessChoice key={h.id} title={h.label} body="Wisp installs it" selected={selected === h.id} onClick={() => pick(h.id)} icon={<HarnessLogo harness={h.id} size={24} />} />
-          ))}
-        </div>
-        {!device && (
-          <p role="status" className="text-sm text-muted">
-            Waiting for a computer to connect; you can skip this for now.
-          </p>
-        )}
-        {noNode ? (
-          <p role="alert" className="text-sm text-bad">
-            {harnessLabel(selected)} needs Node.js, and this computer doesn't have it.{" "}
-            <a href="https://nodejs.org" target="_blank" rel="noreferrer" className="text-info hover:underline">
-              Get Node.js
-            </a>
-            , install it, then try again.
-          </p>
-        ) : (
-          <Problem>{error}</Problem>
-        )}
-      </Thread>
-      <Actions>
-        {needsConnect ? (
-          <SetupButton disabled={busy || !device || !name.trim()} onClick={() => void connect()}>
-            {busy && <Loader2 size={16} className="animate-spin" />}
-            {busy ? "Getting ready…" : `Sign in to ${providerLabel(provider!)}`}
-          </SetupButton>
-        ) : needsSignIn ? (
-          <SetupButton
-            disabled={busy || !current}
-            onClick={() => {
-              if (!current) return;
-              setMakeAfterSignIn(true);
-              setSigningIn(current);
-            }}
-          >
-            Sign in to {harnessLabel(selected)}
-          </SetupButton>
-        ) : (
-          <SetupButton disabled={busy || !device || !name.trim() || (!device.mine && !isInstalled)} onClick={() => void create()}>
-            {busy && <Loader2 size={16} className="animate-spin" />}
-            {busy ? "Getting ready…" : noNode ? "Try again" : isInstalled ? `Make ${displayName}` : `Install ${harnessLabel(selected)} and make ${displayName}`}
-          </SetupButton>
-        )}
-        {needsSignIn && signedIn === null && (
-          <AuthLink onClick={() => setUnknownOk(true)} disabled={busy} className="self-center">
-            It's already signed in
-          </AuthLink>
-        )}
-        <AuthLink onClick={() => void skip()} disabled={busy} className="self-center">
-          Skip for now
-        </AuthLink>
-      </Actions>
-    </>
-  );
-}
-
-const SWATCHES: { name: string; color: string; color2: string }[] = [
-  { name: "White", ...GHOST_WHITE },
-  ...["Bubblegum sky", "Orchid peach", "Coral mint", "Arctic blue", "Solar flare", "Violet ember", "Ultraviolet tide"].map((n) => GHOST_PALETTES.find((p) => p.name === n)!),
-];
-const HATS: [string, GhostAppearance["hat"]][] = [["None", "none"], ["Top hat", "tophat"], ["Crown", "crown"], ["Beanie", "beanie"], ["Party", "party"]];
-
-/** The agent's color, shape and hat; the wisp on the stage shows each change. */
-function LookPicker({ look, onChange }: { look: GhostAppearance; onChange: (l: GhostAppearance) => void }) {
-  const label = "block text-[13px] font-medium text-muted mb-1.5";
-  return (
-    <>
-      <div>
-        <span className={label}>Color</span>
-        <div className="flex gap-2">
-          {SWATCHES.map((s) => (
-            <button key={s.name} type="button" aria-label={s.name} title={s.name} aria-pressed={look.color === s.color && look.color2 === s.color2} className="setup-swatch" style={{ background: `linear-gradient(${s.color}, ${s.color2})` }} onClick={() => onChange({ ...look, color: s.color, color2: s.color2 })} />
-          ))}
-        </div>
-      </div>
-      <div>
-        <span className={label}>Shape</span>
-        <div className="flex gap-1.5">
-          {(Object.keys(SHAPES) as GhostAppearance["shape"][]).map((s) => (
-            <button key={s} type="button" aria-label={s} aria-pressed={look.shape === s} className="setup-shape" onClick={() => onChange({ ...look, shape: s })}>
-              <svg viewBox="16 6 88 108" width="100%" height="100%" aria-hidden>
-                <path d={SHAPES[s].body[0]} fill="currentColor" />
-              </svg>
-            </button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <span className={label}>Hat</span>
-        <div className="flex flex-wrap gap-1.5">
-          {HATS.map(([n, hat]) => (
-            <button key={hat} type="button" aria-pressed={look.hat === hat} className="setup-chip" onClick={() => onChange({ ...look, hat })}>
-              {n}
-            </button>
-          ))}
-        </div>
-      </div>
-    </>
-  );
-}
-
-/** A harness you can pick: its logo, name, and whether it's here or signed in. */
-export function HarnessChoice({
-  title,
-  body,
-  selected,
-  onClick,
-  icon = <Bot size={24} />,
-}: {
-  title: string;
-  body: string;
-  selected: boolean;
-  onClick: () => void;
-  icon?: ReactNode;
-}) {
-  return (
-    <button type="button" role="radio" aria-checked={selected} onClick={onClick} className="setup-choice setup-tile">
-      <span className="shrink-0 grid place-items-center">{icon}</span>
-      <span className="flex-1 min-w-0">
-        <span className="block text-[13.5px] font-medium leading-tight truncate">{title}</span>
-        <span className="block text-xs mt-px text-muted truncate">{body}</span>
-      </span>
-    </button>
-  );
-}
-
-/**
- * Signing an AI in without a terminal: the computer starts the harness's sign-in and Wisp shows
- * the link and code it prints (and takes the code the page gives you back). The same flow as
- * Settings' sign-in.
- */
-function HarnessSignInChat({ device, settings, account, onClose, onDone }: { device: HarnessesResponse["device"]; settings: HarnessSettings; account: HarnessSettings["accounts"][number]; onClose: () => void; onDone: () => void }) {
-  const label = harnessLabel(settings.harness);
-  const perProvider = settings.harness === "hermes";
-  const [provider, setProvider] = useState(settings.provider ?? settings.providers?.[0]?.id ?? "");
-  const [login, setLogin] = useState<HarnessLogin | null>(null);
-  const [manual, setManual] = useState<string | null>(null);
-  const [code, setCode] = useState("");
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const act = (body: unknown) => api<any>("POST", `/api/nodes/${device.id}/harness-accounts/${settings.harness}`, body);
-  const start = async () => {
-    setError(null);
-    try {
-      const r = await act({ op: "login", account: account.id, ...(perProvider ? { provider } : {}) });
-      if ("manual" in r) setManual(r.manual);
-      else setLogin(r);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  useEffect(() => {
-    if (!perProvider) void start();
-  }, []);
-  useEffect(() => {
-    if (!login || login.status !== "running") return;
-    const t = setInterval(async () => {
-      const next = await act({ op: "login_status", loginId: login.id }).catch(() => null);
-      if (!next) return;
-      setLogin(next);
-      if (next.status === "done") onDone();
-    }, 1500);
-    return () => clearInterval(t);
-  }, [login?.id, login?.status]);
-  const close = () => {
-    if (login?.status === "running") void act({ op: "login_cancel", loginId: login.id }).catch(() => {});
-    onClose();
-  };
-  const send = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!login || !code.trim()) return;
-    setLogin(await act({ op: "login_input", loginId: login.id, text: code.trim() }));
-    setCode("");
-  };
-  const choosing = perProvider && !login && !manual;
-  return (
-    <>
-      <Thread title={`Sign in to ${label}`}>
-        {choosing && (
-          <>
-            <Msg>Which account should {label} sign in with?</Msg>
-            <label className="self-start flex items-center gap-3 text-sm text-muted">
-              Provider
-              <select value={provider} onChange={(e) => setProvider(e.target.value)} className="rounded-xl border border-line bg-card p-2 text-ink">
-                {(settings.providers ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.id}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </>
-        )}
-        {manual && (
-          <>
-            <Msg>
-              {label} signs in on its own screen. On {device.name}, run:
-            </Msg>
-            <CopyBlock text={manual} />
-          </>
-        )}
-        {login?.status === "running" && (
-          <>
-            {login.url ? <Msg>{login.code ? "Open the sign-in page, then enter this code there." : pasteHereLine(label, "the sign-in page")}</Msg> : <Waiting>Starting {label}'s sign-in on {device.name}…</Waiting>}
-            {login.code && (
-              <div className="self-stretch flex flex-col items-center gap-3.5">
-                <CodeTiles code={login.code} />
-                <button
-                  type="button"
-                  className="setup-press h-9 px-4 rounded-lg bg-control border border-control-line text-[13px] font-medium inline-flex items-center gap-2 hover:bg-hover"
-                  onClick={() => {
-                    void navigator.clipboard?.writeText(login.code!);
-                    setCopied(true);
-                  }}
-                >
-                  {copied ? <Check size={15} /> : <Copy size={15} />}
-                  {copied ? "Copied" : "Copy code"}
-                </button>
-              </div>
-            )}
-            {login.url && !login.code && (
-              <form onSubmit={send} className="self-stretch flex items-center gap-2">
-                <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste the code here" aria-label="Code from the sign-in page" autoComplete="off" spellCheck={false} className="flex-1 h-12! rounded-full! bg-card! px-4!" />
-                {canReadClipboard() && !code.trim() && (
-                  <button type="button" onClick={() => void readClipboard().then((t) => t && setCode(t))} className="h-12 px-4 rounded-full border border-control-line bg-control text-body font-medium hover:bg-hover">
-                    Paste
-                  </button>
-                )}
-                <button type="submit" disabled={!code.trim()} className="h-12 px-5 rounded-full bg-accent text-accent-ink text-body font-medium disabled:opacity-50">
-                  Send
-                </button>
-              </form>
-            )}
-            <Waiting>{login.url && !login.code ? "Waiting for the code" : "Waiting for you to finish there"}</Waiting>
-          </>
-        )}
-        {login?.status === "done" && <Msg>Signed in.</Msg>}
-        {login?.status === "failed" && <Msg className="text-bad whitespace-pre-wrap">{login.error ?? "The sign-in didn't finish."}</Msg>}
-        <Problem>{error}</Problem>
-      </Thread>
-      <Actions>
-        {choosing && (
-          <SetupButton onClick={start} disabled={!provider}>
-            Continue
-          </SetupButton>
-        )}
-        {login?.status === "running" && login.url && (
-          <a href={login.url} target="_blank" rel="noreferrer" className="h-[42px] w-full inline-flex items-center justify-center gap-2.5 rounded-lg bg-accent text-accent-ink text-body font-medium hover:bg-accent/90">
-            <ExternalLink size={17} /> Open the sign-in page
-          </a>
-        )}
-        {login?.status === "failed" && (
-          <SetupButton
-            variant="secondary"
-            onClick={() => {
-              setLogin(null);
-              if (!perProvider) void start();
-            }}
-          >
-            Try again
-          </SetupButton>
-        )}
-        {(login?.status === "done" || manual) && <SetupButton onClick={close}>Done</SetupButton>}
-        {!(login?.status === "done" || manual) && (
-          <AuthLink className="self-center" onClick={close}>
-            Not now
-          </AuthLink>
-        )}
-      </Actions>
-    </>
-  );
-}
-
-export function AgentCreated({ agent, device, onSignIn, onNext }: { agent: Agent; device?: string; onSignIn?: () => void; onNext: () => void }) {
-  const inVm = agent.settings.runIn === "computer";
-  const label = harnessLabel(agent.harness);
-  // where it works, plainly; which device hosts what is for Advanced
-  const { advanced } = useComputerMode();
-  const computer = useStore((s) => s.computers).find((c) => c.id === agent.computerId);
-  const place = advanced ? (device ? `, on ${device}` : "") : isSharedComputer(computer) || agent.settings.waitsForShared ? ", on the shared computer" : computer?.kind === "vm" ? ", on its own computer" : "";
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const [checked, setChecked] = useState(false);
-  const [screen, setScreen] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    const check = () =>
-      api<{ signedIn: boolean | null }>("GET", `/api/agents/${agent.id}/harness`).then(
-        (r) => {
-          if (!alive) return;
-          setSignedIn(r.signedIn);
-          setChecked(true);
-        },
-        () => {},
-      );
-    void check();
-    const t = setInterval(check, 4000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, [agent.id]);
-  const waiting = checked && signedIn !== true;
-  return (
-    <>
-      <Thread title={waiting ? `${agent.name} needs a sign-in` : `${agent.name} is made`} sub={`Uses ${label}${place}.`}>
-        {waiting && <Msg>{signedIn === null && !inVm ? `Wisp can't tell if ${label} is signed in. If it isn't, ${agent.name} can't answer yet.` : `${agent.name} can't answer until you sign in to ${label}${inVm ? ` on ${agent.name}'s computer` : ""}.`}</Msg>}
-        {waiting && screen && <Msg>Finish signing in on the computer's screen, then come back here. This page updates by itself.</Msg>}
-        <Problem>{error}</Problem>
-      </Thread>
-      <Actions>
-        {waiting && screen && (
-          <a href={screen} target="_blank" rel="noreferrer" className="h-[42px] w-full inline-flex items-center justify-center gap-2.5 rounded-lg bg-control border border-control-line text-body font-medium hover:bg-hover">
-            <Monitor size={17} /> Open the computer's screen
-          </a>
-        )}
-        {waiting && !screen && inVm && (
-          <SetupButton
-            variant="secondary"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              setError(null);
-              // Open synchronously so browsers allow the sign-in window.
-              const tab = window.open("about:blank", "_blank");
-              try {
-                const r = await api<{ computerId: string }>("POST", `/api/agents/${agent.id}/signin`);
-                const to = href({ view: "computers", computerId: r.computerId });
-                // setup stays open here; no window (a blocker, say) still leaves a link to open
-                setScreen(to);
-                if (tab) {
-                  tab.opener = null;
-                  tab.location.href = to;
-                }
-              } catch (e) {
-                tab?.close();
-                setError(unavailable(e, "Sign-in"));
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <Monitor size={17} />}Sign in
-          </SetupButton>
-        )}
-        {waiting && !inVm && onSignIn && (
-          <SetupButton variant="secondary" onClick={onSignIn}>
-            Sign in
-          </SetupButton>
-        )}
-        <SetupButton onClick={onNext}>{waiting ? "Sign in later" : "Continue"}</SetupButton>
-      </Actions>
-    </>
-  );
-}
 
 /** Reach Wisp from outside your home (Tailscale or Cloudflare), or only at home. */
 function AwayStep({ onScene, onDone }: { onScene: (s: StageScene) => void; onDone: () => void }) {

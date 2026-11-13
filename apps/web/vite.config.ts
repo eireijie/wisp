@@ -11,6 +11,6 @@ export default defineConfig({
   optimizeDeps: { esbuildOptions: { target: "es2022" } },
   server: {
     port: 5173,
-    proxy: { "/api": hub, "/ws": { target: hub.replace(/^http/, "ws"), ws: true } },
+    proxy: { "/api": hub, "^/m/[A-Za-z0-9_-]+$": hub, "/ws": { target: hub.replace(/^http/, "ws"), ws: true } },
   },
 });

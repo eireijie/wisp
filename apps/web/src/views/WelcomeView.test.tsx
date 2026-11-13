@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { Agent } from "@wisp/core";
+import type { Agent, ModelConnection } from "@wisp/core";
 import { api } from "../api.ts";
-import { advanceTailscale, AgentCreated, HarnessChoice, makeFirstAgent, NO_NODE, serverAddress, SETUP_LABELS, TailscaleScreen, tailscaleProblem } from "./WelcomeView.tsx";
+import { advanceTailscale, askableOn, makeFirstAgent, NO_NODE, serverAddress, SETUP_LABELS, TailscaleScreen, tailscaleProblem } from "./WelcomeView.tsx";
+import { readiness } from "./onboarding/ConnectStep.tsx";
 import type { AccessInfo } from "../access.ts";
 import type { DeviceInfo } from "../devices.ts";
 
@@ -40,12 +41,27 @@ describe("Wisp setup after the account", () => {
       expect(serverAddress(null, { origin: "https://wisp.example.com", protocol: "https:", hostname: "wisp.example.com" })?.url).toBe("https://wisp.example.com");
     });
   });
-  it("uses a plain line icon and an accessible harness selection", () => {
-    const html = renderToStaticMarkup(createElement(HarnessChoice, { title: "Codex", body: "Signed in", selected: true, onClick() {} }));
-    expect(html).toContain('role="radio"');
-    expect(html).toContain('aria-checked="true"');
-    expect(html).toContain("<svg");
-    expect(html).toContain("Signed in");
+  describe("connect your AI", () => {
+    const conn = (over: Partial<ModelConnection>) => ({ id: "mc1", provider: "anthropic", kind: "oauth", harnesses: ["claude-code"], mine: true, lastError: null, ...over }) as ModelConnection;
+    it("calls Claude Code ready only with a working connection, never on the device's own word", () => {
+      expect(readiness("claude-code", [], true, new Set(["claude-code"]))).toBeNull();
+      expect(readiness("claude-code", [conn({ lastError: "expired" })], true, new Set())).toBeNull();
+      expect(readiness("claude-code", [conn({})], undefined, new Set())).toEqual({ harness: "claude-code", connectionId: "mc1" });
+    });
+    it("counts a harness that signs in where it runs once you pick it and it's signed in there", () => {
+      expect(readiness("hermes", [], true, new Set())).toBeNull();
+      expect(readiness("hermes", [], true, new Set(["hermes"]))).toEqual({ harness: "hermes", connectionId: null });
+      expect(readiness("hermes", [], null, new Set(["hermes"]))).toBeNull();
+    });
+    it("offers to ask Claude Code or Codex only on your own computer, where they're installed, connected ones first", () => {
+      const mac = { ...device, harnesses: [{ id: "claude-code", version: null }, { id: "codex", version: null }, { id: "hermes", version: null }] } as DeviceInfo;
+      expect(askableOn(mac, [{ harness: "codex", connectionId: "mc2" }])).toEqual([
+        { harness: "codex", nodeId: "mac", device: "My Mac" },
+        { harness: "claude-code", nodeId: "mac", device: "My Mac" },
+      ]);
+      expect(askableOn({ ...mac, harnesses: [{ id: "hermes", version: null }] } as DeviceInfo, [])).toEqual([]);
+      expect(askableOn({ ...mac, mine: false }, [{ harness: "claude-code", connectionId: "mc1" }])).toEqual([]);
+    });
   });
   it("keeps an installed harness on the device with its existing sign-in and a free handle", async () => {
     vi.mocked(api).mockResolvedValueOnce({ id: "agent" });
@@ -108,20 +124,6 @@ describe("Wisp setup after the account", () => {
     vi.mocked(api).mockReset().mockResolvedValue({});
     await makeFirstAgent(device, "kimi", "Atlas", [], []);
     expect(api).toHaveBeenNthCalledWith(1, "POST", "/api/nodes/mac/install", { harness: "kimi" });
-  });
-});
-
-describe("the agent's made", () => {
-  const agent = { id: "a1", name: "Atlas", handle: "atlas", harness: "codex", computerId: "c1", settings: {} } as unknown as Agent;
-  const show = (advanced: boolean) => {
-    view.advanced = advanced;
-    view.computers = [{ id: "c1", kind: "vm", name: "Shared computer", nodeId: "mac", config: { shared: true }, agents: ["a1"] }];
-    return renderToStaticMarkup(createElement(AgentCreated, { agent, device: "This Mac", onNext() {} }));
-  };
-  it("says plainly it works on the shared computer, and which device only in Advanced", () => {
-    expect(show(false)).toContain("Uses Codex, on the shared computer.");
-    expect(show(false)).not.toContain("This Mac");
-    expect(show(true)).toContain("Uses Codex, on This Mac.");
   });
 });
 

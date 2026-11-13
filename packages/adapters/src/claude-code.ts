@@ -39,7 +39,7 @@ export function claudeArgs(input: RunInput, opts: { mcpConfigFile?: string } = {
   // Claude Code's fast mode is a setting (what /fast toggles); --settings layers it on for this run
   if (input.fast) args.push("--settings", JSON.stringify({ fastMode: true }));
   // not the person's own plugins, hooks, MCP servers or browser link: only what Wisp passes in below
-  if (input.ownPlugins !== true) args.push("--strict-mcp-config", "--setting-sources", "project,local", "--no-chrome");
+  if (input.ownPlugins !== true) args.push("--strict-mcp-config", "--setting-sources", input.ownMemory ? "user,project,local" : "project,local", "--no-chrome");
   const mcp = claudeMcpConfig(input);
   if (mcp) {
     args.push("--mcp-config", opts.mcpConfigFile ?? JSON.stringify(mcp));
@@ -53,6 +53,7 @@ export function claudeArgs(input: RunInput, opts: { mcpConfigFile?: string } = {
  * device that nobody else can see, while Wisp's memory is shared and visible.
  */
 export function claudeEnv(input: RunInput): Record<string, string> {
+  if (input.ownMemory) return { ...input.env };
   return { ...input.env, CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" };
 }
 
