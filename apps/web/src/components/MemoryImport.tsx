@@ -76,7 +76,7 @@ export function MemoryImport({ agentName, askable, saveLabel, skipLabel, onSave,
       await navigator.clipboard.writeText(memoryPrompt(l?.url));
       setCopied(true);
     } catch {
-      setError("Couldn't copy. Select the prompt below and copy it.");
+      setError("Couldn't copy. Select the prompt and copy it.");
     }
     setPhase({ at: "paste" });
   };
@@ -162,7 +162,7 @@ export function MemoryImport({ agentName, askable, saveLabel, skipLabel, onSave,
             <span className="flex-1 text-[13.5px] font-semibold">{phase.at === "asking" ? `${harnessLabel(phase.harness)} is writing down what it knows…` : `Here's what ${agentName} will know. Untick anything to leave out.`}</span>
             {phase.at === "review" && <span className="ob-note">From {phase.from}</span>}
           </div>
-          <div className="ob-rule flex min-h-[120px] flex-col py-1.5">
+          <div className="ob-rule flex min-h-[120px] max-h-[min(52vh,520px)] overflow-y-auto flex-col py-1.5">
             {phase.at === "asking" && (
               <p className="ob-sub px-[18px] py-3">
                 This can take a few minutes. <span className="ob-dots" aria-hidden><span /><span /><span /></span>

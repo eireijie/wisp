@@ -29,13 +29,24 @@ function fileName(title: string): string {
   );
 }
 
-/** A project line's name: what comes before its first ":", " - ", "—" or "(" ("Wisp: an agents app" → "Wisp"). */
-export function projectName(text: string): string {
-  const name = text
-    .replace(/[*_`]/g, "")
-    .split(/:|\s[-–—]\s|—|\(/)[0]
-    .trim();
-  return name.slice(0, 60) || text.slice(0, 40);
+/**
+ * A project line's name, so every line about one project lands in one note. "Wisp: an agents
+ * app" → "Wisp"; with no short label first, the capitalized words it opens with: "Wisp's next
+ * step is…" and "Hotel Reconciliation Center is…" → "Wisp", "Hotel Reconciliation Center".
+ * Null when the line names nothing, so it goes in the Projects note.
+ */
+export function projectName(text: string): string | null {
+  const bare = text.replace(/[*_`]/g, "").trim();
+  const label = bare.split(/:|\s[-–—]\s|—|\(/)[0].trim();
+  const clean = (n: string) => n.replace(/['’]s$/i, "").replace(/[,.;]+$/, "").trim().slice(0, 60) || null;
+  if (label && label !== bare && label.split(/\s+/).length <= 5) return clean(label);
+  const words: string[] = [];
+  for (const w of bare.split(/\s+/)) {
+    if (!/^[A-Z0-9]/.test(w)) break;
+    words.push(w);
+    if (/(['’]s|[,.;])$/.test(w) || words.length === 5) break;
+  }
+  return words.length ? clean(words.join(" ")) : null;
 }
 
 const bullet = (t: string) => `- ${t.replace(/\s+/g, " ").trim()}`;
@@ -54,9 +65,10 @@ export async function saveImportedMemory(vault: Vault, agent: { id: string; hand
     const text = l.text.replace(/\s+/g, " ").trim();
     const heading = l.heading.replace(/\s+/g, " ").trim().slice(0, 60) || "Other";
     if (!text || looksSecret(text) || looksSecret(heading)) continue;
-    const project = heading.toLowerCase() === "projects";
-    const title = project ? `Project: ${projectName(text)}` : heading;
-    const path = `${dir}/${fileName(project ? `Project - ${projectName(text)}` : heading)}.md`;
+    const name = heading.toLowerCase() === "projects" ? projectName(text) : null;
+    const project = !!name;
+    const title = name ? `Project: ${name}` : heading;
+    const path = `${dir}/${fileName(name ? `Project - ${name}` : heading)}.md`;
     const n = notes.get(path) ?? { title, type: project ? "project" : "reference", lines: [] };
     if (!n.lines.some((x) => x.toLowerCase() === text.toLowerCase())) n.lines.push(text);
     notes.set(path, n);

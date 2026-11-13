@@ -112,7 +112,7 @@ export function parseMemoryAnswer(answer: string): ParsedMemory {
       continue;
     }
     const unsure = /\(unsure\)/i.test(text);
-    text = text.replace(/\s*\(unsure\)\s*/gi, " ").trim().slice(0, 500);
+    text = text.replace(/\s*\(unsure\)\s*/gi, " ").replace(/\s+([.,;:])/g, "$1").trim().slice(0, 500);
     const key = `${heading}\n${text.toLowerCase()}`;
     if (!text || seen.has(key)) continue;
     seen.add(key);

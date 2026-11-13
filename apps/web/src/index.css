@@ -857,6 +857,8 @@ body {
 @keyframes ob-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 @keyframes ob-dot { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
 @media (max-width: 760px) {
+  .ob-foot { flex-wrap: wrap; justify-content: flex-end; }
+  .ob-foot > .ob-note:first-child { flex-basis: 100%; }
   .ob-frame { flex-direction: column; overflow-y: auto; }
   .ob-side { width: auto; flex-direction: row; align-items: center; padding: 12px 16px; gap: 12px; border-right: 0; border-bottom: 1px solid var(--line); }
   .ob-brand span { display: none; }

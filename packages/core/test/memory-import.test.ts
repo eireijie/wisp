@@ -16,7 +16,7 @@ describe("parseMemoryAnswer", () => {
     "Here's everything:",
     "## About me: name, work",
     "- Name: Sam, builds a home automation app (memory)",
-    "- Timezone is Europe/Lisbon (unsure)",
+    "- Timezone is Europe/Lisbon (unsure).",
     "",
     "## Projects",
     "1. Wisp: agents workspace, repo ~/kodi, next step is onboarding",
@@ -35,7 +35,7 @@ describe("parseMemoryAnswer", () => {
     expect(parsed.lines.map((l) => [l.heading, l.text])).toEqual([
       ["Other", "Here's everything:"],
       ["About me", "Name: Sam, builds a home automation app (memory)"],
-      ["About me", "Timezone is Europe/Lisbon"],
+      ["About me", "Timezone is Europe/Lisbon."],
       ["Projects", "Wisp: agents workspace, repo ~/kodi, next step is onboarding"],
       ["Projects", "Garden sensor"],
       ["Tools and accounts", "GitHub, Linear"],
@@ -44,7 +44,7 @@ describe("parseMemoryAnswer", () => {
   });
 
   it("marks (unsure) lines so they start unticked", () => {
-    expect(parsed.lines.filter((l) => l.unsure).map((l) => l.text)).toEqual(["Timezone is Europe/Lisbon", "Garden sensor"]);
+    expect(parsed.lines.filter((l) => l.unsure).map((l) => l.text)).toEqual(["Timezone is Europe/Lisbon.", "Garden sensor"]);
   });
 
   it("drops lines that look like secrets and counts them", () => {
