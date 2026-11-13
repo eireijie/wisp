@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { replyAfter } from "./harness-signin.ts";
+import { pasteHereLine, replyAfter } from "./harness-signin.ts";
 
 describe("a harness sign-in's answer to a pasted code", () => {
   it("is what it printed after the code went in, without the prompt it asks again with", () => {
@@ -10,5 +10,12 @@ describe("a harness sign-in's answer to a pasted code", () => {
 
   it("still finds the last line when the start of the output was trimmed away", () => {
     expect(replyAfter("old text that scrolled off", "…\nLogin failed: Request failed with status code 400\n")).toBe("Login failed: Request failed with status code 400");
+  });
+});
+
+describe("the line before a sign-in's paste box", () => {
+  it("says the page asks for the code in the harness, and that it goes here", () => {
+    expect(pasteHereLine("Claude Code", "claude.ai")).toBe("Sign in on claude.ai. It then shows a code and says to paste it into Claude Code: paste it here instead.");
+    expect(pasteHereLine("Codex")).toContain("Sign in on the page.");
   });
 });

@@ -68,6 +68,17 @@ describe("Wisp setup after the account", () => {
     await makeFirstAgent(ready, "codex", "Atlas", [], []);
     expect(api).toHaveBeenCalledExactlyOnceWith("POST", "/api/agents", expect.objectContaining({ nodeId: "mac", useDefaults: true }));
   });
+  it("puts the agent on the model connection Wisp keeps, so its first message needs no other sign-in", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ id: "agent" });
+    await makeFirstAgent(device, "codex", "Atlas", [], [], undefined, "mc_1");
+    expect(api).toHaveBeenCalledExactlyOnceWith("POST", "/api/agents", expect.objectContaining({ useDefaults: true, settings: { connectionId: "mc_1" } }));
+  });
+  it("gives an agent in its own computer the connection too", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ id: "vm1" }).mockResolvedValueOnce({ id: "agent" });
+    const vmOnly = { ...device, harnesses: [], capabilities: { vm: { ok: true } } } as unknown as DeviceInfo;
+    await makeFirstAgent(vmOnly, "hermes", "Atlas", [], [], undefined, "mc_1");
+    expect(api).toHaveBeenLastCalledWith("POST", "/api/agents", expect.objectContaining({ computerId: "vm1", settings: { runIn: "computer", connectionId: "mc_1" } }));
+  });
   it("installs a missing npm harness before creating its agent", async () => {
     vi.mocked(api).mockResolvedValue({});
     await makeFirstAgent(device, "kimi", "Atlas", [], []);

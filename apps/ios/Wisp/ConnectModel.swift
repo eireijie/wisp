@@ -98,7 +98,7 @@ struct ConnectProviderView: View {
           Text(code).font(.system(size: 26, weight: .semibold, design: .monospaced)).tracking(1.5).textSelection(.enabled)
             .accessibilityIdentifier("login-code")
         } else {
-          Text(login.wantsInput == true ? "Open the link, approve, then paste the code it shows." : "Open the link and approve.").font(.system(size: 15)).foregroundStyle(Palette.muted)
+          Text(login.wantsInput == true ? "Sign in on \(ModelWords.host(login.url) ?? "the page"). It then shows a code and says to paste it into \(HarnessChoice.label(login.harness ?? "")): paste it here instead." : "Open the link and approve.").font(.system(size: 15)).foregroundStyle(Palette.muted)
         }
         HStack(spacing: 8) {
           Button { if let u = login.url.flatMap(URL.init(string:)) { openURL(u) } } label: {
@@ -119,7 +119,7 @@ struct ConnectProviderView: View {
         }
         if login.wantsInput == true && login.code == nil {
           HStack(spacing: 8) {
-            TextField("Paste the code", text: $pasted).font(.system(size: 15, design: .monospaced))
+            TextField("Paste the code here", text: $pasted).font(.system(size: 15, design: .monospaced))
               .textInputAutocapitalization(.never).autocorrectionDisabled()
               .padding(.horizontal, 12).frame(height: 38)
               .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.field))
