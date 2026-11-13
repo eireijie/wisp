@@ -543,9 +543,10 @@ struct HarnessSignInSheet: View {
           CircleButton(symbol: "doc.on.doc", label: "Copy code", size: 44) { UIPasteboard.general.string = value }
         })
       } else if login?.url != nil {
-        step(2, "Copy the code the page shows, then paste it here", {
+        step(2, "Paste the code here", {
+          Text("The page shows a code and says to paste it into \(label). Paste it here instead.").font(.system(size: 13)).foregroundStyle(Palette.muted)
           HStack(spacing: 8) {
-            MarketField(label: nil, placeholder: "Paste the code", text: $code, plain: true)
+            MarketField(label: nil, placeholder: "Paste the code here", text: $code, plain: true)
             // the system's Paste button reads the clipboard without asking each time
             PasteButton(payloadType: String.self) { strings in
               if let text = strings.first?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty { code = text }
@@ -559,7 +560,7 @@ struct HarnessSignInSheet: View {
       Text("\(answer) Copy the whole code from the page and paste it again.").font(.footnote).foregroundStyle(Palette.red).padding(.horizontal, 4)
         .accessibilityIdentifier("sign-in-answer")
     }
-    Text(login?.url != nil && login?.code == nil ? "After you sign in, the page shows a code. Come back here and paste it; Wisp passes it to \(label) on \(device.name). Your password stays with the harness." : "Wisp passes the code to \(label) on \(device.name). Your password stays with the harness.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+    Text("Wisp passes the code to \(label) on \(device.name). Your password stays with \(label).").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
     HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Waiting for you to finish signing in").font(.footnote).foregroundStyle(Palette.muted) }.padding(.horizontal, 4)
   }
 
