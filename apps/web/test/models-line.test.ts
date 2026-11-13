@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CREDENTIAL_SUPPORT, MODEL_PROVIDER_INFO, type ModelConnection } from "@wisp/core";
 // the helpers are pure; the store (which reads the browser) only backs the hooks
 vi.mock("../src/store.ts", () => ({ useStore: Object.assign(() => 0, { subscribe: () => () => {} }) }));
-import { agentComputer, canUse, connectWays, connectionName, connectionSub, connectionsFor, contextLine, effortShort, modelName, planLeft, runLine, siteName, windowName, type AgentContext, type AgentModels, type HarnessComputer } from "../src/models.ts";
+import { agentComputer, canUse, connectWays, readyConnection, signInProvider, connectionName, connectionSub, connectionsFor, contextLine, effortShort, modelName, planLeft, runLine, siteName, windowName, type AgentContext, type AgentModels, type HarnessComputer } from "../src/models.ts";
 
 const ctx = (over: Partial<AgentContext> = {}): AgentContext => ({
   harness: "hermes",
@@ -130,5 +130,21 @@ describe("the agent's computer", () => {
   it("is its VM when it runs in one, else its device", () => {
     expect(agentComputer({ nodeId: "n1" }, { computer: { id: "vm1", name: "agent's desk", reported: true } }, computers)?.name).toBe("agent's desk");
     expect(agentComputer({ nodeId: "n1" }, { computer: null }, computers)?.name).toBe("MacBook");
+  });
+});
+
+describe("signing in once in setup", () => {
+  it("knows which provider a harness signs in to through Wisp", () => {
+    expect(signInProvider("claude-code")).toBe("anthropic");
+    expect(signInProvider("codex")).toBe("openai");
+    // Hermes keeps its many sign-ins where it runs
+    expect(signInProvider("hermes")).toBeNull();
+    expect(signInProvider("gemini")).toBeNull();
+  });
+  it("counts only the person's own connection whose sign-in still works", () => {
+    const c = (over: Partial<ModelConnection>) => ({ id: "mc", provider: "anthropic", kind: "oauth", harnesses: ["claude-code"], mine: true, lastError: null, ...over }) as ModelConnection;
+    expect(readyConnection("claude-code", [c({ id: "dead", lastError: "OAuth session expired" }), c({ id: "ok" })])?.id).toBe("ok");
+    expect(readyConnection("claude-code", [c({ mine: false })])).toBeUndefined();
+    expect(readyConnection("codex", [c({})])).toBeUndefined();
   });
 });

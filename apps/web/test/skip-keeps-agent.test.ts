@@ -12,7 +12,12 @@ describe("Skip for now on the agent step", () => {
     const make = vi.fn().mockResolvedValue({ id: "a1", name: "Atlas" } as Agent);
     const r = await skipKeepingAgent({ ...base, make });
     expect(r.kept?.id).toBe("a1");
-    expect(make).toHaveBeenCalledWith(device, "codex", "Atlas", [], [], base.look);
+    expect(make).toHaveBeenCalledWith(device, "codex", "Atlas", [], [], base.look, undefined);
+  });
+  it("keeps the model connection the person signed in with", async () => {
+    const make = vi.fn().mockResolvedValue({ id: "a1", name: "Atlas" } as Agent);
+    await skipKeepingAgent({ ...base, connectionId: "mc_1", make });
+    expect(make).toHaveBeenCalledWith(device, "codex", "Atlas", [], [], base.look, "mc_1");
   });
   it("has nothing to keep without a computer or a name", async () => {
     const make = vi.fn();

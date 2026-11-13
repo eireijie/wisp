@@ -135,6 +135,20 @@ export function connectionsFor(harness: string, connections: ModelConnection[]):
   return connections.filter((c) => c.harnesses.includes(harness));
 }
 
+/**
+ * The provider a harness signs in to through Wisp (a connection the hub keeps and hands to each
+ * run), when that's the harness's own provider: Claude Code → Claude, Codex → ChatGPT. null for
+ * harnesses that keep their sign-in where they run (Hermes, Gemini, Kimi…).
+ */
+export function signInProvider(harness: string): ModelProvider | null {
+  return PROVIDERS.find((p) => p.signIn?.some((w) => w.harness === harness && !w.hermesProvider))?.id ?? null;
+}
+
+/** The person's own connection a harness can run on now: one whose last sign-in didn't fail. */
+export function readyConnection(harness: string, connections: ModelConnection[]): ModelConnection | undefined {
+  return connectionsFor(harness, connections).find((c) => c.mine && !c.lastError);
+}
+
 /** Whether a harness can use a connection (the shared support table). */
 export function canUse(support: Pick<CredentialSupport, "harness" | "provider" | "kind">[], harness: string, c: { provider: string; kind: string } | null | undefined): boolean {
   return !c || support.some((s) => s.harness === harness && s.provider === c.provider && s.kind === c.kind);

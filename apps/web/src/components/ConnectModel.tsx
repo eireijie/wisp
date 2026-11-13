@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ChevronRight, ExternalLink, Loader2 } from "lucide-react";
-import { MODEL_PROVIDER_INFO, type ModelConnection, type ModelLogin, type ModelProvider } from "@wisp/core";
+import { MODEL_PROVIDER_INFO, harnessLabel, type ModelConnection, type ModelLogin, type ModelProvider } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { PROVIDERS, connectWays, siteName } from "../models.ts";
 import { cx } from "./ui.tsx";
 import { SegBar } from "./RunParts.tsx";
+import { canReadClipboard, pasteHereLine, readClipboard } from "../harness-signin.ts";
 
 /**
  * Connect a model once: a sign-in (one of the person's devices runs the provider's own sign-in and
@@ -160,7 +161,7 @@ function SignIn({ provider, big, onDone, onKey }: { provider: ModelProvider; big
         </p>
       ) : (
         <>
-          <p className={cx("text-ink/90", big ? "text-[15px]" : "text-[13px]")}>{login.code ? "Open the link and enter this code." : login.wantsInput ? `Open the link, sign in, then paste the code ${site} shows.` : "Open the link and sign in."}</p>
+          <p className={cx("text-ink/90", big ? "text-[15px]" : "text-[13px]")}>{login.code ? "Open the link and enter this code." : login.wantsInput ? pasteHereLine(harnessLabel(login.harness), site) : "Open the link and sign in."}</p>
           {login.code && <div className={cx("font-mono font-semibold tracking-[0.12em] select-all", big ? "text-[26px]" : "text-[22px]")}>{login.code}</div>}
           <div className="flex flex-wrap gap-2">
             <a href={login.url} target="_blank" rel="noreferrer" className={cx(btn, "bg-accent text-accent-ink hover:bg-accent/90")}>
@@ -175,7 +176,12 @@ function SignIn({ provider, big, onDone, onKey }: { provider: ModelProvider; big
           </div>
           {login.wantsInput && (
             <form onSubmit={send} className="flex gap-2">
-              <input value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste the code" aria-label="Code from the sign-in page" autoComplete="off" spellCheck={false} className={cx("min-w-0 flex-1 rounded-lg border border-control-line bg-control px-3 font-mono outline-none focus:border-ring", big ? "h-10 text-[15px]" : "h-8 text-[13px]")} />
+              <input value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste the code here" aria-label="Code from the sign-in page" autoComplete="off" spellCheck={false} className={cx("min-w-0 flex-1 rounded-lg border border-control-line bg-control px-3 font-mono outline-none focus:border-ring", big ? "h-10 text-[15px]" : "h-8 text-[13px]")} />
+              {canReadClipboard() && !paste.trim() && (
+                <button type="button" onClick={() => void readClipboard().then((t) => t && setPaste(t))} className={cx(btn, "bg-chip hover:bg-hover")}>
+                  Paste
+                </button>
+              )}
               <button type="submit" disabled={!paste.trim() || sending} className={cx(btn, "bg-chip hover:bg-hover disabled:opacity-50")}>
                 {sending ? <Loader2 size={13} className="animate-spin" /> : "Send"}
               </button>

@@ -14,7 +14,7 @@ import { HarnessLogo } from "../../components/HarnessLogo.tsx";
 import { Badge, Circle, Dlg, Item, Label, Panel, Pick, Prim, Sec, Seg, Switch, TextBox, Tile } from "../../components/MarketParts.tsx";
 import { AgentPicker } from "../../components/ShopParts.tsx";
 import { InstallHarness } from "./runtimes.tsx";
-import { replyAfter } from "../../harness-signin.ts";
+import { canReadClipboard, readClipboard, replyAfter } from "../../harness-signin.ts";
 
 export interface HarnessesResponse {
   device: { id: string; name: string };
@@ -670,13 +670,10 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
   /** what it had printed when a code was sent: anything after is its answer */
   const [sentAt, setSentAt] = useState<string | null>(null);
   const answer = sentAt !== null && login ? replyAfter(sentAt, login.output ?? "") : "";
-  // reading the clipboard needs a secure page and a browser that allows it
-  const canPaste = typeof navigator !== "undefined" && !!navigator.clipboard?.readText && window.isSecureContext;
+  const canPaste = canReadClipboard();
   const paste = async () => {
-    try {
-      const text = (await navigator.clipboard.readText()).trim();
-      if (text) setCode(text);
-    } catch {}
+    const text = await readClipboard();
+    if (text) setCode(text);
   };
   const send = async (e: FormEvent) => {
     e.preventDefault();
@@ -758,14 +755,17 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
               !running.code &&
               step(
                 2,
-                "Copy the code the page shows, then paste it here",
-                <form onSubmit={send} id="harness-code" className="flex min-w-0 items-center gap-2">
-                  <TextBox value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste the code" aria-label="Code from the sign-in page" className="min-w-0 flex-1" autoComplete="off" autoCapitalize="off" spellCheck={false} />
-                  {canPaste && (
-                    <Sec onClick={() => void paste()} className="shrink-0">
-                      Paste
-                    </Sec>
-                  )}
+                "Paste the code here",
+                <form onSubmit={send} id="harness-code" className="min-w-0 space-y-2">
+                  <p className="text-sm text-muted">{`The page shows a code and says to paste it into ${label}. Paste it here instead.`}</p>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <TextBox value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste the code here" aria-label="Code from the sign-in page" className="min-w-0 flex-1" autoComplete="off" autoCapitalize="off" spellCheck={false} />
+                    {canPaste && (
+                      <Sec onClick={() => void paste()} className="shrink-0">
+                        Paste
+                      </Sec>
+                    )}
+                  </div>
                 </form>,
               )}
           </Panel>
@@ -775,7 +775,7 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
             </p>
           )}
           <p className="px-1 text-sm text-faint">
-            {running.url && !running.code ? `After you sign in, the page shows a code. Come back here and paste it; Wisp passes it to ${label} on ${device.name}.` : `Wisp passes the code to ${label} on ${device.name}.`} Your password stays with the harness.
+            Wisp passes the code to {label} on {device.name}. Your password stays with {label}.
           </p>
           <p className="flex items-center gap-1.5 px-1 text-xs text-muted">
             <Loader2 size={12} className="animate-spin" /> Waiting for you to finish signing in
