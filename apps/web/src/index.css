@@ -958,10 +958,19 @@ body {
   .wisp-root .wisp-mouth > * { transition: none; }
 }
 
-/* ---------- the desktop rail: 72px, opens to 300px over the page while the pointer rests on it ---------- */
-.rail { width: 72px; transition: width var(--t-drawer) var(--drawer), box-shadow var(--t-drawer) var(--drawer); }
-.rail-wrap:hover > .rail, .rail:has(:focus-visible) { width: 300px; box-shadow: var(--shadow-float); transition-delay: 120ms; }
-.rail .rail-label { opacity: 0; transition: opacity 180ms ease-out; pointer-events: none; }
-.rail-wrap:hover > .rail .rail-label, .rail:has(:focus-visible) .rail-label { opacity: 1; transition-delay: 180ms; pointer-events: auto; }
-.rail-chats { scrollbar-width: none; }
-.rail-chats::-webkit-scrollbar { display: none; }
+/* ---------- the desktop sidebar (2026-11-21 canvas "Wisp docked sidebar"): docked, dragged by its edge ---------- */
+.side-list { scrollbar-width: none; }
+.side-list::-webkit-scrollbar { display: none; }
+/* the edge: a 9px grab strip over the 1px border; violet after a short hover, at once while dragging */
+.side-edge { position: absolute; top: 0; bottom: 0; right: -5px; width: 9px; z-index: 40; cursor: col-resize; touch-action: none; outline: none; }
+.side-edge > span { position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; background: transparent; transition: background-color 140ms ease, width 140ms ease, left 140ms ease; }
+.side-edge:hover > span, .side-edge:focus-visible > span, .side-edge[data-drag] > span { background: var(--wisp); width: 2px; left: 3.5px; transition-delay: 90ms; }
+.side-edge[data-drag] > span { transition-delay: 0ms; }
+body.side-resizing { cursor: col-resize; user-select: none; -webkit-user-select: none; }
+body.side-resizing iframe { pointer-events: none; }
+@keyframes side-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.side-pulse { animation: side-pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .side { transition: none !important; }
+  .side-pulse { animation: none; }
+}

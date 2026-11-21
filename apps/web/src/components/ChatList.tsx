@@ -31,7 +31,7 @@ export function startNewAgent() {
 }
 
 /** One row of the flat chats list: a chat with an agent, or a team. */
-interface Chat {
+export interface Chat {
   key: string;
   kind: "dm" | "team";
   channel: ChannelInfo | null;
@@ -344,7 +344,7 @@ function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSec
 }
 
 /** Pin to top, Move to section, Mute, Mark as read and Leave team for one chat. */
-function ChatMenu({ chat, channel, at, onClose, sections, onNewSection }: { chat: Chat; channel: ChannelInfo; at: { x: number; y: number }; onClose: () => void; sections: Section[]; onNewSection: () => void }) {
+export function ChatMenu({ chat, channel, at, onClose, sections, onNewSection }: { chat: Chat; channel: ChannelInfo; at: { x: number; y: number }; onClose: () => void; sections: Section[]; onNewSection: () => void }) {
   const [view, setView] = useState<"main" | "move">("main");
   const [settings, setSettings] = useState(false);
   const guest = useStore((s) => s.me?.role) === "guest";
