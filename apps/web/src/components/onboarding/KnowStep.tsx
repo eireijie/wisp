@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useMotionReduced } from "../../theme.ts";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { motionReduced } from "../../theme.ts";
 import { FACT_GROUPS, SCAN_PARTS } from "../../onboardingV3.ts";
 import { IMPORT_APPS, addFacts, copyQuestion, dropFact, initKnow, pickApp, questionText, startScan, stillLearning, takeAnswer, useKnow } from "../../onboardingKnow.ts";
 import { OnboardingGhost } from "./OnboardingGhost.tsx";
 import { PageTop } from "./PageTop.tsx";
+import { HOST_LOOK, HostGhost, OB_EASE, hostReact } from "./HostGhost.tsx";
+import { useCountUp, useOneByOne } from "./obMotion.tsx";
 
 const STYLE = `
 @keyframes ob-pop { 0% { opacity: 0; transform: translateY(6px) scale(.96); } 100% { opacity: 1; transform: none; } }
@@ -26,6 +28,26 @@ const STYLE = `
   .ob-btn:active { transform: none; }
 }`;
 
+/** A finding that flies out of the host into place (it just appears under Reduce Motion). */
+function FlyIn({ className, children }: { className: string; children: ReactNode }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const host = document.querySelector<HTMLElement>('[data-testid="host-ghost"]');
+    if (!el || !host || typeof el.animate !== "function" || motionReduced()) return;
+    const from = host.getBoundingClientRect();
+    const to = el.getBoundingClientRect();
+    const dx = from.left + from.width / 2 - (to.left + to.width / 2);
+    const dy = from.top + from.height * 0.55 - (to.top + to.height / 2);
+    el.animate([{ transform: `translate(${dx}px, ${dy}px) scale(0.3)`, opacity: 0 }, { opacity: 1, offset: 0.25 }, { transform: "none", opacity: 1 }], { duration: 560, easing: OB_EASE });
+  }, []);
+  return (
+    <span ref={ref} className={className}>
+      {children}
+    </span>
+  );
+}
+
 const Check = () => (
   <span className="ob-pop w-[18px] h-[18px] rounded-full bg-ink flex items-center justify-center">
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--panel)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -44,18 +66,15 @@ const primary = "ob-btn h-10 px-[18px] rounded-full bg-ink text-panel font-semib
  * knows. Every finding is a chip the person can remove; they're saved to memory as they arrive.
  */
 export function KnowStep({ name, workspaceId, onContinue, onSkip, onBack }: { name: string; workspaceId: string; onContinue: () => void; onSkip: () => void; onBack?: () => void }) {
-  const reduced = useMotionReduced();
   const first = name.trim().split(/\s+/)[0] ?? "";
   const k = useKnow();
   useEffect(() => initKnow(workspaceId), [workspaceId]);
 
-  // the ghost hops when it finds the name, and when an import lands
-  const [hop, setHop] = useState(0);
+  // the host hops when it finds the name, and when an import lands
   const [smile, setSmile] = useState(false);
   const smileT = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cheer = () => {
-    if (reduced) return;
-    setHop((h) => h + 1);
+    hostReact("hop");
     setSmile(true);
     clearTimeout(smileT.current);
     smileT.current = setTimeout(() => setSmile(false), 1100);
@@ -81,7 +100,15 @@ export function KnowStep({ name, workspaceId, onContinue, onSkip, onBack }: { na
   const [draft, setDraft] = useState("");
 
   const scanning = k.scan === "running";
-  const facts = k.facts;
+  // what it finds lands one thing at a time: each flies out of the host into "What I know", the host catches it, and the count ticks up
+  const shown = useOneByOne(k.facts.length, 170);
+  const facts = k.facts.slice(0, shown);
+  const count = useCountUp(facts.length);
+  const caught = useRef(shown);
+  useEffect(() => {
+    if (shown > caught.current) hostReact("catch");
+    caught.current = shown;
+  }, [shown]);
   const appName = IMPORT_APPS.find((a) => a.id === k.app)!.label;
   const sub = scanning ? "Looking around…" : facts.length ? "Here's what I picked up." : "The more I know, the less you'll have to explain later.";
 
@@ -117,11 +144,9 @@ export function KnowStep({ name, workspaceId, onContinue, onSkip, onBack }: { na
       <style>{STYLE}</style>
       <PageTop step={2} onBack={onBack} />
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="ob-page mx-auto w-full max-w-[1072px] flex flex-col gap-6 px-4 sm:px-6 pt-4 pb-10">
+        <div className="ob-stagger mx-auto w-full max-w-[1072px] flex flex-col gap-6 px-4 sm:px-6 pt-4 pb-10">
           <div className="flex items-center gap-4">
-            <span className={hop === 0 ? "block" : hop % 2 ? "block ob-hop-a" : "block ob-hop-b"} style={{ transformOrigin: "50% 100%" }}>
-              <OnboardingGhost size={64} working={scanning} smiling={smile || !!k.imported} />
-            </span>
+            <HostGhost look={HOST_LOOK} size={72} mood={scanning ? "working" : "awake"} happy={smile || !!k.imported} />
             <div className="flex flex-col gap-0.5 min-w-0">
               <h1 className="text-[24px] leading-[30px] font-[650] tracking-[-0.015em]">{first ? `Let me get to know you, ${first}.` : "Let me get to know you."}</h1>
               <p className="text-[15px] leading-[22px] text-muted" aria-live="polite">
@@ -132,7 +157,7 @@ export function KnowStep({ name, workspaceId, onContinue, onSkip, onBack }: { na
 
           <div className={showScan ? "grid grid-cols-1 md:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4 max-w-[528px]"}>
             {showScan && (
-              <section className={card}>
+              <section className={`${card}${scanning ? " ob-sweep" : ""}`}>
                 <div className="flex items-center gap-2.5">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                     <rect x="4" y="5" width="16" height="11" rx="2" />
@@ -243,7 +268,7 @@ export function KnowStep({ name, workspaceId, onContinue, onSkip, onBack }: { na
           <div className="flex flex-col gap-2.5">
             <div className="flex items-baseline gap-2.5">
               <h2 className="text-[15px] font-semibold">What I know so far</h2>
-              {!!facts.length && <span className="text-[13px] text-muted">{facts.length} {facts.length === 1 ? "thing" : "things"}</span>}
+              {!!facts.length && <span className="text-[13px] text-muted tabular-nums" data-testid="know-count">{count} {count === 1 ? "thing" : "things"}</span>}
             </div>
             <div className="min-h-[120px] rounded-[18px] bg-[var(--card)] p-4 flex flex-col gap-3">
               {!facts.length && <span className="text-faint">Only your name, so far. Say yes above and this fills in.</span>}
@@ -255,7 +280,7 @@ export function KnowStep({ name, workspaceId, onContinue, onSkip, onBack }: { na
                     <span className="w-[72px] shrink-0 text-[12px] leading-[30px] text-muted">{g}</span>
                     <div className="flex flex-wrap gap-1.5 min-w-0">
                       {mine.map((f) => (
-                        <span key={f.id} className="ob-pop ob-fact min-h-[30px] max-w-full flex items-center gap-1.5 pl-3 pr-1.5 rounded-[15px] bg-panel border border-[var(--line)] text-[13px]">
+                        <FlyIn key={f.id} className="ob-fact min-h-[30px] max-w-full flex items-center gap-1.5 pl-3 pr-1.5 rounded-[15px] bg-panel border border-[var(--line)] text-[13px]">
                           <span className="min-w-0 break-words">{f.text}</span>
                           <span className="text-[11px] text-faint shrink-0">{f.src}</span>
                           <button type="button" aria-label={`Forget ${f.text}`} onClick={() => dropFact(f.id)} className="ob-x w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-ink hover:bg-[var(--hover)]">
@@ -263,7 +288,7 @@ export function KnowStep({ name, workspaceId, onContinue, onSkip, onBack }: { na
                               <path d="M6 6l12 12M18 6 6 18" />
                             </svg>
                           </button>
-                        </span>
+                        </FlyIn>
                       ))}
                     </div>
                   </div>

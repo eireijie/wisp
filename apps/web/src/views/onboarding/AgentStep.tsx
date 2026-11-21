@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { GhostShape } from "@wisp/core";
-import { useMotionReduced } from "../../theme.ts";
-import { FAMILY_COLORS, SHAPE_TO_SILHOUETTE, SILHOUETTES, eyeInk, type Silhouette } from "../../ghostFamily.ts";
-import { ONBOARDING_GHOST_STYLE } from "../../components/onboarding/OnboardingGhost.tsx";
+import { motionReduced, useMotionReduced } from "../../theme.ts";
+import { FAMILY_COLORS } from "../../ghostFamily.ts";
+import { Ghost } from "../../components/Ghost.tsx";
 import { agentInstructions, cap, loadAnswers, PHRASE, pickedGoals, roleLine, type AgentDraft } from "../../onboardingV3.ts";
 import { PageTop } from "../../components/onboarding/PageTop.tsx";
+import { HOST_LOOK, HostGhost, OB_EASE, hostReact } from "../../components/onboarding/HostGhost.tsx";
+import { WHITE_WISP } from "../../components/SetupStage.tsx";
 export { roleLine };
 
 /** What page 3 learned (its Fact, read loosely so this page works before or without it). */
@@ -32,12 +34,9 @@ const STYLE = `
 }`;
 
 const COLOR_NAMES = ["Violet", "Teal", "Orange", "Blue", "Pink", "Lime"];
-const SHAPES: Silhouette[] = ["ghost", "drop", "soft", "tall", "wide", "block"];
-const SHAPE_LABEL: Record<Silhouette, string> = { ghost: "Ghost", drop: "Drop", soft: "Soft", tall: "Tall", wide: "Wide", block: "Block" };
+const SHAPES: GhostShape[] = ["classic", "round", "tall", "sheet", "wisp"];
+const SHAPE_LABEL: Record<GhostShape, string> = { classic: "Classic", round: "Round", tall: "Tall", sheet: "Sheet", wisp: "Wisp" };
 const NAME_POOL = ["Juno", "Atlas", "Pip", "Nova", "Milo", "Iris", "Otto", "Wren", "Remy", "Luna"];
-
-/** Family silhouette → the shape the app stores (block has none of its own, so it saves as classic). */
-const STORED: Record<Silhouette, GhostShape> = { ...(Object.fromEntries(Object.entries(SHAPE_TO_SILHOUETTE).map(([k, v]) => [v, k])) as Record<Silhouette, GhostShape>), block: "classic" };
 
 /** One thing it learned on page 3 that reads well after "then": work first, never "You're Sam". */
 function factLine(facts: readonly Fact[]): string | null {
@@ -69,43 +68,9 @@ export const handleOf = (name: string) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 32);
 
-/** A family ghost in any colour and silhouette: idles, hops, smiles and talks (no cursor follow). */
-function AgentGhost({ size, color, silhouette, smiling = false, talking = false, hop = 0 }: { size: number; color: string; silhouette: Silhouette; smiling?: boolean; talking?: boolean; hop?: number }) {
-  const reduced = useMotionReduced();
-  const shape = SILHOUETTES[silhouette];
-  const eye = eyeInk(color);
-  const my = shape.ey + 5;
-  const md = smiling ? `M18 ${my - 0.3}q2 1.7 4 0` : `M18.7 ${my}h2.6`;
-  return (
-    <span
-      aria-hidden
-      className={["wisp-root hello-ghost relative inline-block shrink-0 idle", talking && "talking", reduced && "frozen", size <= 44 && "small"].filter(Boolean).join(" ")}
-      style={{ width: size, height: size }}
-    >
-      <style>{ONBOARDING_GHOST_STYLE}</style>
-      <svg width="100%" height="100%" viewBox="0 0 40 40" style={{ overflow: "visible", display: "block" }}>
-        <g className="wisp-wander">
-          <g key={hop} className={hop ? "wisp-wake hop" : "wisp-wake"}>
-            <g className="wisp-bob">
-              <g className="wisp-lean">
-                <path d={shape.d} fill={color} style={{ transition: reduced ? undefined : "fill .25s ease" }} />
-                <g className="wisp-gaze">
-                  <g className="wisp-lid">
-                    <ellipse className="wisp-eye" cx="16" cy={shape.ey} rx="1.9" ry="2.7" fill={eye} />
-                  </g>
-                  <g className="wisp-lid">
-                    <ellipse className="wisp-eye" cx="24" cy={shape.ey} rx="1.9" ry="2.7" fill={eye} />
-                  </g>
-                  <path className="hello-mouth" d={md} fill="none" stroke={eye} strokeWidth="1.25" strokeLinecap="round" />
-                  <ellipse className="hello-talk" cx="20" cy={my} rx="1.5" ry="1.3" fill={eye} />
-                </g>
-              </g>
-            </g>
-          </g>
-        </g>
-      </svg>
-    </span>
-  );
+/** The app's ghost in the picked colour and shape: floats, smiles and talks (no cursor follow). */
+function AgentGhost({ size, color, shape, smiling = false, still = false }: { size: number; color: string; shape: GhostShape; smiling?: boolean; still?: boolean }) {
+  return <Ghost look={{ shape, color, eyes: "dots", mouth: "smile", cheeks: false, hat: "none", accessory: "none", motion: "float" }} size={size} happy={smiling} talking={smiling} animate={!still} label="" />;
 }
 
 type Field = "name" | "role" | "color" | "shape";
@@ -125,9 +90,25 @@ export function AgentStep({ workspaceId, person, onContinue, onBack }: { workspa
   // a draft saved with the old "so you can spend less time on them" wording gets the new line
   const [role, setRole] = useState(() => (draft?.role && !/, so you can spend less time on (them|it)\.$/.test(draft.role) ? draft.role : roleLine(answers.goals, answers.other, facts)));
   const [color, setColor] = useState<string>(draft?.color ?? FAMILY_COLORS[0]);
-  const [shape, setShape] = useState<Silhouette>(draft?.silhouette ?? (draft ? SHAPE_TO_SILHOUETTE[draft.shape] : "ghost"));
-  const [hop, setHop] = useState(0);
+  const [shape, setShape] = useState<GhostShape>(draft?.shape && SHAPES.includes(draft.shape) ? draft.shape : "classic");
   const [smile, setSmile] = useState(false);
+  // a new shape morphs in (a quick shrink and twist back to rest), never a cut
+  const morph = useRef<HTMLDivElement>(null);
+  const shownShape = useRef(shape);
+  useEffect(() => {
+    if (shownShape.current === shape) return;
+    shownShape.current = shape;
+    const el = morph.current;
+    if (!el || motionReduced() || typeof el.animate !== "function") return;
+    el.animate([{ transform: "scale(0.86) rotate(-6deg)", opacity: 0.55 }, { transform: "none", opacity: 1 }], { duration: 300, easing: OB_EASE });
+  }, [shape]);
+  // the white host puts on the agent's colour a beat after the page opens (already dressed when coming back)
+  const [dressed, setDressed] = useState(!!draft);
+  useEffect(() => {
+    if (dressed) return;
+    const t = setTimeout(() => (setDressed(true), hostReact("hop")), reduced ? 0 : 650);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -155,17 +136,18 @@ export function AgentStep({ workspaceId, person, onContinue, onBack }: { workspa
   const first = person.trim().split(/\s+/)[0] ?? "";
   const names = NAME_POOL.filter((n) => n.toLowerCase() !== first.toLowerCase()).slice(0, 3);
 
-  const bump = () => {
+  const bump = (kind: "hop" | "nod" = "hop") => {
+    setDressed(true);
+    hostReact(kind);
     if (reduced) return;
-    setHop((h) => h + 1);
     setSmile(true);
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setSmile(false), 1100);
   };
   const change = (f: Field) => touched.current.add(f);
-  const pickName = (n: string) => (change("name"), setName(n), bump());
+  const pickName = (n: string) => (change("name"), setName(n), bump("nod"));
   const pickColor = (c: string) => (change("color"), setColor(c), bump());
-  const pickShape = (s: Silhouette) => (change("shape"), setShape(s), bump());
+  const pickShape = (s: GhostShape) => (change("shape"), setShape(s), bump());
   const surprise = () => {
     const any = <T,>(xs: readonly T[], not: T) => {
       const rest = xs.filter((x) => x !== not);
@@ -192,8 +174,7 @@ export function AgentStep({ workspaceId, person, onContinue, onBack }: { workspa
       ...(handleOf(n) ? { handle: handleOf(n) } : {}),
       role: r,
       color,
-      shape: STORED[shape],
-      silhouette: shape,
+      shape,
       instructions: agentInstructions(n, person, r, answers.goals, answers.other),
     });
   };
@@ -205,7 +186,7 @@ export function AgentStep({ workspaceId, person, onContinue, onBack }: { workspa
       <style>{STYLE}</style>
       <PageTop step={3} onBack={onBack} />
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="ob-page min-h-full grid grid-cols-1 lg:grid-cols-[minmax(0,520px)_minmax(0,440px)] gap-10 lg:gap-20 justify-center items-center px-4 sm:px-6 pt-4 pb-10">
+        <div className="ob-stagger min-h-full grid grid-cols-1 lg:grid-cols-[minmax(0,520px)_minmax(0,440px)] gap-10 lg:gap-20 justify-center items-center px-4 sm:px-6 pt-4 pb-10">
           <form
             className="flex flex-col gap-[22px] min-w-0 order-2 lg:order-1"
             onSubmit={(e) => {
@@ -296,13 +277,9 @@ export function AgentStep({ workspaceId, person, onContinue, onBack }: { workspa
                     aria-pressed={shape === s}
                     onClick={() => pickShape(s)}
                     className="ob-btn w-14 h-14 rounded-[14px] border flex items-center justify-center p-0"
-                    style={{ borderColor: shape === s ? "var(--ink)" : "var(--line2)", background: shape === s ? `${color}1f` : "var(--panel)" }}
+                    style={{ borderColor: shape === s ? "var(--ink)" : "var(--line2)", boxShadow: shape === s ? "inset 0 0 0 1px var(--ink)" : "none", background: shape === s ? `${color}1f` : "var(--panel)" }}
                   >
-                    <svg width="36" height="36" viewBox="0 0 40 40" aria-hidden style={{ overflow: "visible" }}>
-                      <path d={SILHOUETTES[s].d} fill={color} />
-                      <ellipse cx="16" cy={SILHOUETTES[s].ey} rx="1.9" ry="2.7" fill={eyeInk(color)} />
-                      <ellipse cx="24" cy={SILHOUETTES[s].ey} rx="1.9" ry="2.7" fill={eyeInk(color)} />
-                    </svg>
+                    <AgentGhost size={38} color={color} shape={s} still />
                   </button>
                 ))}
               </div>
@@ -319,13 +296,17 @@ export function AgentStep({ workspaceId, person, onContinue, onBack }: { workspa
           </form>
 
           <div className="flex flex-col items-center gap-[22px] min-w-0 order-1 lg:order-2">
-            <div className="w-full max-w-[440px] h-[220px] lg:h-[300px] rounded-[24px] bg-[var(--card)] flex items-center justify-center">
-              <span className={hop === 0 ? "block" : hop % 2 ? "block ob-hop-a" : "block ob-hop-b"} style={{ transformOrigin: "50% 100%" }}>
-                <AgentGhost size={168} color={color} silhouette={shape} smiling={smile} talking={smile} />
-              </span>
+            <div className="w-full max-w-[440px] h-[240px] lg:h-[320px] rounded-[24px] bg-[var(--card)] flex flex-col items-center justify-center gap-3">
+              <div ref={morph} data-ghost-glance="">
+                <HostGhost className="ob-dress" look={dressed ? { ...WHITE_WISP, shape, color, color2: undefined } : { ...HOST_LOOK, shape }} size={150} happy={smile} talking={smile} follow={false} />
+              </div>
+              <div className="flex flex-col items-center gap-0.5 min-w-0 max-w-full px-6 text-center">
+                <span className="text-[15px] font-semibold truncate max-w-full">{agent}</span>
+                <span className="text-[13px] text-muted line-clamp-2">{role.trim() || suggestedRole}</span>
+              </div>
             </div>
             <div className="w-full max-w-[440px] flex gap-2.5 items-start" aria-live="polite">
-              <AgentGhost size={28} color={color} silhouette={shape} />
+              <AgentGhost size={28} color={color} shape={shape} />
               <div className="flex flex-col gap-1 min-w-0">
                 <span className="text-[13px] font-semibold truncate">{agent}</span>
                 <span key={preview} className="ob-pop bg-[var(--card)] rounded-[18px] px-3.5 py-[9px] self-start">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bell, Blocks, Check, Clock, Eye, Monitor, Phone, UserRound, X } from "lucide-react";
 import { FEATURE_INFO, FEATURE_PRESETS, FEATURE_KEYS, harnessLabel, type Agent, type FeatureKey, type Routine } from "@wisp/core";
 import { api } from "../api.ts";
@@ -9,7 +9,9 @@ import { permission, useNotifyPrefs } from "../notifications.ts";
 import { canRecognize, inDesktopApp } from "../voice/providers.ts";
 import { setReadyItem, useOnboarding, useReadyChecklist, type ReadyItem } from "../onboarding.ts";
 import { Modal, cx } from "../components/ui.tsx";
-import { OnboardingGhost } from "../components/onboarding/OnboardingGhost.tsx";
+import { HOST_LOOK, HostGhost, hostReact } from "../components/onboarding/HostGhost.tsx";
+import { DrawnCheck, useCountUp } from "../components/onboarding/obMotion.tsx";
+import { useNarrow } from "../components/SetupShell.tsx";
 import { hereSeenKey } from "../components/onboarding/FirstChat.tsx";
 import { PhonePairing } from "./settings/mobile.tsx";
 import { startNewAgent } from "../components/ChatList.tsx";
@@ -28,6 +30,8 @@ interface Row {
   title: string;
   sub: string;
   warn?: boolean;
+  /** not done yet (no check, not counted as ready), without the warning colour */
+  pending?: boolean;
   /** Undo/Redo: `off` is the undone state */
   toggle?: { off: boolean; run: (off: boolean) => Promise<void> };
   action?: { label: string; run: () => void };
@@ -85,6 +89,14 @@ export function HereView({ agentId }: { agentId?: string | null }) {
   useEffect(() => {
     if (inDesktopApp()) api<{ openaiKey: string }>("GET", "/api/voice/settings").then((s) => setOpenaiKey(!!s.openaiKey), () => setOpenaiKey(false));
   }, []);
+  // the first look at this page ends in one celebration; coming back later doesn't repeat it
+  const [firstLook] = useState(() => {
+    try {
+      return !agent || !localStorage.getItem(hereSeenKey(agent.id));
+    } catch {
+      return false;
+    }
+  });
   useEffect(() => {
     if (agent) try { localStorage.setItem(hereSeenKey(agent.id), "1"); } catch {}
     if (ready.workspaceId && !ready.started) setReadyItem(ready.workspaceId, "started", true);
@@ -141,7 +153,7 @@ export function HereView({ agentId }: { agentId?: string | null }) {
   }
   const perm = permission();
   const notifOn = perm === "granted" && notify.enabled;
-  rows.push({ id: "notif", icon: <Bell {...ICON} />, title: "Notifications", sub: notifOn ? "On. Only when something's done or needs a yes." : perm === "denied" ? "Off. Blocked in this browser's settings." : "Off.", action: notifOn ? undefined : { label: "Settings", run: () => go({ view: "settings", page: "notifications" }) } });
+  rows.push({ id: "notif", icon: <Bell {...ICON} />, title: "Notifications", pending: !notifOn, sub: notifOn ? "On. Only when something's done or needs a yes." : perm === "denied" ? "Off. Blocked in this browser's settings." : "Off.", action: notifOn ? undefined : { label: "Settings", run: () => go({ view: "settings", page: "notifications" }) } });
   if (agent) {
     const listen = inDesktopApp() ? openaiKey : canRecognize();
     if (listen === true) rows.push({ id: "calls", icon: <Phone {...ICON} />, title: "Calls", sub: `Ready. Call ${agent.name} from the name pill.` });
@@ -173,17 +185,33 @@ export function HereView({ agentId }: { agentId?: string | null }) {
     else startNewAgent();
   };
   const first = me.user.preferredName || me.user.name.split(" ")[0];
+  // while the rows land the host stands big beside them, then settles above the title and celebrates once
+  const narrow = useNarrow("(max-width: 767px)");
+  const filling = loading || shown < rows.length;
+  const readyCount = useCountUp(rows.slice(0, shown).filter((r) => !r.warn && !r.pending && !r.toggle?.off).length);
+  const readyTotal = rows.filter((r) => !r.warn && !r.toggle?.off).length;
+  const cheered = useRef(false);
+  useEffect(() => {
+    if (filling || cheered.current || !firstLook) return;
+    cheered.current = true;
+    const t = setTimeout(() => hostReact("celebrate"), 450);
+    return () => clearTimeout(t);
+  }, [filling, firstLook]);
+  const look = agent?.settings.appearance ?? HOST_LOOK;
 
   return (
     <div className="here-page flex-1 overflow-y-auto bg-panel">
       <style>{HERE_STYLE}</style>
       <div className="mx-auto grid w-full max-w-5xl gap-8 px-4 py-8 md:grid-cols-[minmax(0,1fr)_300px] md:px-8 md:py-12">
         <main className="min-w-0">
-          <div className="here-hop w-fit">
-            <OnboardingGhost size={64} smiling follow={false} look={agent?.settings.appearance} />
-          </div>
+          {(narrow || !filling) && <HostGhost key="settled" look={look} size={64} happy={!filling} />}
           <h1 className="mt-4 text-[26px] font-semibold leading-tight tracking-[-0.01em] text-ink">Here's your Wisp, {first}.</h1>
           <p className="mt-1.5 text-[15px] text-muted">I set this up from your answers. Undo anything.</p>
+          {readyTotal > 0 && (
+            <p className="mt-3 text-[13px] text-muted tabular-nums" aria-live="polite" data-testid="here-count">
+              <b className="font-semibold text-ink">{readyCount}</b> of {readyTotal} ready
+            </p>
+          )}
           <ul className="mt-6 overflow-hidden rounded-[18px] border border-line bg-panel" aria-live="polite">
             {rows.slice(0, shown).map((r, i) => {
               const off = !!r.toggle?.off;
@@ -191,7 +219,10 @@ export function HereView({ agentId }: { agentId?: string | null }) {
                 <li key={r.id} className={cx("here-pop flex items-center gap-3 px-4 py-3", i < Math.min(shown, rows.length) - 1 && "border-b border-line")}>
                   <span className={cx("grid size-9 shrink-0 place-items-center rounded-full bg-chip text-ink", off && "opacity-60")}>{r.icon}</span>
                   <div className={cx("min-w-0 flex-1", off && "opacity-60")}>
-                    <div className="truncate text-[14px] font-medium text-ink">{r.title}</div>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="truncate text-[14px] font-medium text-ink">{r.title}</span>
+                      {!r.warn && !r.pending && !off && <DrawnCheck size={14} />}
+                    </div>
                     <div className={cx("text-[13px] leading-5", r.warn ? "text-warn" : "text-muted")}>{off ? "Undone." : r.sub}</div>
                   </div>
                   {r.toggle && <UndoButton off={off} run={r.toggle.run} />}
@@ -212,6 +243,11 @@ export function HereView({ agentId }: { agentId?: string | null }) {
           )}
         </main>
         <aside className="flex flex-col gap-4">
+          {!narrow && filling && (
+            <div className="grid place-items-center py-6">
+              <HostGhost key="filling" look={look} size={150} mood="working" />
+            </div>
+          )}
           <section className="rounded-[18px] border border-line bg-card p-4" aria-labelledby="ready-list">
             <h2 id="ready-list" className="text-[15px] font-semibold text-ink">When you're ready</h2>
             <p className="mt-0.5 text-[13px] text-muted">This list stays in the sidebar until it's done.</p>
@@ -277,11 +313,9 @@ function UndoButton({ off, run }: { off: boolean; run: (off: boolean) => Promise
 }
 
 const HERE_STYLE = `
-@keyframes here-pop{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:none}}
-@keyframes here-hop{0%,100%{transform:none}35%{transform:translateY(-12px) scale(.95,1.06)}70%{transform:translateY(0) scale(1.07,.93)}}
-.here-pop{animation:here-pop .35s cubic-bezier(.32,.72,0,1) both}
-.here-hop{animation:here-hop .55s cubic-bezier(.32,.72,0,1) .2s both}
+@keyframes here-pop{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:none}}
+.here-pop{animation:here-pop .42s cubic-bezier(.22,1,.36,1) both}
 .here-btn{transition:transform .15s ease,background .15s ease}
 .here-btn:active{transform:scale(.97)}
-@media (prefers-reduced-motion: reduce){.here-pop,.here-hop{animation:none}.here-btn{transition:none}}
+@media (prefers-reduced-motion: reduce){.here-pop{animation:none}.here-btn{transition:none}}
 `;

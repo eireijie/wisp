@@ -81,14 +81,7 @@ struct GhostRenderer {
     let p = root.moved(60, pivot + y, scaleX: sx, scaleY: sy, angle: angle).moved(-60, -pivot)
     let body = g.a.path(toward: g.b, fraction: animated && size >= 44 ? GhostAnimation.wave(time, mood == .thinking ? 1.4 : 2.6) : 0)
     p.context.fill(body, with: gradient)
-    var lit = p.context
-    lit.clip(to: body)
-    let box = body.boundingRect
-    lit.scaleBy(x: 1, y: box.height / box.width)
-    lit.fill(Path(CGRect(x: box.minX, y: box.minY * box.width / box.height, width: box.width, height: box.width)),
-      with: .radialGradient(Gradient(stops: [.init(color: .white.opacity(sleeping ? 0.1 : 0.24), location: 0),
-        .init(color: .white.opacity(0.06), location: 0.65), .init(color: .white.opacity(0), location: 1)]),
-        center: CGPoint(x: box.midX, y: (box.minY + box.height * 0.42) * box.width / box.height), startRadius: 0, endRadius: box.width * 0.6))
+    // no glow layer (owner, 2026-11-21): gradient, rim and shadow only
     var rim = p.context
     rim.clip(to: body)
     rim.stroke(body, with: .color(.black.opacity(0.1)), lineWidth: 7)

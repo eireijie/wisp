@@ -29,7 +29,7 @@ describe("shared ghost gaze", () => {
       const node = () => ({ setAttribute: vi.fn() });
       const pupil = node(), shine = node(), body = { ...node(), querySelectorAll: () => [] };
       const face = { ...node(), querySelectorAll: (selector: string) => selector === "[data-ghost-pupil]" ? [pupil] : [shine] };
-      const root = { getBoundingClientRect: () => ({ left: 100, top: offscreen ? 1000 : 100, width: 40, height: 40, right: 140, bottom: offscreen ? 1040 : 140 }), closest: () => ({ dataset: { petFacing: String(facing) } }) };
+      const root = { getBoundingClientRect: () => ({ left: 100, top: offscreen ? 1000 : 100, width: 40, height: 40, right: 140, bottom: offscreen ? 1040 : 140 }), closest: (sel: string) => (sel === "[data-pet-facing]" ? { dataset: { petFacing: String(facing) } } : null) };
       return { face, body, pupil, shine, stop: registerGhost({ root, face, body } as unknown as Parameters<typeof registerGhost>[0]) };
     };
     /** a ghost wearing sunglasses, a hat and a tie */
@@ -117,6 +117,36 @@ describe("shared ghost gaze", () => {
       p.flush();
       expect(a.face.setAttribute.mock.lastCall?.[1]).toBe("translate(0 0)");
     } finally { a.stop(); }
+  });
+
+  it("lets a ghost marked to glance look around on its own, and holds still under reduced motion", () => {
+    vi.useFakeTimers();
+    let now = 1000;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.9);
+    const p = page();
+    const face = { setAttribute: vi.fn(), querySelectorAll: () => [] };
+    const body = { setAttribute: vi.fn(), querySelectorAll: () => [] };
+    const root = { getBoundingClientRect: () => ({ left: 100, top: 100, width: 40, height: 40, right: 140, bottom: 140 }), closest: (sel: string) => (sel === "[data-ghost-glance]" ? {} : null) };
+    const stop = registerGhost({ root, face, body } as unknown as Parameters<typeof registerGhost>[0]);
+    try {
+      refreshGhostGaze();
+      p.flush();
+      const first = face.setAttribute.mock.lastCall?.[1];
+      expect(first).not.toBe("translate(0 0)");
+      // a glance moves the eyes, never tilts the body
+      expect(body.setAttribute.mock.lastCall?.[1]).toBe("rotate(0 60 85)");
+      // the next glance comes within 2 seconds, somewhere else
+      random.mockReturnValue(0.3);
+      now += 2100;
+      vi.advanceTimersByTime(2100);
+      p.flush();
+      expect(face.setAttribute.mock.lastCall?.[1]).not.toBe(first);
+      motion.reduced = true;
+      refreshGhostGaze();
+      p.flush();
+      expect(face.setAttribute.mock.lastCall?.[1]).toBe("translate(0 0)");
+    } finally { stop(); vi.restoreAllMocks(); }
   });
 
   it("moves sunglasses with the eyes behind them", () => {

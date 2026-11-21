@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { api } from "../../api.ts";
+import { useStore } from "../../store.ts";
 import { Bell, ChevronRight } from "lucide-react";
 import type { Agent } from "@wisp/core";
 import { enableNotifications, permission } from "../../notifications.ts";
@@ -10,6 +12,9 @@ import { go } from "../../router.ts";
  * before the system asks, and a pill to "Here's your Wisp" (page 7). Both only while the setup the
  * hello started is fresh, and only in that chat.
  */
+
+/** What you can answer its hello with in one tap. */
+const QUICK = ["Sounds good, start there", "Something else first", "What can you do?"];
 
 const ASKED_KEY = (workspaceId: string) => `wisp.notifyAsked.${workspaceId}`;
 export const hereSeenKey = (agentId: string) => `wisp.hereSeen.${agentId}`;
@@ -37,7 +42,15 @@ export function isFirstChat(agent: Pick<Agent, "settings"> | undefined, channelI
 export function FirstChatExtras({ agent, channelId, workspaceId }: { agent: Agent | undefined; channelId: string; workspaceId: string }) {
   const [asked, setAsked] = useState(() => !!read(ASKED_KEY(workspaceId)) || permission() !== "default");
   const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  // quick replies, until you've said something yourself
+  const youSpoke = useStore((s) => (s.messages[channelId] ?? []).some((m) => m.author.kind === "user"));
   if (!agent || !isFirstChat(agent, channelId)) return null;
+  const quick = !sent && !youSpoke ? QUICK : [];
+  const reply = (text: string) => {
+    setSent(true);
+    void api("POST", `/api/channels/${channelId}/messages`, { body: text }).catch(() => setSent(false));
+  };
   const seen = !!read(hereSeenKey(agent.id));
   const close = () => {
     write(ASKED_KEY(workspaceId));
@@ -53,11 +66,20 @@ export function FirstChatExtras({ agent, channelId, workspaceId }: { agent: Agen
       close();
     }
   };
-  if (asked && seen) return null;
+  if (asked && seen && !quick.length) return null;
   return (
     <div className="shrink-0 w-full max-w-3xl mx-auto px-3 md:px-5 flex flex-col gap-2 pb-2">
+      {!!quick.length && (
+        <div className="flex flex-wrap gap-1.5 justify-end" role="group" aria-label="Quick replies">
+          {quick.map((q, i) => (
+            <button key={q} type="button" onClick={() => reply(q)} className="first-chat-pop h-8 rounded-full border border-line2 bg-panel px-3.5 text-[13px] text-ink hover:bg-hover transition-transform active:scale-[.97]" style={{ animationDelay: `${600 + i * 60}ms` }}>
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
       {!asked && (
-        <section className="first-chat-pop flex items-start gap-3 rounded-[18px] border border-line bg-card px-3.5 py-3" aria-label="Notifications">
+        <section style={{ animationDelay: "900ms" }} className="first-chat-pop flex items-start gap-3 rounded-[18px] border border-line bg-card px-3.5 py-3" aria-label="Notifications">
           <Bell size={16} strokeWidth={1.7} className="mt-0.5 shrink-0 text-muted" aria-hidden />
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-medium text-ink">Want a ping when I'm done?</div>
@@ -85,7 +107,7 @@ export function FirstChatExtras({ agent, channelId, workspaceId }: { agent: Agen
           <ChevronRight size={14} strokeWidth={1.8} aria-hidden />
         </button>
       )}
-      <style>{`@keyframes first-chat-pop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:none}}.first-chat-pop{animation:first-chat-pop .35s cubic-bezier(.32,.72,0,1) both}@media (prefers-reduced-motion: reduce){.first-chat-pop{animation:none}}`}</style>
+      <style>{`@keyframes first-chat-pop{0%{opacity:0;transform:translateY(16px)}100%{opacity:1;transform:none}}.first-chat-pop{animation:first-chat-pop .45s cubic-bezier(.22,1,.36,1) both}@media (prefers-reduced-motion: reduce){.first-chat-pop{animation:none}}`}</style>
     </div>
   );
 }

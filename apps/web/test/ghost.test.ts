@@ -69,58 +69,67 @@ describe("shared page activity", () => {
 
 describe("still ghosts", () => {
   const look = { ...defaultAppearance("ghost"), glow: true, hat: "propeller" as const };
-  it.each([false, true])("stills every animation with reduced motion=%s", (reduced) => {
+  it.each([false, true])("disables SVG and CSS motion with reduced motion=%s", (reduced) => {
     motion.reduced = reduced;
-    const html = renderToStaticMarkup(createElement(Ghost, { look, size: 80, mood: "working", interactive: true, animate: !reduced && false }));
-    expect(html).toContain("frozen");
+    const html = renderToStaticMarkup(createElement(Ghost, { look, size: 80, mood: "working", interactive: true, animate: reduced }));
+    expect(html).toContain('data-animate="false"');
     expect(html).not.toContain("<animate");
+    expect(html).not.toMatch(/ghost-(float|bounce|spin|type|key|interactive)\b/);
   });
   it("doesn't glow, even for a look saved with glow on (the feature was removed)", () => {
     expect(renderToStaticMarkup(createElement(Ghost, { look, size: 80 }))).not.toContain("glow");
   });
 });
 
-describe("ghost family", () => {
-  const look = { ...defaultAppearance("ghost"), color: "#3cc0a6", color2: undefined, hat: "none" as const, accessory: "none" as const };
-  const render = (size: number, mood: Parameters<typeof Ghost>[0]["mood"] = "awake", shape = look.shape) => renderToStaticMarkup(createElement(Ghost, { look: { ...look, shape }, size, mood }));
-  it("is one flat colour with two eyes and its own silhouette", () => {
-    const html = render(40);
-    expect(html).toContain('fill="#3cc0a6"');
-    expect(html.match(/class="wisp-eye"/g)).toHaveLength(2);
-    expect(html).not.toContain("Gradient");
-    expect(render(40, "awake", "tall")).not.toEqual(render(40, "awake", "round"));
+describe("soft ghost details", () => {
+  const look = { ...defaultAppearance("ghost"), eyes: "dots" as const, cheeks: false, hat: "none" as const };
+  const render = (size: number, mood: Parameters<typeof Ghost>[0]["mood"] = "awake") => renderToStaticMarkup(createElement(Ghost, { look, size, mood }));
+  it("gives dots glossy round eyes without cluttering tiny avatars", () => {
+    expect(render(40)).toContain('rx="3.9" ry="4.9"');
+    expect(render(40).match(/data-ghost-shine/g)).toHaveLength(2);
+    expect(render(22)).not.toContain("data-ghost-shine");
+    expect(render(40)).toContain('opacity="0.18"');
+    expect(render(22)).not.toContain('opacity="0.18"');
+    expect(render(40, "asleep")).not.toContain('opacity="0.18"');
   });
-  it("sits idle, and wakes up with a laptop and thought bubbles while working", () => {
-    expect(render(40)).toContain("idle");
-    expect(render(40)).not.toContain("wisp-kit");
-    const working = render(80, "working");
-    expect(working).toContain("working");
-    expect(working).toContain("wisp-kit");
-    expect(working).toContain("wisp-thoughts");
-    // tiny avatars keep the laptop but drop the bubbles
-    expect(render(22, "working")).toContain("wisp-kit");
-    expect(render(22, "working")).not.toContain("wisp-thoughts");
+  it("grows one-piece arms that pose with its mood, and none at tiny sizes", () => {
+    expect(render(40)).toContain("ga-arm ga-awake ga-r");
+    expect(render(40, "working")).toContain("ga-arm ga-working ga-l");
+    expect(render(40, "working")).toContain("ga-key");
+    expect(render(40, "waiting")).toContain("ga-arm ga-waiting ga-r");
+    const done = render(40, "done");
+    expect(done).toContain("ga-arm ga-done ga-l");
+    expect(done).toContain("ga-arm ga-done ga-r");
+    expect(render(22)).not.toContain("ga-arm");
   });
-  it("has one mouth in the eyes' ink: flat, a smile for the pointer, pressed while working, open while talking", () => {
-    const html = render(40);
-    for (const m of ["m-flat", "m-smile", "m-work", "m-talk"]) expect(html).toContain(m);
-    expect(html).toMatch(/class="wisp-mouth" stroke="rgba\(20,20,20,.88\)"/);
-    // a mustache or a look with no mouth hides it; tiny avatars skip it
-    expect(renderToStaticMarkup(createElement(Ghost, { look: { ...look, accessory: "mustache" }, size: 40 }))).not.toContain("wisp-mouth");
-    expect(renderToStaticMarkup(createElement(Ghost, { look: { ...look, mouth: "none" }, size: 40 }))).not.toContain("wisp-mouth");
-    expect(render(22)).not.toContain("wisp-mouth");
+});
+
+describe("the old ghost, everything but the glow (2026-11-21)", () => {
+  const look = { ...defaultAppearance("ghost"), hat: "crown" as const, accessory: "bowtie" as const };
+  const render = (props: Partial<Parameters<typeof Ghost>[0]> = {}) => renderToStaticMarkup(createElement(Ghost, { look, size: 80, ...props }));
+  it("keeps the gradient, rim, hat and neckwear but has no lit face plate", () => {
+    const html = render();
+    expect(html).toContain("<linearGradient");
+    expect(html).toContain('stroke-width="7"');
+    expect(html).toContain('fill="#ffcf3f"'); // the crown
+    expect(html).toContain('fill="#e5484d"'); // the bow tie
+    expect(html).not.toContain('cy="0.42"');
+    expect(renderToStaticMarkup(createElement(Ghost, { look, size: 22 }))).not.toContain("radialGradient");
   });
-  it("still wears its hat and neckwear, and makes room for the hat", () => {
-    const worn = renderToStaticMarkup(createElement(Ghost, { look: { ...look, hat: "tophat", accessory: "bowtie" }, size: 40 }));
-    expect(worn).toContain('fill="#2b2735"');
-    expect(worn).toContain('fill="#e5484d"');
-    expect(worn).toContain('viewBox="-4 -8 48 48"');
-    expect(render(40)).toContain('viewBox="0 0 40 40"');
-    const glasses = renderToStaticMarkup(createElement(Ghost, { look: { ...look, accessory: "glasses" }, size: 40 }));
-    expect(glasses).toContain('stroke="#2b2735"');
+  it("opens its mouth when happy or talking, and hops once when asked", () => {
+    expect(render()).not.toContain("ghost-talk");
+    expect(render({ talking: true })).toContain("ghost-talk");
+    expect(render({ happy: true })).toContain('fill="#ff7a93"');
+    expect(render({ label: "" })).toContain('aria-hidden="true"');
   });
-  it("gives white looks a family colour instead of a white ghost", () => {
-    const white = renderToStaticMarkup(createElement(Ghost, { look: { ...look, color: "#ffffff", color2: "#ffffff" }, size: 40, seed: "nova" }));
-    expect(white).not.toContain('fill="#ffffff"');
+});
+
+describe("onboarding shares the app's ghost", async () => {
+  const { OnboardingGhost } = await import("../src/components/onboarding/OnboardingGhost.tsx");
+  it("draws the same ghost, violet, and works at its laptop", () => {
+    const html = renderToStaticMarkup(createElement(OnboardingGhost, { size: 140 }));
+    expect(html).toContain('class="ghost ');
+    expect(html).toContain('stop-color="#a98bf5"');
+    expect(renderToStaticMarkup(createElement(OnboardingGhost, { size: 140, working: true }))).toContain("ga-working");
   });
 });

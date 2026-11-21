@@ -36,7 +36,8 @@ import { chatName, isGrouped, needsStamp, snippetOf, stampLabel, startsChat, too
 import { openDm } from "../openDm.ts";
 import { HarnessSignInButton, SignInNeededBar } from "../components/HarnessSignInButton.tsx";
 import { CheckbackLabel, ClosedLine, LoopParts } from "../components/Loops.tsx";
-import { FirstChatExtras } from "../components/onboarding/FirstChat.tsx";
+import { FirstChatExtras, isFirstChat } from "../components/onboarding/FirstChat.tsx";
+import { GhostLanding, useFirstHelloHtml } from "../components/onboarding/FirstHello.tsx";
 
 /** What's open in the pane beside the chat (a thread comes from the route instead). */
 type Side = { kind: "agent"; agentId: string; tab: AgentPanelTab } | { kind: "info"; tab: InfoTab };
@@ -151,6 +152,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   const sideAgent = !route.threadId && side?.kind === "agent" ? names.agent(side.agentId) : undefined;
   const dmPanel = sideAgent && dmAgent && sideAgent.id === dmAgent.id ? (side as Extract<Side, { kind: "agent" }>).tab : null;
   const infoOpen = side?.kind === "info" && !route.threadId && channel.kind === "channel";
+  const pillRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="flex-1 min-h-0 flex">
@@ -167,7 +169,11 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
           </div>
           {dmAgent ? (
             // the agent lives here, in the middle, and nowhere else in its DM
-            <AgentPill agent={dmAgent} open={dmPanel === "details"} onClick={() => (dmPanel === "details" ? setSide(null) : openAgent(dmAgent.id, "details"))} />
+            <div ref={pillRef} className="flex justify-center min-w-0">
+              <AgentPill agent={dmAgent} open={dmPanel === "details"} onClick={() => (dmPanel === "details" ? setSide(null) : openAgent(dmAgent.id, "details"))} />
+              {/* straight from setup: the host flies into the pill */}
+              {dmFull && isFirstChat(dmFull, channel.id) && <GhostLanding key={channel.id} agent={dmFull} target={() => pillRef.current} />}
+            </div>
           ) : (
             <TeamPill channel={channel} open={infoOpen} onClick={toggleInfo} />
           )}
@@ -914,7 +920,9 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
   const names = useNames();
   const handles = useHandleNames();
   const colors = useHandleColors();
-  const html = useMemo(() => (m.body ? renderMarkdown(m.body, { handles, colors }) : ""), [m.body, handles, colors]);
+  const rendered = useMemo(() => (m.body ? renderMarkdown(m.body, { handles, colors }) : ""), [m.body, handles, colors]);
+  // a first chat's hello types in once and underlines what it already knows
+  const html = useFirstHelloHtml(m, rendered);
   const cards = useMemo(() => linkCards(m.body), [m.body]);
   const isSummary = m.parts.some((p) => p.type === "summary");
   const [menu, setMenu] = useState<{ at: { x: number; y: number } | null } | null>(null);

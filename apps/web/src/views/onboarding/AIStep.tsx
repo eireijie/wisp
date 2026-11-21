@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ComponentType, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ComponentType, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import type { Message } from "@wisp/core";
 import { HARNESSES, MODEL_PROVIDER_INFO, harnessLabel, type Agent, type HarnessSettings, type ModelConnection, type ModelProvider } from "@wisp/core";
 import type { GhostAppearance } from "@wisp/core/src/appearance.ts";
 import { api } from "../../api.ts";
@@ -6,15 +7,16 @@ import { useStore } from "../../store.ts";
 import { unavailable } from "../../join.ts";
 import { ConnectModel } from "../../components/ConnectModel.tsx";
 import { switchOnRecommended } from "../../onboardingSetup.ts";
-import { OnboardingGhost } from "../../components/onboarding/OnboardingGhost.tsx";
+import { HOST_LOOK, HostGhost, hostReact } from "../../components/onboarding/HostGhost.tsx";
+import { DrawnCheck, SlideMark, Typed } from "../../components/onboarding/obMotion.tsx";
 import { WHITE_WISP } from "../../components/SetupStage.tsx";
 import { canUse, readyConnection, signInProvider, useConnections } from "../../models.ts";
-import { useMotionReduced } from "../../theme.ts";
 import { loadAnswers, saveAnswers, type AgentDraft } from "../../onboardingV3.ts";
 import type { DeviceInfo } from "../../devices.ts";
 import type { HarnessesResponse, HarnessSignIn as HarnessSignInDialog } from "../settings/harnesses.tsx";
 import { makeFirstAgent } from "./firstAgent.ts";
 import { PageTop } from "../../components/onboarding/PageTop.tsx";
+import { useNarrow } from "../../components/SetupShell.tsx";
 
 const STYLE = `
 @keyframes ob-pop { 0% { opacity: 0; transform: translateY(6px) scale(.98); } 100% { opacity: 1; transform: none; } }
@@ -29,7 +31,8 @@ const STYLE = `
 .ob-spin { animation: ob-spin .9s linear infinite; transform-origin: center; }
 .ob-choice { transition: background .15s ease, border-color .15s ease, transform .1s ease; }
 .ob-choice:hover { border-color: rgb(28 28 28 / .32); }
-.ob-choice[aria-pressed="true"], .ob-choice[aria-pressed="true"]:hover { border-color: var(--wisp); background: rgb(169 139 245 / .10); }
+.ob-choice[aria-pressed="true"], .ob-choice[aria-pressed="true"]:hover { border-color: transparent; }
+.ob-slide > .ob-choice[aria-pressed="true"] { background: transparent; }
 .ob-choice:active { transform: scale(.98); }
 @media (prefers-reduced-motion: reduce) {
   .ob-pop, .ob-hop-a, .ob-hop-b, .ob-page, .ob-spin { animation: none; }
@@ -97,9 +100,9 @@ type Phase = "idle" | "checking" | "ready" | "failed";
 export function AIStep({ device, person, onDone, onBack }: { device: DeviceInfo | undefined; person: string; onDone: (agentId: string | null, channelId: string | null) => void; onBack?: () => void }) {
   const me = useStore((s) => s.me)!;
   const ws = me.workspace.id;
-  const reduced = useMotionReduced();
   const { connections, support, reload } = useConnections();
   const [{ name, look, draft }] = useState(() => draftOf(ws));
+  const narrow = useNarrow("(max-width: 1023px)");
   const first = person.trim().split(/\s+/)[0] ?? "";
   const found = foundOn(device, connections ?? []);
   const [pick, setPick] = useState<Pick | null>(null);
@@ -113,8 +116,11 @@ export function AIStep({ device, person, onDone, onBack }: { device: DeviceInfo 
   // its AI said "signed in" but its first run couldn't sign in (an expired session): sign in again
   const [resign, setResign] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string | null>(() => loadAnswers(ws).agentId ?? null);
-  const [hop, setHop] = useState(0);
   const [leaving, setLeaving] = useState(false);
+  // the three live steps while it's tried: signing in, trying a hello, ready
+  const [stage, setStage] = useState<"signin" | "hello" | "ready">("signin");
+  // its real hello, typed in beside the host once it's said
+  const [hello, setHello] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ Dialog: ComponentType<Parameters<typeof HarnessSignInDialog>[0]>; device: HarnessesResponse["device"]; settings: HarnessSettings } | null>(null);
   const run = useRef(0);
   const alive = useRef(true);
@@ -125,7 +131,7 @@ export function AIStep({ device, person, onDone, onBack }: { device: DeviceInfo 
     };
   }, []);
 
-  const bump = () => !reduced && setHop((h) => h + 1);
+  const bump = (kind: "hop" | "nod" = "nod") => hostReact(kind);
 
   /** Make (or point) the agent at this AI, then wait until it can answer. */
   const tryIt = async (h: string, connectionId: string | null) => {
@@ -134,6 +140,8 @@ export function AIStep({ device, person, onDone, onBack }: { device: DeviceInfo 
     const live = () => alive.current && run.current === n;
     setHarness(h);
     setPhase("checking");
+    setStage("signin");
+    setHello(null);
     setProblem(null);
     setResign(null);
     bump();
@@ -163,6 +171,7 @@ export function AIStep({ device, person, onDone, onBack }: { device: DeviceInfo 
         if (r && (r.signedIn === true || (r.signedIn === null && !connectionId && !r.inComputer))) {
           // a status check can say "signed in" for a session that can't refresh: its hello is the real
           // first run, and only a hello it wrote (or Wisp's, if it ran out of time) means it's ready
+          setStage("hello");
           while (live() && Date.now() < deadline) {
             // signed out since (its run failed on sign-in): sign in again before anything else runs
             const now = await api<{ signedIn: boolean | null }>("GET", `/api/agents/${agent.id}/harness`).catch(() => null);
@@ -171,8 +180,10 @@ export function AIStep({ device, person, onDone, onBack }: { device: DeviceInfo 
             if (g?.status === "signin") throw needsSignIn();
             if (g?.status === "already" || g?.status === "sent") {
               if (!live()) return;
+              setStage("ready");
               setPhase("ready");
-              bump();
+              bump("hop");
+              void readHello(agent.id).then((text) => live() && setHello(text));
               return;
             }
             await wait(1500);
@@ -190,6 +201,16 @@ export function AIStep({ device, person, onDone, onBack }: { device: DeviceInfo 
       setProblem(re ? (e as Error).message : unavailable(e, harnessLabel(h)));
       setPhase("failed");
     }
+  };
+
+  /** The hello it just said, from its chat (null if it can't be read yet). */
+  const readHello = async (id: string): Promise<string | null> => {
+    await useStore.getState().refreshAgents().catch(() => {});
+    const setup = useStore.getState().agents.find((a) => a.id === id)?.settings.setup;
+    if (!setup?.channelId || !setup.greetingId) return null;
+    const r = await api<{ messages: Message[] }>("GET", `/api/channels/${setup.channelId}/messages?limit=20`).catch(() => null);
+    const text = r?.messages.find((m) => m.id === setup.greetingId)?.body.trim();
+    return text ? (text.length > 280 ? `${text.slice(0, 277).trimEnd()}…` : text) : null;
   };
 
   /** Sign in again where this AI signs in: Claude and ChatGPT through Wisp, the rest on the computer. */
@@ -281,9 +302,10 @@ export function AIStep({ device, person, onDone, onBack }: { device: DeviceInfo 
     { id: "key", title: "I have an API key", sub: "Claude, OpenAI, OpenRouter, Gemini or Grok.", icon: ICON.key, harness: harnessFor(keyFor, "key", support) },
   ];
   const others = HARNESSES.filter((h) => h.protocol !== "mcp");
+  const list = useRef<HTMLDivElement>(null);
   const signInOf: Partial<Record<Pick, ModelProvider>> = { claude: "anthropic", chatgpt: "openai", grok: "xai" };
   const provider = cur ? signInOf[cur] : undefined;
-  const cta = phase === "ready" || phase === "failed" ? "Continue" : cur === "found" ? "Use this" : "Continue";
+  const cta = phase === "ready" ? `Meet ${name}` : phase === "failed" ? "Continue" : cur === "found" ? "Use this" : "Continue";
   const idleNote = phase === "idle";
 
   return (
@@ -291,14 +313,15 @@ export function AIStep({ device, person, onDone, onBack }: { device: DeviceInfo 
       <style>{STYLE}</style>
       <PageTop step={4} onBack={onBack} />
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="ob-page min-h-full grid grid-cols-1 lg:grid-cols-[minmax(0,560px)_minmax(0,400px)] gap-10 lg:gap-20 justify-center items-center px-4 sm:px-6 pt-4 pb-10">
+        <div className="ob-stagger min-h-full grid grid-cols-1 lg:grid-cols-[minmax(0,560px)_minmax(0,400px)] gap-10 lg:gap-20 justify-center items-center px-4 sm:px-6 pt-4 pb-10">
           <div className="flex flex-col gap-[18px] min-w-0">
             <div className="flex flex-col gap-0.5">
               <h1 className="text-[24px] leading-[30px] font-[650] tracking-[-0.015em]">What should {name} think with?</h1>
               <p className="text-[15px] leading-[22px] text-muted">Sign in once. Every agent you make can use it.</p>
             </div>
 
-            <div className="flex flex-col gap-2" role="radiogroup" aria-label="What it thinks with">
+            <div ref={list} className="ob-slide" style={{ "--ob-slide-r": "14px" } as CSSProperties} role="radiogroup" aria-label="What it thinks with">
+              <SlideMark list={list} pick={`${cur}${more}`} />
               {opts.map((o) => (
                 <Choice key={o.id} on={cur === o.id} title={o.title} sub={o.sub} icon={o.icon} badge={o.found ? `Found on ${here}` : undefined} onClick={() => choose(o.id)} />
               ))}
@@ -323,18 +346,18 @@ export function AIStep({ device, person, onDone, onBack }: { device: DeviceInfo 
 
             {!device && <p className="text-[13px] text-muted">Waiting for a computer to connect…</p>}
 
-            <div className="flex gap-2 items-center">
+            <div className="flex flex-wrap gap-x-1 gap-y-2 items-center">
               <button type="button" disabled={leaving || phase === "checking" || (phase === "idle" && cur !== "found" && !!device)} onClick={() => void proceed()} className="setup-press h-11 px-[22px] rounded-full bg-ink text-panel font-semibold disabled:opacity-40">
                 {leaving ? "Opening…" : cta}
               </button>
               {!more && (
-                <button type="button" onClick={() => setMore(true)} className="h-11 px-3.5 rounded-full text-muted hover:text-ink">
+                <button type="button" onClick={() => setMore(true)} className="h-11 px-3.5 rounded-full text-muted hover:text-ink whitespace-nowrap">
                   More agents ({others.length})
                 </button>
               )}
               {/* nothing working yet: no one is stuck here; it can be set up later in Settings */}
               {phase !== "ready" && phase !== "checking" && cur !== "found" && (
-                <button type="button" disabled={leaving} onClick={() => onDone(agentId, null)} className="h-11 px-3.5 rounded-full text-muted hover:text-ink">
+                <button type="button" disabled={leaving} onClick={() => onDone(agentId, null)} className="h-11 px-3.5 rounded-full text-muted hover:text-ink whitespace-nowrap">
                   Set up later
                 </button>
               )}
@@ -342,25 +365,19 @@ export function AIStep({ device, person, onDone, onBack }: { device: DeviceInfo 
           </div>
 
           <div className="flex flex-col items-center gap-5 min-w-0">
-            <span className={hop === 0 ? "block" : hop % 2 ? "block ob-hop-a" : "block ob-hop-b"} style={{ transformOrigin: "50% 100%" }}>
-              <OnboardingGhost size={140} look={draft ? look : undefined} working={phase === "checking"} smiling={phase === "ready"} talking={phase === "ready"} />
-            </span>
-            <div className="w-full max-w-[400px] min-h-[120px] flex flex-col gap-2 items-center text-center" aria-live="polite">
+            <HostGhost look={draft ? look : HOST_LOOK} size={narrow ? 88 : 140} mood={phase === "checking" ? "working" : "awake"} happy={phase === "ready"} talking={phase === "ready" && hello === null} />
+            <div className="w-full max-w-[400px] min-h-[120px] flex flex-col gap-3 items-center text-center" aria-live="polite">
               {phase === "idle" && <span className="text-muted">Pick one and I'll try it right away.</span>}
-              {phase === "checking" && (
-                <>
-                  <span className="ob-pop flex items-center gap-2">
-                    <svg className="ob-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--wisp)" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
-                      <path d="M12 3a9 9 0 1 1-9 9" />
-                    </svg>
-                    Trying my first thought…
-                  </span>
-                  <span className="text-[12px] text-muted">Setting up {harnessLabel(harness)} on my computer meanwhile.</span>
-                </>
+              {(phase === "checking" || phase === "ready") && (
+                <ol className="ob-steps self-center text-left" aria-label="Trying it">
+                  <LiveStep state={stage === "signin" ? "now" : "done"}>Signing in to {harnessLabel(harness)}</LiveStep>
+                  <LiveStep state={stage === "signin" ? "later" : stage === "hello" ? "now" : "done"}>Trying a hello</LiveStep>
+                  <LiveStep state={stage === "ready" ? "done" : "later"}>Ready</LiveStep>
+                </ol>
               )}
               {phase === "ready" && (
                 <span className="ob-pop bg-[var(--card)] rounded-[18px] px-3.5 py-[9px] text-left">
-                  I can think. Running on {harnessLabel(harness)}. Ready when you are{first ? `, ${first}` : ""}.
+                  <Typed text={hello ?? `I can think. Running on ${harnessLabel(harness)}. Ready when you are${first ? `, ${first}` : ""}.`} />
                 </span>
               )}
               {phase === "failed" && (
@@ -397,6 +414,26 @@ export function AIStep({ device, person, onDone, onBack }: { device: DeviceInfo 
         />
       )}
     </div>
+  );
+}
+
+/** One of the three live steps: a dot before it, a spinner while it runs, a check that draws when it's done. */
+function LiveStep({ state, children }: { state: "later" | "now" | "done"; children: ReactNode }) {
+  return (
+    <li data-state={state}>
+      <span className="w-4 h-4 shrink-0 grid place-items-center">
+        {state === "done" ? (
+          <DrawnCheck size={15} />
+        ) : state === "now" ? (
+          <svg className="ob-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden>
+            <path d="M12 3a9 9 0 1 1-9 9" />
+          </svg>
+        ) : (
+          <span className="block w-1.5 h-1.5 rounded-full bg-[var(--input)]" />
+        )}
+      </span>
+      {children}
+    </li>
   );
 }
 

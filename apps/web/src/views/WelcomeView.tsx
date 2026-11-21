@@ -28,6 +28,8 @@ import { flushNotes } from "../onboardingKnow.ts";
 import { saveAgentDraft } from "../onboardingV3.ts";
 import { AgentStep } from "./onboarding/AgentStep.tsx";
 import { AIStep, draftOf } from "./onboarding/AIStep.tsx";
+import { SlideMark, SlideOpen } from "../components/onboarding/obMotion.tsx";
+import { hostReact } from "../components/onboarding/HostGhost.tsx";
 export { makeFirstAgent } from "./onboarding/firstAgent.ts";
 
 export const SETUP_LABELS: Record<StepId, string> = { anywhere: "Away from home", address: "Your address", agent: "Make your first agent", devices: "Add your devices" };
@@ -35,7 +37,7 @@ export const SETUP_LABELS: Record<StepId, string> = { anywhere: "Away from home"
 type Screen = "anywhere" | "address" | "connect" | "name" | "memory" | "setup" | "devices";
 /** Where each screen sits on the five-dot track (0: before it) and what the wisp says there. */
 const SCREENS: Record<Screen, { at: number; line: (name: string) => string; mood?: GhostMood }> = {
-  anywhere: { at: 0, line: () => "Want to reach me when you're out?" },
+  anywhere: { at: 0, line: () => "Want me on your phone when you're out?" },
   address: { at: 0, line: () => "This is where I live." },
   connect: { at: 1, line: () => "Pick the AI I run on. You only sign in once." },
   name: { at: 2, line: () => "What should I be called?" },
@@ -65,7 +67,8 @@ export function WelcomeView({ intro }: { intro?: boolean }) {
   const [v3, setV3] = useState<V3 | null>(() => (intro && savedSetup(me.workspace.id).address ? firstV3() : null));
   const [screen, setScreen] = useState<Screen>(() => {
     // resuming on a v3 page: Back from it lands on the address screen, the last one before it
-    if (intro) return onPublicAddress() || savedSetup(me.workspace.id).address ? "address" : "anywhere";
+    // Away and its address are one page now; a cloud server (already reachable) only shows its address
+    if (intro) return onPublicAddress() ? "address" : "anywhere";
     const next = nextStep(done) ?? "anywhere";
     return next === "agent" ? "connect" : next;
   });
@@ -78,6 +81,7 @@ export function WelcomeView({ intro }: { intro?: boolean }) {
   const drafted = loadAnswers(me.workspace.id).agentDraft ? draftOf(me.workspace.id).look : null;
   const look: GhostAppearance = agents[0]?.settings.appearance ?? drafted ?? START_LOOK;
   const [lines, setLines] = useState<MemoryLine[]>([]);
+  const [awayChoice, setAwayChoice] = useState<AwayChoice | null>(null);
   const powered = ready.find((r) => r.harness === harness) ?? ready[0];
   const advance = (step: StepId) => {
     completeSetupStep(me.workspace.id, step);
@@ -164,10 +168,10 @@ export function WelcomeView({ intro }: { intro?: boolean }) {
     {learning}
     <SetupShell
       // a new setup counts away and address as its first two of five dots, like the pages after them
-      at={intro ? ({ anywhere: 1, address: 2, devices: 5 } as Partial<Record<Screen, number>>)[screen] ?? s.at : s.at}
+      at={intro ? ({ anywhere: 1, address: 1, devices: 5 } as Partial<Record<Screen, number>>)[screen] ?? s.at : s.at}
       track={intro ? NEW_TRACK : undefined}
-      line={s.line(name.trim() || "your agent")} look={preAgent ? undefined : look} mood={s.mood} stepKey={screen} onBack={goBack}>
-      {screen === "anywhere" && narrow(<AwayStep onScene={onScene} onDone={() => advance("anywhere")} />)}
+      line={screen === "anywhere" && awayChoice ? AWAY_LINES[awayChoice] : s.line(name.trim() || "your agent")} look={preAgent ? undefined : look} mood={s.mood} stepKey={screen} onBack={goBack}>
+      {screen === "anywhere" && narrow(<AwayStep onScene={onScene} onChoice={setAwayChoice} onDone={() => (completeSetupStep(me.workspace.id, "anywhere"), advance("address"))} />)}
       {screen === "address" && narrow(<AddressStep onScene={onScene} onNext={() => advance("address")} />)}
       {screen === "connect" && (
         <ConnectStep
@@ -342,11 +346,11 @@ function PhoneStep({ onScene, onFinish }: { onScene: (s: StageScene) => void; on
 export const NO_NODE = /Node\.js isn't installed on this computer/;
 
 /** Reach Wisp from outside your home (Tailscale or Cloudflare), or only at home. */
-function AwayStep({ onScene, onDone }: { onScene: (s: StageScene) => void; onDone: () => void }) {
+function AwayStep({ onScene, onChoice, onDone }: { onScene: (s: StageScene) => void; onChoice?: (c: AwayChoice) => void; onDone: () => void }) {
   const info = useAccess(3000);
   const failed = useAccessStore((s) => s.failed);
   const allowed = useStore((s) => canApproveJoin(s.me?.role));
-  const [choice, setChoice] = useState<"tailscale" | "cloudflare" | null>(null);
+  const [choice, setChoice] = useState<AwayChoice | null>(null);
   const [credential, setCredential] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -369,7 +373,7 @@ function AwayStep({ onScene, onDone }: { onScene: (s: StageScene) => void; onDon
   }, [state, attempt]);
   useEffect(() => {
     if (choice !== "tailscale" || !info || !allowed || !state) return;
-    if (awayEnabled(info)) return onDone();
+    if (awayEnabled(info)) return;
     // a state we don't push (error, starting, missing) forgets the last push, so a recovery pushes again
     if (state !== "needs-login" && state !== "running" && state !== "stopped") pushed.current = null;
     if (pushed.current === state) return;
@@ -379,7 +383,7 @@ function AwayStep({ onScene, onDone }: { onScene: (s: StageScene) => void; onDon
       pushed.current = state;
     } else return;
     void advanceTailscale(state, !!info.tailscale.authUrl).then((r) => {
-      if (r.done) return onDone();
+      if (r.done) return void useAccessStore.getState().refresh(true);
       if (r.loginUrl) setLoginUrl(r.loginUrl);
       // a late answer about a state we've already left is old news
       if (r.problem && stateRef.current === state) setFound({ state, text: r.problem });
@@ -403,8 +407,7 @@ function AwayStep({ onScene, onDone }: { onScene: (s: StageScene) => void; onDon
       const next = await api<AccessInfo>("POST", "/api/reach/cloudflare", { action: "start", token: credential.trim() });
       useAccessStore.setState({ info: next, failed: false });
       setCredential("");
-      if (awayEnabled(next)) onDone();
-      else setHint("Cloudflare is connecting…");
+      if (!awayEnabled(next)) setHint("Cloudflare is connecting…");
     } catch (e) {
       setError(unavailable(e, "Away from home"));
     } finally {
@@ -415,57 +418,64 @@ function AwayStep({ onScene, onDone }: { onScene: (s: StageScene) => void; onDon
     skipAccess();
     onDone();
   };
+  useEffect(() => onScene({ name: "anywhere" }), []);
+  const problem = choice === "tailscale" ? tailscaleProblem({ info, failed, found: found && found.state === state ? found.text : null, slow }) : null;
+  // the address picking gives you: the public one once away from home works, the home one when staying home
+  const away = !!info && awayEnabled(info);
+  const address = choice === "home" || (choice && away) ? serverAddress(info) : null;
+  const ready = choice === "home" || (!!choice && away);
+  // the host hops once when the address lands
   useEffect(() => {
-    if (choice) onScene({ name: choice === "tailscale" ? "tailscale" : "anywhere", linked: state === "running", onBack: () => setChoice(null) });
-    else onScene({ name: "anywhere" });
-  }, [choice, state === "running"]);
-  if (choice === "tailscale") {
-    const problem = tailscaleProblem({ info, failed, found: found && found.state === state ? found.text : null, slow });
-    return <TailscaleScreen info={info} authUrl={info?.tailscale.authUrl ?? loginUrl} problem={problem} onRetry={tryAgain} onSkip={only} />;
-  }
-  if (choice === "cloudflare") {
-    return (
-      <form
-        className="flex-1 flex flex-col"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void startCloudflare();
-        }}
-      >
-        <Thread title="Connect Cloudflare" sub="Paste your Cloudflare setup code. This needs a domain you own.">
-          <AuthInput type="password" autoComplete="off" className="h-[42px] rounded-lg px-3" value={credential} onChange={(e) => setCredential(e.target.value)} placeholder="Setup code" aria-label="Cloudflare setup code" autoFocus />
-          {hint && (
-            <p role="status" className="text-sm text-muted">
-              {hint}
-            </p>
-          )}
-          <Problem>{error}</Problem>
-        </Thread>
-        <Actions>
-          <SetupButton disabled={busy || !allowed}>
-            {busy && <Loader2 size={16} className="animate-spin" />}Continue
-          </SetupButton>
-        </Actions>
-      </form>
-    );
-  }
+    if (address?.url) hostReact("hop");
+  }, [address?.url]);
+  const pick = (c: AwayChoice) => {
+    setChoice(c);
+    onChoice?.(c);
+    setError(null);
+    hostReact("nod");
+  };
+  const list = useRef<HTMLDivElement>(null);
   return (
-    <>
+    <form
+      className="flex-1 flex flex-col"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (choice === "cloudflare" && !away) return void startCloudflare();
+        if (choice === "home") return only();
+        if (ready) onDone();
+      }}
+    >
       <Thread title="Use Wisp outside your home?" sub="So your phone and laptop work on any Wi-Fi or on cell data.">
-        <button type="button" className="setup-choice" disabled={!allowed} onClick={() => setChoice("tailscale")}>
-          <BrandMark name="tailscale" />
-          <span>
-            <strong className="block text-sm font-medium">Yes, with Tailscale</strong>
-            <span className="block text-[13px] text-muted">A free app that links your devices.</span>
-          </span>
-        </button>
-        <button type="button" className="setup-choice" disabled={!allowed} onClick={() => setChoice("cloudflare")}>
-          <BrandMark name="cloudflare" />
-          <span>
-            <strong className="block text-sm font-medium">Yes, with Cloudflare</strong>
-            <span className="block text-[13px] text-muted">Needs a domain you own.</span>
-          </span>
-        </button>
+        <div ref={list} className="ob-slide" role="radiogroup" aria-label="Away from home">
+          <SlideMark list={list} pick={choice} />
+          <AwayChoiceRow on={choice === "tailscale"} disabled={!allowed} onPick={() => pick("tailscale")} mark={<BrandMark name="tailscale" />} title="Yes, with Tailscale" sub="A free app that links your devices." />
+          <AwayChoiceRow on={choice === "cloudflare"} disabled={!allowed} onPick={() => pick("cloudflare")} mark={<BrandMark name="cloudflare" />} title="Yes, with Cloudflare" sub="Needs a domain you own." />
+          <AwayChoiceRow on={choice === "home"} onPick={() => pick("home")} mark={<HomeMark />} title="Only at home for now" sub="Your devices connect on your home Wi-Fi." />
+        </div>
+        <SlideOpen open={choice === "tailscale" && !away}>
+          <div className="flex flex-col gap-2.5 pt-1">
+            <TailscaleRows info={info} authUrl={info?.tailscale.authUrl ?? loginUrl} problem={problem} />
+            {problem && (
+              <button type="button" className="ob-link self-start text-sm" onClick={tryAgain}>
+                Try again
+              </button>
+            )}
+          </div>
+        </SlideOpen>
+        <SlideOpen open={choice === "cloudflare" && !away}>
+          <div className="flex flex-col gap-2 pt-1">
+            <AuthInput type="password" autoComplete="off" className="h-[42px] rounded-lg px-3" value={credential} onChange={(e) => setCredential(e.target.value)} placeholder="Cloudflare setup code" aria-label="Cloudflare setup code" />
+            {hint && (
+              <p role="status" className="text-sm text-muted">
+                {hint}
+              </p>
+            )}
+            <Problem>{error}</Problem>
+          </div>
+        </SlideOpen>
+        <SlideOpen open={!!address}>
+          <AddressCard address={address} />
+        </SlideOpen>
         {!info && failed && (
           <p role="status" className="text-sm text-muted">
             Away from home isn't available yet; you can keep going.
@@ -474,11 +484,63 @@ function AwayStep({ onScene, onDone }: { onScene: (s: StageScene) => void; onDon
         {!allowed && <p className="text-sm text-muted">Your Wisp's owner can turn this on.</p>}
       </Thread>
       <Actions>
-        <AuthLink className="self-center" onClick={only}>
-          Only at home for now
-        </AuthLink>
+        <SetupButton disabled={busy || !choice || (choice === "tailscale" && !away) || (choice === "cloudflare" && !away && !credential.trim())}>
+          {busy && <Loader2 size={16} className="animate-spin" />}
+          {choice === "cloudflare" && !away ? "Connect" : "Continue"}
+        </SetupButton>
       </Actions>
-    </>
+    </form>
+  );
+}
+
+type AwayChoice = "tailscale" | "cloudflare" | "home";
+/** What the host says once you pick how to reach it. */
+const AWAY_LINES: Record<AwayChoice, string> = { tailscale: "Then I'm on your phone too.", cloudflare: "Then I'm on your phone too.", home: "Home it is. Change it any time." };
+
+/** One way to reach Wisp, as a radio row; the picked row's outline slides to it. */
+function AwayChoiceRow({ on, disabled, onPick, mark, title, sub }: { on: boolean; disabled?: boolean; onPick: () => void; mark: ReactNode; title: string; sub: string }) {
+  return (
+    <button type="button" role="radio" aria-checked={on} className="setup-choice" disabled={disabled} onClick={onPick}>
+      {mark}
+      <span className="flex-1 min-w-0">
+        <strong className="block text-sm font-medium">{title}</strong>
+        <span className="block text-[13px] text-muted">{sub}</span>
+      </span>
+    </button>
+  );
+}
+
+function HomeMark() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0">
+      <path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5h-6v5H5a1 1 0 0 1-1-1z" />
+    </svg>
+  );
+}
+
+/** The address your devices connect to, with Copy. */
+function AddressCard({ address }: { address: { url: string; note: string } | null }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => setCopied(false), [address?.url]);
+  return (
+    <div className="pt-1 flex flex-col gap-1.5">
+      <div className="rounded-lg border border-line bg-card p-3.5 flex items-center justify-between gap-2.5">
+        {address ? <span className="font-mono text-sm break-all">{address.url}</span> : <Waiting>Looking up your address</Waiting>}
+        {address && (
+          <button
+            type="button"
+            className="h-8 px-2.5 shrink-0 rounded-md bg-control border border-control-line text-[13px] font-medium hover:bg-hover"
+            onClick={() => {
+              void navigator.clipboard?.writeText(address.url);
+              setCopied(true);
+            }}
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
+        )}
+      </div>
+      {address && <p className="text-[13px] text-muted">{address.note}</p>}
+    </div>
   );
 }
 
@@ -528,10 +590,26 @@ export function tailscaleProblem({ info, failed, found, error, slow }: { info: A
 }
 
 export function TailscaleScreen({ info, authUrl, problem, onRetry, onSkip }: { info: AccessInfo | null; authUrl?: string | null; problem: string | null; onRetry: () => void; onSkip: () => void }) {
-  const state = info?.tailscale.state;
   return (
     <>
       <Thread title="Connect Tailscale" sub="Wisp moves on by itself once both are done.">
+        <TailscaleRows info={info} authUrl={authUrl} problem={problem} />
+      </Thread>
+      <Actions>
+        {problem && <SetupButton onClick={onRetry}>Try again</SetupButton>}
+        <AuthLink className="self-center" onClick={onSkip}>
+          Only at home for now
+        </AuthLink>
+      </Actions>
+    </>
+  );
+}
+
+/** Tailscale's two steps (installed, signed in), what's wrong, and what it's waiting on. */
+function TailscaleRows({ info, authUrl, problem }: { info: AccessInfo | null; authUrl?: string | null; problem: string | null }) {
+  const state = info?.tailscale.state;
+  return (
+    <>
         <Group>
           <StatusRow state={!state || state === "missing" ? "working" : "done"} text="Tailscale is installed">
             {state === "missing" && info && (
@@ -551,13 +629,6 @@ export function TailscaleScreen({ info, authUrl, problem, onRetry, onSkip }: { i
         <Problem>{problem}</Problem>
         {!problem && state === "starting" && <Waiting>Tailscale is connecting</Waiting>}
         {!problem && state === "needs-login" && !authUrl && <Waiting>Getting the sign-in page</Waiting>}
-      </Thread>
-      <Actions>
-        {problem && <SetupButton onClick={onRetry}>Try again</SetupButton>}
-        <AuthLink className="self-center" onClick={onSkip}>
-          Only at home for now
-        </AuthLink>
-      </Actions>
     </>
   );
 }

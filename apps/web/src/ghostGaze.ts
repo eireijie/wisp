@@ -11,6 +11,22 @@ let frame = 0;
 let tapTimer: ReturnType<typeof setTimeout> | undefined;
 const pointer = { x: 0, y: 0, vx: 0, vy: 0, at: 0, stillSince: 0, active: false, touch: false };
 let anchor: Point = { x: 0, y: 0 };
+/** Where every watching ghost looks instead of the pointer: a point (the field being typed in), or away (a password). */
+let focus: Point | "away" | null = null;
+/** Ghosts inside [data-ghost-glance] look around on their own (small glances every 0.5–2 s) when nothing else draws their eye. */
+const glances = new WeakMap<object, { target: number[]; next: number }>();
+let glanceTimer: ReturnType<typeof setTimeout> | undefined;
+let glanceDue = Infinity;
+
+/** The next small glance: a little to the side, a little up or down, sometimes straight ahead. */
+function nextGlance(size: number): number[] {
+  if (Math.random() < 0.25) return [0, 0, 0, 0, 0];
+  const dx = (Math.random() * 2 - 1) * size * 1.6;
+  const dy = (Math.random() * 2 - 1) * size * 0.5;
+  // a glance moves the eyes, not the whole body
+  const [x, y, px, py] = gazeTarget(dx, dy, size);
+  return [x * 0.6, y * 0.6, px, py, 0];
+}
 
 const clamp = (n: number, limit: number) => Math.max(-limit, Math.min(limit, n));
 
@@ -43,9 +59,19 @@ function tick() {
       continue;
     }
     const facing = ghost.root.closest<HTMLElement>("[data-pet-facing]")?.dataset.petFacing === "-1" ? -1 : 1;
-    const target = !still && pointer.active
-      ? gazeTarget((pointer.x - box.left - box.width / 2) * facing, pointer.y - box.top - box.height / 2, box.width, ghost.strong)
-      : [0, 0, 0, 0, 0];
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
+    const target = still
+      ? [0, 0, 0, 0, 0]
+      : focus === "away"
+        ? gazeTarget(-box.width * 4 * facing, -box.height * 0.6, box.width, true)
+        : focus
+          ? gazeTarget((focus.x - cx) * facing, focus.y - cy, box.width, ghost.strong)
+          : ghost.root.closest("[data-ghost-glance]")
+            ? glanceAt(ghost, box.width)
+            : pointer.active
+              ? gazeTarget((pointer.x - cx) * facing, pointer.y - cy, box.width, ghost.strong)
+              : [0, 0, 0, 0, 0];
     ghost.value = ghost.value.map((n, i) => {
       if (still || Math.abs(target[i] - n) < 0.015) return target[i];
       unsettled = true;
@@ -54,6 +80,23 @@ function tick() {
     paint(ghost);
   }
   if (unsettled && !still) refreshGhostGaze();
+}
+
+function glanceAt(ghost: Registered, size: number): number[] {
+  const now = performance.now();
+  let g = glances.get(ghost);
+  if (!g || now >= g.next) {
+    g = { target: nextGlance(size), next: now + 500 + Math.random() * 1500 };
+    glances.set(ghost, g);
+  }
+  // wake up for the soonest next glance; one timer serves every glancing ghost
+  // (a due time already past means its timer is gone: schedule afresh)
+  if (g.next < glanceDue || glanceDue <= now) {
+    clearTimeout(glanceTimer);
+    glanceDue = g.next;
+    glanceTimer = setTimeout(() => ((glanceDue = Infinity), refreshGhostGaze()), Math.max(16, g.next - now));
+  }
+  return g.target;
 }
 
 /** Roaming ghosts also invalidate gaze when their position changes. */
@@ -106,6 +149,12 @@ function visibility() {
 }
 
 export const ghostPointer = () => pointer;
+
+/** Make every watching ghost look at a point (the field being typed in) or away (while a password is typed); null gives the pointer back. */
+export function setGazeFocus(next: Point | "away" | null) {
+  focus = next;
+  refreshGhostGaze();
+}
 
 /** One shared pointer source, retained by both gazing and roaming pets. */
 export function retainGhostPointer() {

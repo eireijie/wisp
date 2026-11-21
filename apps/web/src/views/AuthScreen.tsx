@@ -1,9 +1,25 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { SetupShell } from "../components/SetupShell.tsx";
+import { DrawnCheck } from "../components/onboarding/obMotion.tsx";
+import { hostReact } from "../components/onboarding/HostGhost.tsx";
 import { Check } from "lucide-react";
 import { api } from "../api.ts";
 import { setupCodeFromHash } from "../setup-link.ts";
 import { AuthButton, AuthError, AuthField, AuthHero, AuthInput, AuthLink, AuthPage } from "../components/auth.tsx";
+
+/** Looks like a whole email address (the check that draws in beside it). */
+export const emailLooksRight = (email: string) => /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(email.trim()) && !/\.$/.test(email.trim());
+
+/** 0–4: how strong a new password is (8+ characters, then mixed case, a digit, a symbol or 14+ characters). */
+export function passwordStrength(pw: string): number {
+  if (pw.length < 8) return pw ? 1 : 0;
+  let n = 1;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) n++;
+  if (/\d/.test(pw)) n++;
+  if (/[^A-Za-z0-9]/.test(pw) || pw.length >= 14) n++;
+  return Math.min(4, n);
+}
+const STRENGTH = ["", "Weak", "Okay", "Good", "Strong"];
 
 /** An invite link: #/join/<code>. */
 const inviteCode = () => location.hash.match(/^#\/join\/([\w-]+)/)?.[1] ?? null;
@@ -36,6 +52,12 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
   const [pasting, setPasting] = useState(false);
   const [pasted, setPasted] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const [hiding, setHiding] = useState(false);
+  const emailOk = emailLooksRight(form.email);
+  // the host nods once when the email looks right
+  useEffect(() => {
+    if (emailOk && needsSetup) hostReact("nod");
+  }, [emailOk, needsSetup]);
 
   useEffect(() => {
     api<{ needsSetup: boolean; needsCode?: boolean }>("GET", "/api/setup")
@@ -180,7 +202,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
       <form onSubmit={submit} className="flex flex-col">
         {needsSetup ? (
           <div className="flex flex-col gap-2">
-            <h1 className="text-[22px] font-semibold tracking-[-0.02em] leading-tight">Create your account</h1>
+            <h1 className="text-[22px] font-semibold tracking-[-0.02em] leading-tight">{form.name.trim() ? `Hi, ${form.name.trim().split(/\s+/)[0]}.` : "Create your account"}</h1>
             <p className="text-sm text-muted">You'll use this to sign in from your other devices.</p>
           </div>
         ) : (
@@ -206,7 +228,14 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
             </AuthField>
           )}
           <AuthField label="Email">
-            <AuthInput type="email" value={form.email} onChange={set("email")} autoComplete="email" placeholder="you@example.com" aria-label="Email" required />
+            <span className="relative block">
+              <AuthInput type="email" value={form.email} onChange={set("email")} autoComplete="email" placeholder="you@example.com" aria-label="Email" required className={needsSetup ? "pr-11" : undefined} />
+              {needsSetup && emailOk && (
+                <span className="absolute right-4 top-1/2 -translate-y-1/2" data-testid="email-ok">
+                  <DrawnCheck />
+                </span>
+              )}
+            </span>
           </AuthField>
           <AuthField label="Password" hint={joining ? "At least 8 characters." : undefined}>
             <AuthInput
@@ -217,8 +246,11 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
               minLength={needsSetup || joining ? 8 : undefined}
               placeholder={needsSetup || joining ? "At least 8 characters" : "Password"}
               aria-label="Password"
+              onFocus={() => setHiding(true)}
+              onBlur={() => setHiding(false)}
               required
             />
+            {(needsSetup || joining) && form.password && <Meter strength={passwordStrength(form.password)} short={form.password.length < 8} />}
           </AuthField>
           <AuthError>{error}</AuthError>
         </div>
@@ -240,10 +272,24 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
   );
   // the first run's account screen stands on the setup stage, with the wisp beside it
   return needsSetup ? (
-    <SetupShell at={0} stepKey="account" line="Hi. Make your account first. It's how you sign in to Wisp from any device.">
+    <SetupShell at={0} stepKey="account" line={hiding ? "Not looking." : form.name.trim() ? `Nice to meet you, ${form.name.trim().split(/\s+/)[0]}.` : "Hi. Make your account first. It's how you sign in to Wisp from any device."}>
       <div className="ob-narrow">{page}</div>
     </SetupShell>
   ) : (
     <AuthPage>{page}</AuthPage>
+  );
+}
+
+/** Four bars that fill as a new password gets stronger, and one word for it. */
+function Meter({ strength, short }: { strength: number; short: boolean }) {
+  return (
+    <span className="flex items-center gap-2.5 pl-1.5" aria-live="polite">
+      <span className="ob-meter flex-1 !mt-0" aria-hidden>
+        {[1, 2, 3, 4].map((i) => (
+          <i key={i} data-on={strength >= i} />
+        ))}
+      </span>
+      <span className="text-[12px] text-muted w-16 text-right">{short ? "Too short" : STRENGTH[strength]}</span>
+    </span>
   );
 }
