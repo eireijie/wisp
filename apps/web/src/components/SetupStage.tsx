@@ -3,7 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { GHOST_WHITE, type GhostAppearance } from "@wisp/core/src/appearance.ts";
 import { motionReduced } from "../theme.ts";
 import type { GhostMood } from "./Ghost.tsx";
-import { ClassicGhost } from "./onboarding/ClassicGhost.tsx";
+import { Ghost } from "./Ghost.tsx";
 import { HarnessLogo } from "./HarnessLogo.tsx";
 
 export type StageName = "account" | "anywhere" | "tailscale" | "address" | "look" | "harness" | "signin" | "made" | "phone";
@@ -68,7 +68,7 @@ export function SetupStage({ scene, children }: { scene: StageScene; children: R
         )}
         <div className="setup-wisp" style={{ left: `${place.x}%`, top: `${place.y}%`, transform: `translate(-50%, -50%) scale(calc(${place.size / BOX} * var(--setup-k)))`, width: BOX, height: BOX }}>
           <div ref={wisp}>
-            <ClassicGhost look={look} size={BOX} mood={place.mood} trackPointer label="" />
+            <Ghost look={look} size={BOX} mood={place.mood} trackPointer label="" />
           </div>
         </div>
         {scene.name === "made" && <Sparks />}

@@ -193,12 +193,10 @@ export interface AgentDraft {
   handle?: string;
   /** "What I do", one line */
   role: string;
-  /** one of FAMILY_COLORS */
+  /** one of FAMILY_COLORS; the ghost shades it into its gradient */
   color: string;
   /** the shape the app stores (GhostAppearance.shape) */
   shape: "classic" | "round" | "tall" | "sheet" | "wisp";
-  /** the family silhouette picked (the "block" one has no stored shape of its own, so it rides along here) */
-  silhouette?: "drop" | "soft" | "tall" | "wide" | "block" | "ghost";
   /** the start of its instructions */
   instructions: string;
 }

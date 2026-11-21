@@ -1126,7 +1126,6 @@ const CREW = [
       };
       return `<svg viewBox="-8 -18 136 140" aria-hidden="true"><defs>
         <linearGradient id="g${i}" gradientUnits="userSpaceOnUse" x1="0" y1="${b.top}" x2="0" y2="${b.bottom}"><stop offset="0.08" stop-color="${c[1]}"/><stop offset="0.95" stop-color="${c[2]}"/></linearGradient>
-        <radialGradient id="l${i}" cx="0.5" cy="0.42" r="0.6"><stop offset="0" stop-color="white" stop-opacity="0.24"/><stop offset="0.65" stop-color="white" stop-opacity="0.06"/><stop offset="1" stop-color="white" stop-opacity="0"/></radialGradient>
         <clipPath id="c${i}"><path d="${b.d}">${rip}</path></clipPath>
         <clipPath id="k${i}"><path class="${armC[0]}" style="${armStyle(0, t.left)}" d="${LIMB}"/><path class="${armC[1]}" style="${armStyle(1, t.right)}" d="${LIMB}"/></clipPath>
         <clipPath id="o${i}"><path d="${LIMB}"/></clipPath>
@@ -1134,7 +1133,7 @@ const CREW = [
       </defs>
       <ellipse class="ground" style="${t.ground || ""}" cx="60" cy="${b.ground}" rx="24" ry="3.4" fill="black" opacity="0.28"/>
       <g class="tilt"><g class="mo ${motion}" style="${t.motion || ""}">
-        <path d="${b.d}" fill="url(#g${i})">${rip}</path><path d="${b.d}" fill="url(#l${i})">${rip}</path>
+        <path d="${b.d}" fill="url(#g${i})">${rip}</path>
         <path d="${b.d}" fill="none" stroke="black" stroke-opacity="0.1" stroke-width="7" clip-path="url(#c${i})">${rip}</path>
         ${lap ? `<path d="${lap.deck}" fill="#4a4760" stroke="#4a4760" stroke-width="1.6" stroke-linejoin="round"/><path d="${lap.keys}" class="keys" stroke="#a6e8d4" stroke-opacity="0.7" stroke-width="1.1" stroke-linecap="round"/>` : ""}
         ${mood === "waiting" ? `<g class="${armC[1]}" style="${armStyle(1)}"><g transform="translate(10.6 0) rotate(30)"><path d="M0 7.5 V-19" stroke="#8d8291" stroke-width="2.6" stroke-linecap="round"/><rect x="-9.5" y="-37" width="19" height="19" rx="5" fill="#f5c542"/><path d="M-3.4 -30.4 C-3.4 -35 3.7 -35 3.7 -30.7 C3.7 -28.4 0.2 -28.3 0.2 -25.4" stroke="#343244" stroke-width="2.6" fill="none" stroke-linecap="round"/><circle cx="0.2" cy="-21.7" r="1.5" fill="#343244"/></g></g>` : ""}
