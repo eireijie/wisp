@@ -1,7 +1,7 @@
 {
   "name": "@bubble-ai/desktop",
   "productName": "Bubble AI",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Bubble AI for Mac, Windows and Linux: the workspace in its own window, a hub on this computer, and this computer as a device for agents.",
   "license": "Apache-2.0",
   "private": true,
