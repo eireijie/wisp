@@ -253,6 +253,24 @@ describe("a broken .git folder", () => {
   });
 });
 
+describe("a vault folder git thinks belongs to someone else", () => {
+  it("still starts and saves (Windows: folders made by an admin app or on another drive)", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-owner-"));
+    const before = process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
+    process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = "1";
+    try {
+      const v = new Vault(root, new Database(":memory:"));
+      await v.init();
+      await v.write("shared/a.md", "# A", me);
+      expect(await v.history("shared/a.md")).toHaveLength(1);
+    } finally {
+      if (before === undefined) delete process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
+      else process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = before;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("edits made outside Bubble AI", () => {
   it("are committed as 'Edited in Obsidian', indexed, and never confused with Bubble AI's own saves", async () => {
     await vault.write("shared/ours.md", "# Ours\n", me);

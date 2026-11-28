@@ -13,6 +13,7 @@ import { parseServiceAccount } from "./fcm.ts";
 import { registerHarnessSettingsApi } from "./api-harness-settings.ts";
 import { featureOn } from "./features.ts";
 import { CHAT_BACKGROUND, backgroundProblem } from "./chat-background.ts";
+import { trustVaultGit } from "@bubble-ai/vault";
 
 interface Helpers {
   need(req: FastifyRequest, reply: FastifyReply, opts?: { owner?: boolean; user?: boolean; member?: boolean }): Caller | null;
@@ -520,7 +521,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   app.get("/api/export/vault.zip", async (req, reply) => {
     const c = need(req, reply, { owner: true });
     if (!c) return;
-    const child = spawn("git", ["-C", hub.vault(c.workspaceId).root, "archive", "--format=zip", "--prefix=memory/", "HEAD"], { stdio: ["ignore", "pipe", "ignore"] });
+    const child = spawn("git", ["-C", hub.vault(c.workspaceId).root, "archive", "--format=zip", "--prefix=memory/", "HEAD"], { env: trustVaultGit(process.env), stdio: ["ignore", "pipe", "ignore"] });
     reply.header("content-type", "application/zip").header("content-disposition", `attachment; filename="wisp-memory-${new Date().toISOString().slice(0, 10)}.zip"`);
     return reply.send(child.stdout);
   });

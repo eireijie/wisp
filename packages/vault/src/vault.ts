@@ -775,13 +775,24 @@ export class Vault {
     return exec("git", args, {
       cwd: this.root,
       maxBuffer: 32 * 1024 * 1024,
-      env: { ...process.env, GIT_COMMITTER_NAME: who.name, GIT_COMMITTER_EMAIL: who.email, GIT_AUTHOR_NAME: who.name, GIT_AUTHOR_EMAIL: who.email },
+      env: trustVaultGit({ ...process.env, GIT_COMMITTER_NAME: who.name, GIT_COMMITTER_EMAIL: who.email, GIT_AUTHOR_NAME: who.name, GIT_AUTHOR_EMAIL: who.email }),
     }).catch((err) => {
       // the vault keeps its notes in git: without it, say so instead of a stack trace
       if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new Error("Bubble AI needs Git to keep its notes. Install it from git-scm.com, then start Bubble AI again.");
       throw err;
     });
   }
+}
+
+/**
+ * Git refuses a repository whose folder seems to belong to someone else ("dubious ownership"). On
+ * Windows that happens to folders made by an app running as administrator, or on another drive,
+ * and git then says "not in a git directory" for a vault it just made. Bubble AI only runs git in
+ * its own vault folders, so it trusts them, for this command only (nothing is written to any config).
+ */
+export function trustVaultGit(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const n = Number(env.GIT_CONFIG_COUNT) || 0;
+  return { ...env, GIT_CONFIG_COUNT: String(n + 1), [`GIT_CONFIG_KEY_${n}`]: "safe.directory", [`GIT_CONFIG_VALUE_${n}`]: "*" };
 }
 
 /** What a caller holding the vault exclusively may do. */
