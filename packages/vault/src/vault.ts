@@ -114,11 +114,9 @@ export class Vault {
     // front matter `type:` (person, project, decision…), added after the first release
     const cols = this.db.prepare("PRAGMA table_info(vault_notes)").all() as { name: string }[];
     if (!cols.some((c) => c.name === "type")) this.db.exec("ALTER TABLE vault_notes ADD COLUMN type TEXT");
-    try {
-      await fs.access(path.join(this.root, ".git"));
-    } catch {
-      await this.git(["init", "-q"]);
-    }
+    // Always run git init: it leaves a working repository (and its history) as it is, and it repairs
+    // a .git folder that is empty or half made, which git doesn't count as a repository at all.
+    await this.git(["init", "-q"]);
     // Git for Windows turns on core.autocrlf system-wide: notes would be checked out with CRLF and an
     // Obsidian push would leave the vault looking edited. Notes are kept byte for byte.
     if (process.platform === "win32") await this.git(["config", "core.autocrlf", "false"]);

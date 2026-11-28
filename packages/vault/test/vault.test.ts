@@ -236,6 +236,23 @@ describe("an existing Obsidian vault", () => {
   });
 });
 
+describe("a broken .git folder", () => {
+  it("is repaired instead of stopping the server (an empty .git isn't a repository to git)", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-brokengit-"));
+    try {
+      await fs.mkdir(path.join(root, ".git"));
+      await put(root, "note.md", "# Kept");
+      const v = new Vault(root, new Database(":memory:"));
+      await v.init();
+      expect(gitOut(root, "log", "-1", "--format=%s")).toBe("Start tracking this folder");
+      expect(gitOut(root, "ls-files").split("\n")).toContain("note.md");
+      expect(await fs.readFile(path.join(root, "note.md"), "utf8")).toBe("# Kept");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("edits made outside Bubble AI", () => {
   it("are committed as 'Edited in Obsidian', indexed, and never confused with Bubble AI's own saves", async () => {
     await vault.write("shared/ours.md", "# Ours\n", me);
