@@ -13,6 +13,7 @@ import {
   GHOST_SHAPES,
   BUBBLE_SHAPES,
   MAX_MODEL_ID_LENGTH,
+  MAX_PINS,
   accessChecker,
   atLeast,
   cleanRulePath,
@@ -1269,6 +1270,23 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return agentView(store.agent(agent.id)!);
   });
 
+  /**
+   * Round 16 (board 16c): the sidebar's tile row is only what someone pins, so the person's first
+   * agent is pinned for them. Only once: never after they've saved a layout of their own (an unpin
+   * included), never when they already pin something (starred chats are their old pins), and never
+   * for a later agent. The layout keeps the workspace's sections the way the apps read them before.
+   */
+  const pinFirstAgent = (workspaceId: string, userId: string, agentId: string) => {
+    const prefs = store.prefs(userId);
+    if (prefs.sidebar) return;
+    if (store.agents(workspaceId).some((a) => a.id !== agentId && a.settings.createdBy === userId)) return;
+    if (Object.values(store.channelPrefs(userId)).some((p) => p.starred)) return;
+    const channels = store.channels(workspaceId).filter((ch) => ch.kind !== "dm" && !ch.archivedAt);
+    const sections = store.sections(workspaceId).map((s) => ({ id: s.id.slice(0, 40), name: s.name.slice(0, 40) || "Folder", items: channels.filter((ch) => ch.sectionId === s.id).map((ch) => `c:${ch.id}`) }));
+    store.setPrefs(userId, { ...prefs, sidebar: { pins: [`a:${agentId}`].slice(0, MAX_PINS), sections } });
+    hub.broadcast(workspaceId, { type: "prefs_changed" }, (u) => u === userId);
+  };
+
   app.post("/api/agents", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;
@@ -1368,6 +1386,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     await hub.ensureBuiltinSkills([agent.id]);
     // it speaks first: hello, then a few questions to get to know whoever made it
     if (greet !== "later") greetNewAgent(hub, agent, c.actor.kind === "user" ? c.actor.id : null);
+    if (c.actor.kind === "user") pinFirstAgent(c.workspaceId, c.actor.id, agent.id);
     hub.broadcast(c.workspaceId, { type: "agents_changed" });
     return agentView(store.agent(agent.id)!);
   });

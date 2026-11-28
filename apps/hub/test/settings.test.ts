@@ -77,8 +77,10 @@ describe("your settings", () => {
     const me = (await api("PATCH", "/api/me", { preferredName: "Alex", timezone: "America/New_York" })).data;
     expect(me).toMatchObject({ name: "Alex Morgan", preferredName: "Alex", timezone: "America/New_York" });
     expect((await api("PATCH", "/api/me", { timezone: "Mars/Olympus" })).status).toBe(400);
-    expect((await api("PUT", "/api/me/prefs", { sendWith: "mod-enter", clock: "24h" })).data).toEqual({ sendWith: "mod-enter", clock: "24h", experience: "simple" });
-    expect((await api("GET", "/api/me")).data.prefs).toEqual({ sendWith: "mod-enter", clock: "24h", experience: "simple" });
+    // the first agent made above was pinned for this person (round 16, first-agent-pin.test.ts)
+    const sidebar = { pins: [expect.stringMatching(/^a:/)], sections: [] };
+    expect((await api("PUT", "/api/me/prefs", { sendWith: "mod-enter", clock: "24h" })).data).toEqual({ sendWith: "mod-enter", clock: "24h", experience: "simple", sidebar });
+    expect((await api("GET", "/api/me")).data.prefs).toEqual({ sendWith: "mod-enter", clock: "24h", experience: "simple", sidebar });
     // Show me around: which stops were seen, kept with the other preferences so every device agrees
     expect((await api("PUT", "/api/me/prefs", { learn: { seen: ["write", "attach"], started: true } })).data.learn).toEqual({ seen: ["write", "attach"], started: true });
     expect((await api("GET", "/api/me")).data.prefs).toMatchObject({ clock: "24h", learn: { seen: ["write", "attach"], started: true } });

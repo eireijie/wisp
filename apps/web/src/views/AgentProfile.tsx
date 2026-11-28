@@ -29,7 +29,7 @@ import { runsOnDevice } from "./AgentComputer.tsx";
 /**
  * The profile (round 11, board 12): one short list, no tabs. Every other address opens a part over it
  * with a back arrow: Edit (#/agents/<id>/settings) holds the name, look, background, voice and brain;
- * the short list's rows open Library, Computer, Apps and skills, Routines and Memory; "Full profile"
+ * the short list's rows open Library, Computer, Apps and skills, Routines and Memory; "All settings"
  * (more) holds everything else. Old addresses keep working: each lands on its part.
  */
 export const PART_PARENT: Partial<Record<AgentTab, AgentTab>> = {

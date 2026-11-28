@@ -457,6 +457,8 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
   // the AI was picked here: send it, rather than leave it to the defaults
   const aiPicked = useRef(false);
   const placePicked = useRef(false);
+  // a device picked here goes with it, even when the rest comes from your defaults
+  const devicePicked = useRef(false);
   // devices can arrive after the dialog opened with none: settle on one then
   const firstUsable = usable.find((n) => n.online)?.id ?? usable[0]?.id;
   useEffect(() => {
@@ -650,7 +652,8 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
         if (useDefaults) {
           // the AI picked here, the rest placed by your defaults
           const ai = aiPicked.current && !external ? { harness, ...(model.trim() ? { model: model.trim() } : {}) } : {};
-          a = await api<Agent>("POST", "/api/agents", { ...common, ...ai, useDefaults: true, settings });
+          const where = devicePicked.current && nodeId && !external ? { nodeId } : {};
+          a = await api<Agent>("POST", "/api/agents", { ...common, ...ai, ...where, useDefaults: true, settings });
         } else {
           const computer: ComputerChoice = place.kind === "auto" ? { kind: "later" } : place;
           const computerId = external ? null : await resolveComputer(computer, nodeId, cleanName);
@@ -900,7 +903,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                     </label>
 
                     {!invite && selectedHarness.protocol !== "mcp" && (
-                      <PlacePicker value={place} onChange={choosePlace} node={node} nodes={nodes} usable={usable} nodeId={nodeId} onNode={(id) => (setNodeId(id), choosePlace(place.kind === "auto" ? place : defaultComputer(nodes.find((n) => n.id === id), computers)))} auto={defaults !== "error" ? (summary?.computer ?? "Automatic") : null} advanced={pickWhere} />
+                      <PlacePicker value={place} onChange={choosePlace} node={node} nodes={nodes} usable={usable} nodeId={nodeId} onNode={(id) => ((devicePicked.current = true), setNodeId(id), choosePlace(place.kind === "auto" ? place : defaultComputer(nodes.find((n) => n.id === id), computers)))} auto={defaults !== "error" ? (summary?.computer ?? "Automatic") : null} advanced={pickWhere} />
                     )}
                     {!invite && place.kind !== "auto" && node && !node.online && (
                       <p role="status" className="text-xs text-warn">
@@ -1087,7 +1090,8 @@ export function RespondPicker({ value, onChange, disabled }: { value: RespondTo;
 
 /**
  * Where a new agent works, as tiles: Automatic (your defaults: the shared computer in Simple), its
- * own computer, your screen, or none. In Advanced, also the computers already here and the device.
+ * own computer, your screen, or none, and which device it runs on. In Advanced, also the
+ * computers already here.
  */
 function PlacePicker({ value, onChange, node, nodes, usable, nodeId, onNode, auto, advanced }: { value: Place; onChange: (p: Place) => void; node: NodeInfo | undefined; nodes: NodeInfo[]; usable: NodeInfo[]; nodeId: string; onNode: (id: string) => void; auto: string | null; advanced: boolean }) {
   const computers = useStore((s) => s.computers);
@@ -1106,8 +1110,9 @@ function PlacePicker({ value, onChange, node, nodes, usable, nodeId, onNode, aut
     <section className="space-y-2">
       <div className="flex items-center gap-2">
         <span className={cx(LABEL, "flex-1")}>Computer</span>
-        {advanced && usable.length > 1 && (
-          <select aria-label="Device" value={nodeId} onChange={(e) => onNode(e.target.value)} className="h-8 rounded-[8px] border border-input bg-panel px-2 text-[12px]">
+        {/* which device: for everyone, not only in Advanced (round 16, board 16c) */}
+        {usable.length > 1 && (
+          <select aria-label="Runs on" title="Runs on" value={nodeId} onChange={(e) => onNode(e.target.value)} className="h-8 rounded-[8px] border border-input bg-panel px-2 text-[12px]">
             {usable.map((n) => (
               <option key={n.id} value={n.id}>
                 {n.name}

@@ -378,6 +378,8 @@ export type ClientEvent =
   | { type: "sections_changed" }
   | { type: "channels_changed" }
   | { type: "agents_changed" }
+  /** your own prefs changed on the hub (the sidebar's first pin, round 16); refetch GET /api/me */
+  | { type: "prefs_changed" }
   | { type: "lead_changed" }
   | { type: "discussion"; discussion: import("./types.ts").Discussion }
   | { type: "computer"; computer: import("./computers.ts").Computer }

@@ -62,36 +62,13 @@ export function useSideLayout(chats: readonly Chat[]): [SidebarLayout, (next: Si
   return [layout, save];
 }
 
-export function SideList({ chats, lines, active, phone = false }: { chats: Chat[]; lines: Map<string, PreviewLine>; active: string | null; phone?: boolean }) {
-  const me = useStore((s) => s.me)!;
-  const clock = useStore((s) => s.me?.prefs.clock) ?? "auto";
-  const guest = me.role === "guest";
+/**
+ * What the chat menus do (round 16): the wide sidebar's list and the narrow rail share them, so Pin
+ * and Unpin work the same in both. Pins are the sidebar layout's; a team's star follows along.
+ */
+function useChatActions(chats: readonly Chat[], active: string | null) {
   const [layout, save] = useSideLayout(chats);
   const [notice, setNotice] = useState<string | null>(null);
-  const [menu, setMenu] = useState<MenuAt | null>(null);
-  const [renaming, setRenaming] = useState<string | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [hot, setHot] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<Chat | null>(null);
-  const [settingsFor, setSettingsFor] = useState<Chat | null>(null);
-
-  const byKey = useMemo(() => new Map(chats.map((c) => [c.key, c])), [chats]);
-  const home = useMemo(() => placeHome(layout, chats), [layout, chats]);
-  const placed = { sections: home.folders };
-  const unreadMarks = useMemo(() => new Set(layout.unread ?? []), [layout.unread]);
-  const isUnread = (c: Chat) => c.unread > 0 || unreadMarks.has(c.key);
-
-  // opening a chat you marked unread clears the mark
-  const activeKey = chats.find((c) => c.channel && c.channel.id === active)?.key;
-  useEffect(() => {
-    if (activeKey && unreadMarks.has(activeKey)) save(clearUnread(layout, activeKey));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeKey]);
-
-  const open = (c: Chat) => (c.channel ? go({ view: "chat", channelId: c.channel.id, threadId: null }) : c.agent && void openDm(c.agent.id));
-  const urlOf = (c: Chat) => (c.channel ? href({ view: "chat", channelId: c.channel.id, threadId: null }) : undefined);
-
   const doPin = (c: Chat) => {
     const next = pin(layout, c.key);
     if (!next) return setNotice(pinsFullNotice(c.name));
@@ -108,21 +85,7 @@ export function SideList({ chats, lines, active, phone = false }: { chats: Chat[
     save(sectionId === NONE ? moveTo(layout, c.key, "__none__") : moveTo(layout, c.key, sectionId));
     if (wasPinned && c.channel?.starred) void setChannelPrefs(c.channel, { starred: false }).catch(() => {});
   };
-  const doNewSection = (c?: Chat) => {
-    const id = `s${Date.now().toString(36)}`;
-    save(addSection(layout, newSectionName(layout), id, c?.key));
-    setEditing(id);
-  };
-  const newRef = useRef(doNewSection);
-  newRef.current = doNewSection;
-  useEffect(() => {
-    const on = () => newRef.current();
-    window.addEventListener(NEW_SECTION, on);
-    return () => window.removeEventListener(NEW_SECTION, on);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const doRename = async (c: Chat, name: string) => {
-    setRenaming(null);
     const clean = name.trim();
     if (!clean || clean === c.name) return;
     try {
@@ -151,6 +114,55 @@ export function SideList({ chats, lines, active, phone = false }: { chats: Chat[
     if (c.channel && c.channel.id === active) go({ view: "chats" });
   };
 
+  return { layout, save, notice, setNotice, doPin, doUnpin, doMove, doRename, doDelete };
+}
+
+export function SideList({ chats, lines, active, phone = false }: { chats: Chat[]; lines: Map<string, PreviewLine>; active: string | null; phone?: boolean }) {
+  const me = useStore((s) => s.me)!;
+  const clock = useStore((s) => s.me?.prefs.clock) ?? "auto";
+  const guest = me.role === "guest";
+  const { layout, save, notice, setNotice, doPin, doUnpin, doMove, doRename: renameTo, doDelete } = useChatActions(chats, active);
+  const doRename = (c: Chat, name: string) => {
+    setRenaming(null);
+    return renameTo(c, name);
+  };
+  const [menu, setMenu] = useState<MenuAt | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [hot, setHot] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<Chat | null>(null);
+  const [settingsFor, setSettingsFor] = useState<Chat | null>(null);
+
+  const byKey = useMemo(() => new Map(chats.map((c) => [c.key, c])), [chats]);
+  const home = useMemo(() => placeHome(layout, chats), [layout, chats]);
+  const placed = { sections: home.folders };
+  const unreadMarks = useMemo(() => new Set(layout.unread ?? []), [layout.unread]);
+  const isUnread = (c: Chat) => c.unread > 0 || unreadMarks.has(c.key);
+
+  // opening a chat you marked unread clears the mark
+  const activeKey = chats.find((c) => c.channel && c.channel.id === active)?.key;
+  useEffect(() => {
+    if (activeKey && unreadMarks.has(activeKey)) save(clearUnread(layout, activeKey));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKey]);
+
+  const open = (c: Chat) => (c.channel ? go({ view: "chat", channelId: c.channel.id, threadId: null }) : c.agent && void openDm(c.agent.id));
+  const urlOf = (c: Chat) => (c.channel ? href({ view: "chat", channelId: c.channel.id, threadId: null }) : undefined);
+
+  const doNewSection = (c?: Chat) => {
+    const id = `s${Date.now().toString(36)}`;
+    save(addSection(layout, newSectionName(layout), id, c?.key));
+    setEditing(id);
+  };
+  const newRef = useRef(doNewSection);
+  newRef.current = doNewSection;
+  useEffect(() => {
+    const on = () => newRef.current();
+    window.addEventListener(NEW_SECTION, on);
+    return () => window.removeEventListener(NEW_SECTION, on);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // --- drag and drop (desktop) -------------------------------------------------------------------
   const dragProps = (c: Chat) =>
     phone || guest
@@ -192,14 +204,14 @@ export function SideList({ chats, lines, active, phone = false }: { chats: Chat[
   };
   const press = useLongPress((key, x, y) => setMenu({ key, x, y }));
 
-  // --- tiles (round 11, boards 8 and 9): every agent and team, pins first --------------------------
+  // --- tiles (round 16, board 16c): only what's pinned -------------------------------------------
   // round 8 sizes (owner, 2026-11-28: "make them bigger"): 68 in the sidebar, the iPhone's 80 on phones
   const tileSize = phone ? 80 : 68;
   const tiles = home.tiles.map((k) => byKey.get(k)!).filter(Boolean);
   const tileGrid = tiles.length > 0 && (
     <div
       data-tour="pins"
-      aria-label="Agents and teams"
+      aria-label="Pinned"
       role="list"
       className={cx("side-tiles grid grid-cols-3 gap-x-1 gap-y-1 rounded-[14px]", phone ? "px-1 pb-1.5 pt-2.5" : "px-0.5 pb-2 pt-3", hot === "pins" && "bg-[var(--wisp-soft,rgba(122,91,220,.10))]")}
       {...dropProps("pins", (key) => {
@@ -297,10 +309,12 @@ export function SideList({ chats, lines, active, phone = false }: { chats: Chat[
               style={{ width: avatar, height: avatar }}
             >
               <ChatAvatar chat={c} size={avatar} />
+              <BlueDot on={unread || !!line?.needs} />
             </span>
           ) : (
             <span className="relative grid shrink-0 place-items-center" style={{ width: avatar, height: avatar }}>
               <ChatAvatar chat={c} size={avatar} />
+              <BlueDot on={unread || !!line?.needs} />
             </span>
           )}
           <span className={cx("flex min-w-0 flex-1 flex-col", c.muted && "opacity-60")}>
@@ -331,7 +345,10 @@ export function SideList({ chats, lines, active, phone = false }: { chats: Chat[
     const isEditing = editing === s.id && !s.none;
     return (
       <section key={s.id} aria-label={s.name} className={cx("flex flex-col rounded-[12px]", isHot && s.keys.length > 0 && "bg-[var(--wisp-soft,rgba(122,91,220,.10))]")} {...dropProps(`sec:${s.id}`, (key) => byKey.get(key) && doMove(byKey.get(key)!, s.id))}>
-        {s.none && layout.sections.length === 0 ? null : isEditing ? (
+        {s.none && layout.sections.length === 0 ? (
+          // no folders: the chats under the pins are just "Chats"
+          tiles.length > 0 && !phone ? <div className="px-3 pb-1.5 pt-4 text-[12.5px] font-medium text-muted">Chats</div> : null
+        ) : isEditing ? (
           <div className={cx("flex items-center gap-1.5", phone ? "px-[10px] pb-1 pt-3.5" : "px-3 pb-1.5 pt-4")}>
             <RenameField
               value={layout.sections.find((x) => x.id === s.id)?.name ?? s.name}
@@ -378,6 +395,7 @@ export function SideList({ chats, lines, active, phone = false }: { chats: Chat[
           </button>
         </div>
       )}
+      {tiles.length > 0 && !phone && <div className="px-3 pt-1 text-[12.5px] font-medium text-muted">Pinned</div>}
       {tileGrid}
       <div data-tour="sections" className="flex flex-col gap-0.5">
         {shownSections.map(sectionBlock)}
@@ -429,6 +447,81 @@ export function SideList({ chats, lines, active, phone = false }: { chats: Chat[
       )}
       {settingsFor?.channel && createPortal(<ChannelSettings channel={settingsFor.channel} onClose={() => setSettingsFor(null)} />, document.body)}
     </div>
+  );
+}
+
+/**
+ * The narrow rail's right-click menu (round 16, board 16c): the same menu as the wide sidebar, so
+ * Pin and Unpin are there too. Rename is in the wide sidebar, where the name can be edited in place.
+ */
+export function RailChatMenu({ chats, chat, at, active, line, onClose, onNewFolder }: { chats: readonly Chat[]; chat: Chat; at: { x: number; y: number }; active: string | null; line?: PreviewLine; onClose: () => void; onNewFolder: () => void }) {
+  const guest = useStore((s) => s.me?.role) === "guest";
+  const { layout, save, notice, setNotice, doPin, doUnpin, doMove, doDelete } = useChatActions(chats, active);
+  const [confirm, setConfirm] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(true);
+  const unread = chat.unread > 0 || (layout.unread ?? []).includes(chat.key);
+  const url = chat.channel ? href({ view: "chat", channelId: chat.channel.id, threadId: null }) : undefined;
+  const open = () => (chat.channel ? go({ view: "chat", channelId: chat.channel.id, threadId: null }) : chat.agent && void openDm(chat.agent.id));
+  const done = () => !confirm && !settings && !notice && onClose();
+  // the menu closes as soon as something is picked; what it opened (a confirm, settings, a notice) stays
+  const closeMenu = () => setMenuOpen(false);
+  useEffect(() => {
+    if (!menuOpen) done();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuOpen, confirm, settings, notice]);
+  return (
+    <>
+      {menuOpen && (
+        <SideMenu
+          chat={chat}
+          at={{ key: chat.key, ...at }}
+          phone={false}
+          guest={guest}
+          pinned={layout.pins.includes(chat.key)}
+          pinsFull={layout.pins.length >= MAX_PINS}
+          unread={unread}
+          sections={layout.sections}
+          here={layout.sections.find((x) => x.items.includes(chat.key))?.id ?? NONE}
+          onClose={closeMenu}
+          onPin={() => doPin(chat)}
+          onUnpin={() => doUnpin(chat)}
+          onMove={(id) => doMove(chat, id)}
+          onNewSection={onNewFolder}
+          onMarkUnread={() => save(markUnread(layout, chat.key))}
+          onMarkRead={() => {
+            save(clearUnread(layout, chat.key));
+            if (chat.channel?.unread) useStore.getState().markRead(chat.channel.id);
+          }}
+          onNewWindow={() => url && window.open(url, "_blank", "noopener")}
+          onHide={() => save(hide(layout, chat.key))}
+          onSearch={() => {
+            if (!chat.channel) return;
+            requestChatSearch(chat.channel.id);
+            open();
+          }}
+          onMute={() => chat.channel && void setChannelPrefs(chat.channel, { notify: chat.channel.notify === "mute" ? "default" : "mute" })}
+          onTeamSettings={() => setSettings(true)}
+          onLeave={() => chat.channel && void leaveChannel(chat.channel)}
+          onDelete={() => setConfirm(true)}
+          onTemplate={() => chat.channel && void api("POST", "/api/team-templates", { channelId: chat.channel.id, name: chat.name }).then(() => setNotice(`Saved ${chat.name} as a template. Find it under New team.`), (e) => setNotice((e as Error).message))}
+          line={line}
+        />
+      )}
+      {notice &&
+        createPortal(
+          <div role="status" className="m-pop fixed bottom-4 left-[110px] z-[95] flex w-[300px] items-center gap-2.5 rounded-[12px] bg-panel px-3 py-2.5 text-[13px] text-ink shadow-[0_12px_36px_rgba(0,0,0,.16),0_0_0_1px_rgba(0,0,0,.06)]">
+            <Pin size={15} strokeWidth={2} className="shrink-0 text-muted" aria-hidden />
+            <span className="flex-1">{notice}</span>
+            <button type="button" onClick={() => setNotice(null)} className="rounded px-1 py-0.5 font-semibold hover:bg-hover">
+              OK
+            </button>
+          </div>,
+          document.body,
+        )}
+      {confirm && <DeleteConfirm chat={chat} onClose={() => setConfirm(false)} onDelete={() => doDelete(chat)} />}
+      {settings && chat.channel && createPortal(<ChannelSettings channel={chat.channel} onClose={() => setSettings(false)} />, document.body)}
+    </>
   );
 }
 
@@ -547,7 +640,8 @@ function SideMenu(p: {
   onMarkUnread: () => void;
   onMarkRead: () => void;
   onNewWindow: () => void;
-  onRename: () => void;
+  /** absent where the name can't be edited in place (the narrow rail) */
+  onRename?: () => void;
   onHide: () => void;
   onMute: () => void;
   onSearch: () => void;
@@ -615,8 +709,8 @@ function SideMenu(p: {
           </Item>
           {open === "more" && (
             <div className="flex flex-col pb-[3px] pl-[28px]">
-              {!p.guest && (
-                <Item sub icon={<PenLine size={15} />} onClick={() => (close(), p.onRename())}>
+              {!p.guest && p.onRename && (
+                <Item sub icon={<PenLine size={15} />} onClick={() => (close(), p.onRename?.())}>
                   Rename
                 </Item>
               )}

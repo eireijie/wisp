@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bell, BookOpen, ChevronLeft, ChevronRight, Ellipsis, Hand, Library, Loader2, Maximize2, MessageCircle, Monitor, Pencil, Plug, Settings2, Clock, Video, X } from "lucide-react";
-import { harnessLabel, type Agent, type Connector, type Routine, type Skill } from "@bubble-ai/core";
+import { Bell, BookOpen, ChevronLeft, ChevronRight, Ellipsis, Hand, LayoutGrid, Library, Loader2, Maximize2, MessageCircle, Monitor, Pencil, Plug, Settings2, Clock, Video, X } from "lucide-react";
+import { harnessInfo, harnessLabel, type Agent, type Connector, type Routine, type Skill } from "@bubble-ai/core";
 import { defaultAppearance, type GhostAppearance } from "@bubble-ai/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
@@ -23,6 +23,8 @@ import { LookEditor, withParts } from "./LookEditor.tsx";
 import { VoiceChat } from "./AgentProfile.tsx";
 import { BOARD_COLORS, looksFromWords } from "./lookWords.ts";
 import { mergeLook, uploadFace } from "../components/lookPhoto.tsx";
+import { agentRunsOn, runsOnChoices, runsOnMove, useDevices } from "../devices.ts";
+import { RunsOnList } from "./NewAgentSheet.tsx";
 import "../round11-agent.css";
 
 const to = (agent: Agent, t: AgentTab) => href({ view: "agents", agentId: agent.id, tab: t });
@@ -81,9 +83,9 @@ export function computerWord(c: ComputerInfo | undefined, working: boolean): str
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /**
- * The profile (round 11, board 12): one short list. Its bubble, name and what it does; Edit and
- * Message; Library and Computer; "Set up" (Apps and skills, Routines, Memory); Notifications; and
- * Full profile for everything else.
+ * The profile (round 11, board 12; round 16, board 16c): one short list. Its bubble, name and what
+ * it does; Edit and Message; Library and Computer; "Set up" (Runs on, Apps and skills, Routines,
+ * Memory); Notifications; and one All settings row for everything else.
  */
 export function ShortProfile({ agent }: { agent: Agent }) {
   const features = useFeatures();
@@ -126,7 +128,6 @@ export function ShortProfile({ agent }: { agent: Agent }) {
   const routinesOn = routines?.filter((r) => r.enabled).length ?? 0;
   const notify = dm ? dm.notify !== "mute" : true;
   const menu = [
-    { label: "Full profile", icon: <Settings2 size={15} />, onSelect: () => go({ view: "agents", agentId: agent.id, tab: "more" }) },
     { label: "Who can message", icon: <MessageCircle size={15} />, onSelect: () => go({ view: "agents", agentId: agent.id, tab: "access" }) },
     ...(canEdit ? ["divider" as const, { label: `Remove ${agent.name}`, danger: true, onSelect: () => go({ view: "agents", agentId: agent.id, tab: "remove" }) }] : []),
   ];
@@ -165,6 +166,7 @@ export function ShortProfile({ agent }: { agent: Agent }) {
       </div>
       <div className="r11-sec">Set up</div>
       <div className="r11-grp">
+        <RunsOnRow agent={agent} canEdit={canEdit} />
         <Row icon={<Plug size={18} strokeWidth={1.8} />} label="Apps and skills" value={usable ? String(usable) : undefined} href={to(agent, "apps")} />
         {features.routines && <Row icon={<Clock size={18} strokeWidth={1.8} />} label="Routines" value={routinesOn ? `${routinesOn} on` : undefined} href={to(agent, "routines")} />}
         <Row icon={<BookOpen size={18} strokeWidth={1.8} />} label="Memory" value={notes ? plural(notes, "note") : undefined} href={to(agent, "notes")} />
@@ -175,10 +177,56 @@ export function ShortProfile({ agent }: { agent: Agent }) {
         </Row>
       </div>
       <p className="r11-note">Tells you when {agent.name} finishes or needs you.</p>
-      <div className="r11-grp mt-2">
-        <Row label="Full profile" href={to(agent, "more")} />
+      <div className="r11-grp mt-3.5">
+        <Row icon={<LayoutGrid size={18} strokeWidth={1.8} />} label="All settings" href={to(agent, "more")} />
       </div>
+      <p className="r11-note">Model, instructions, permissions, who can message it, voice, background checks. Everything in one list.</p>
     </div>
+  );
+}
+
+/**
+ * Runs on (round 16, board 16c): where the agent runs, and the list to move it (the shared
+ * computer or any device this person can use). Agents that connect from outside (MCP) have none.
+ */
+function RunsOnRow({ agent, canEdit }: { agent: Agent; canEdit: boolean }) {
+  const devices = useDevices();
+  const computers = useStore((s) => s.computers);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const choices = useMemo(() => runsOnChoices(devices ?? [], computers), [devices, computers]);
+  if (harnessInfo(agent.harness)?.protocol === "mcp") return null;
+  const now = agentRunsOn(agent, computers);
+  const label = (now && choices.find((c) => c.key === now)?.label) ?? devices?.find((d) => d.id === agent.nodeId)?.name ?? (agent.nodeId ? "A device" : "No device yet");
+  const move = async (key: string) => {
+    setOpen(false);
+    const pick = choices.find((c) => c.key === key);
+    if (!pick || key === now) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api("PATCH", `/api/agents/${agent.id}`, runsOnMove(agent, pick.to, computers));
+      await Promise.all([useStore.getState().refreshAgents(), useStore.getState().refreshComputers()]);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const can = canEdit && choices.length > 0;
+  return (
+    <>
+      <Row icon={<Monitor size={18} strokeWidth={1.8} />} label="Runs on" onClick={can ? () => setOpen((o) => !o) : undefined}>
+        {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <span className="truncate">{label}</span>}
+      </Row>
+      {open && (
+        <div className="border-b border-line px-1.5 pb-1.5">
+          <RunsOnList choices={choices} value={now} onPick={(k) => void move(k)} className="bg-transparent! shadow-none! p-0!" />
+        </div>
+      )}
+      {error && <p role="alert" className="border-b border-line px-3.5 py-2 text-[13px] text-bad">{error}</p>}
+    </>
   );
 }
 

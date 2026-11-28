@@ -53,7 +53,7 @@ describe("docked sidebar", () => {
     vi.unstubAllGlobals();
   });
 
-  // nothing pinned (someone who never pinned gets three agents pinned: sidebarLayout.test.ts)
+  // nothing pinned (round 16: the hub pins someone's first agent; sidebarLayout.test.ts, first-agent-pin.test.ts)
   const pins: { sidebar?: { pins: string[]; sections: [] } } = { sidebar: { pins: [], sections: [] } };
   function render(stored: unknown) {
     const data = new Map<string, string>(stored ? [["wisp.sidebar2", JSON.stringify(stored)]] : []);
@@ -111,16 +111,37 @@ describe("docked sidebar", () => {
     expect(quiet).not.toContain("side-tile-dot");
     expect(quiet).not.toContain("background:#0a84ff");
     initial.approvals = { ok: { id: "ok", status: "pending", channelId: "c1", agentId: "a1", summary: "Send it?" } as (typeof initial.approvals)[string] };
+    // not pinned: Iris is a chat row, with one dot on her bubble
+    const row = render({ width: 360, collapsed: false });
+    expect(row).toContain('aria-label="Iris, needs you"');
+    expect(row).not.toContain("side-tile-dot");
+    expect(row.match(/side-row-dot/g)?.length).toBe(1);
+    // pinned: a tile, with exactly one dot, inside Iris's own tile
+    pins.sidebar = { pins: ["a:a1"], sections: [] };
     const html = render({ width: 360, collapsed: false });
-    expect(html).toContain('aria-label="Iris, needs you"');
-    // exactly one dot, inside Iris's own tile
+    pins.sidebar = { pins: [], sections: [] };
+    expect(html).toContain('aria-label="Iris, pinned, needs you"');
     expect(html.match(/side-tile-dot/g)?.length).toBe(1);
-    const tile = html.slice(html.indexOf('aria-label="Iris, needs you"'));
+    const tile = html.slice(html.indexOf('aria-label="Iris, pinned, needs you"'));
     expect(tile.indexOf("side-tile-dot")).toBeGreaterThan(-1);
     expect(tile.indexOf("background:#0a84ff")).toBeGreaterThan(-1);
     // the narrow rail marks it too
     expect(render({ width: 360, collapsed: true })).toContain("background:#0a84ff");
     initial.approvals = {};
+  });
+
+  it("shows only pins as tiles (round 16): an unpinned agent is a chat row, a pinned one a tile under Pinned", () => {
+    initial.channels = [{ id: "c1", kind: "dm", name: "dm:person:a1", unread: 0, notify: "default", starred: false, sectionId: null } as unknown as (typeof initial.channels)[number]];
+    const loose = render({ width: 360, collapsed: false });
+    expect(loose).not.toContain("side-tile ");
+    expect(loose).not.toContain(">Pinned<");
+    expect(loose).toContain('data-tour="chat-row"');
+    pins.sidebar = { pins: ["a:a1"], sections: [] };
+    const pinned = render({ width: 360, collapsed: false });
+    pins.sidebar = { pins: [], sections: [] };
+    expect(pinned).toContain(">Pinned<");
+    expect(pinned).toContain('aria-label="Iris, pinned"');
+    expect(pinned).not.toContain('data-tour="chat-row"');
   });
 
   it("collapsed is a rail of tiles (SIDEBAR.rail wide), and every place is still reachable", () => {

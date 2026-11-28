@@ -15,9 +15,9 @@ describe("sidebar layout", () => {
     expect(baseLayout(empty, chats, [])).toBe(empty);
   });
 
-  it("pins the first three agents by last activity for someone who never pinned; their own choice wins after", () => {
-    const chats = [chat("a:old", { kind: "dm", at: 1 }), chat("c:team", { kind: "team", at: 9 }), chat("a:new", { kind: "dm", at: 8 }), chat("a:mid", { kind: "dm", at: 5 }), chat("a:mid2", { kind: "dm", at: 4 })];
-    expect(baseLayout(undefined, chats, []).pins).toEqual(["a:new", "a:mid", "a:mid2"]);
+  it("pins nothing for someone who never pinned (round 16: the hub pins their first agent); their own choice wins after", () => {
+    const chats = [chat("a:old", { kind: "dm", at: 1 }), chat("c:team", { kind: "team", at: 9 }), chat("a:new", { kind: "dm", at: 8 })];
+    expect(baseLayout(undefined, chats, []).pins).toEqual([]);
     // unpinning everything is a choice too
     expect(baseLayout(empty, chats, []).pins).toEqual([]);
     // chats starred before still count as pins
@@ -35,16 +35,22 @@ describe("sidebar layout", () => {
     ]);
   });
 
-  it("round 11 home: every chat is a tile (pins first); only chats with messages sit in folders, pinned ones too", () => {
+  it("round 16 home: the tile row is only pins; every other chat sits in its folder, messages or not", () => {
     const chats = [chat("a", { at: 5 }), chat("b", { at: 0 }), chat("c", { at: 3 }), chat("d", { at: 2, unread: 1 }), chat("e", { at: 1 })];
     const l: SidebarLayout = { pins: ["c"], sections: [{ id: "s", name: "Work", items: ["c", "e"] }], hidden: ["e", "d"] };
     const h = placeHome(l, chats);
-    // e is hidden; d is hidden but has something new, so it's back
-    expect(h.tiles).toEqual(["c", "a", "b", "d"]);
+    expect(h.tiles).toEqual(["c"]);
+    // e is hidden; d is hidden but has something new, so it's back; b has no messages yet and still shows
     expect(h.folders.map((f) => [f.id, f.name, f.keys])).toEqual([
-      ["s", "Work", ["c"]],
-      [NONE, "Unsorted", ["a", "d"]],
+      ["s", "Work", []],
+      [NONE, "Unsorted", ["a", "b", "d"]],
     ]);
+    // unpinned, it's back in its folder and off the tile row
+    const u = placeHome(unpin(l, "c"), chats);
+    expect(u.tiles).toEqual([]);
+    expect(u.folders[0].keys).toEqual(["c"]);
+    // nothing pinned: no tiles at all
+    expect(placeHome({ pins: [], sections: [] }, chats).tiles).toEqual([]);
   });
 
   it(`keeps at most ${MAX_PINS} pins; the next one is refused with a plain notice`, () => {

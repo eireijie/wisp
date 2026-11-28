@@ -461,6 +461,8 @@ export const useStore = create<State>((set, get) => ({
       get().refreshLead();
     } else if (e.type === "agents_changed") {
       get().refreshAgents();
+    } else if (e.type === "prefs_changed") {
+      api<Me>("GET", "/api/me").then((me) => set((s) => ({ me: keep(s.me, me) })), () => {});
     } else if (e.type === "sections_changed") {
       get().refreshSections();
     } else if (e.type === "lead_changed") {

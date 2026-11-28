@@ -87,7 +87,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
   // Edit, Bubble and the computer bring their own top bars
   const ownBar = !part || part === "settings" || part === "look" || part === "screen";
   const back = to((part && PART_PARENT[part]) || "overview");
-  const partTitle = part === "notes" ? "Memory" : part === "library" ? "Library" : part === "more" ? "Full profile" : part ? TAB_TITLES[part] : "";
+  const partTitle = part === "notes" ? "Memory" : part === "library" ? "Library" : part === "more" ? "All settings" : part ? TAB_TITLES[part] : "";
   const close = (
     <button type="button" onClick={closePopup} className="gl r11-circle size-9!" aria-label="Close profile" title="Close (Esc)">
       <X size={16} strokeWidth={2} />

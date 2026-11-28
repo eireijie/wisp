@@ -224,3 +224,72 @@ export function machinesOn(devices: Pick<DeviceInfo, "online" | "paused">[] | nu
   const vms = computers.filter((c) => c.kind !== "device" && c.online && !c.paused && (c.status === "ready" || c.status === "starting")).length;
   return own + vms;
 }
+
+/**
+ * Where an agent runs (round 16, board 16c "Runs on"): the organization's shared computer, or one of
+ * the devices this person can use. One list for New agent and the agent's profile.
+ */
+export type RunsOn = { kind: "shared"; computerId: string; nodeId: string | null } | { kind: "device"; nodeId: string };
+
+export interface RunsOnChoice {
+  key: string;
+  label: string;
+  /** "Always on · on Sam's Mac", "Windows · online", "Offline" */
+  sub: string;
+  online: boolean;
+  to: RunsOn;
+}
+
+const SHORT_OS: Record<string, string> = { darwin: "Mac", win32: "Windows", linux: "Linux" };
+
+export const runsOnKey = (r: RunsOn) => (r.kind === "shared" ? "shared" : `d:${r.nodeId}`);
+
+/** The choices, shared computer first, then the usable devices (online ones first, in the hub's order). */
+export function runsOnChoices(devices: DeviceInfo[], computers: Pick<ComputerInfo, "id" | "nodeId" | "config">[]): RunsOnChoice[] {
+  const shared = computers.find(isSharedComputer);
+  const usable = usableDevices(devices);
+  const out: RunsOnChoice[] = [];
+  if (shared) {
+    const host = devices.find((d) => d.id === shared.nodeId);
+    out.push({ key: "shared", label: "Shared computer", sub: host ? `Always on · on ${host.name}` : "Always on", online: !host || host.online, to: { kind: "shared", computerId: shared.id, nodeId: shared.nodeId ?? null } });
+  }
+  for (const d of [...usable.filter((x) => x.online), ...usable.filter((x) => !x.online)]) {
+    const os = SHORT_OS[d.capabilities?.platform ?? ""];
+    const state = !d.online ? "Offline" : d.paused ? "Paused" : "Online";
+    const whose = !d.mine && d.ownerName ? `${d.ownerName}'s` : null;
+    const sub = [whose, os, os || whose ? state.toLowerCase() : state].filter(Boolean).join(" · ");
+    out.push({ key: `d:${d.id}`, label: d.name, sub: sub.charAt(0).toUpperCase() + sub.slice(1), online: d.online && !d.paused, to: { kind: "device", nodeId: d.id } });
+  }
+  return out;
+}
+
+/** Where an agent runs now, as a choice key: "shared" on the shared computer, else its device; null with neither. */
+export function agentRunsOn(agent: Pick<Agent, "nodeId" | "computerId">, computers: Pick<ComputerInfo, "id" | "config">[]): string | null {
+  const comp = agent.computerId ? computers.find((c) => c.id === agent.computerId) : undefined;
+  if (comp && isSharedComputer(comp)) return "shared";
+  return agent.nodeId ? `d:${agent.nodeId}` : null;
+}
+
+/** What New agent sends for a choice: the device, and the shared computer when that's the pick. */
+export function runsOnCreate(r: RunsOn): { nodeId: string | null; computerId?: string } {
+  return r.kind === "shared" ? { nodeId: r.nodeId, computerId: r.computerId } : { nodeId: r.nodeId };
+}
+
+/**
+ * What moving an agent sends (PATCH /api/agents/:id). Onto the shared computer: its device and that
+ * computer. Onto a device: that device; a computer it had elsewhere (the shared one, or a VM or
+ * screen on the old device) stays behind and it runs on the device itself.
+ */
+export function runsOnMove(agent: Pick<Agent, "nodeId" | "computerId">, r: RunsOn, computers: Pick<ComputerInfo, "id" | "nodeId" | "config">[]): { nodeId: string | null; computerId?: string | null; settings?: { runIn: "device" } } {
+  if (r.kind === "shared") return { nodeId: r.nodeId, computerId: r.computerId };
+  const comp = agent.computerId ? computers.find((c) => c.id === agent.computerId) : undefined;
+  if (comp && (isSharedComputer(comp) || comp.nodeId !== r.nodeId)) return { nodeId: r.nodeId, computerId: null, settings: { runIn: "device" } };
+  return { nodeId: r.nodeId };
+}
+
+/** The pick New agent starts on: what the defaults would do (the shared computer for an owner when that's the default, else the default device), else the first device that's on. */
+export function defaultRunsOn(choices: RunsOnChoice[], defaults: { computer: string; nodeId: string | null } | null, owner: boolean): RunsOnChoice | null {
+  const shared = choices.find((c) => c.key === "shared");
+  if (shared && owner && defaults?.computer === "shared") return shared;
+  return (defaults?.nodeId && choices.find((c) => c.key === `d:${defaults.nodeId}`)) || choices.find((c) => c.key !== "shared" && c.online) || choices.find((c) => c.key !== "shared") || shared || null;
+}

@@ -18,8 +18,8 @@ import { openDm } from "../openDm.ts";
 import { ComputersIcon } from "./icons.tsx";
 import { NewOrgDialog, OrgList, useOrgs } from "./OrgSwitcher.tsx";
 import { Menu, cx } from "./ui.tsx";
-import { ChatAvatar, ChatMenu, chatPreviewLine, startNewAgent, type Chat, type PreviewLine } from "./ChatList.tsx";
-import { BLUE_DOT, SideList, newSideSection, useSideLayout } from "./SideList.tsx";
+import { ChatAvatar, chatPreviewLine, startNewAgent, type Chat, type PreviewLine } from "./ChatList.tsx";
+import { BLUE_DOT, RailChatMenu, SideList, newSideSection, useSideLayout } from "./SideList.tsx";
 import { placeChats } from "../sidebarLayout.ts";
 import { SIDEBAR, SIDEBAR_CLOSE_MS, SIDEBAR_EASE, SIDEBAR_OPEN_MS, SIDEBAR_TOGGLE, dragWidth, loadSidebar, saveSidebar, settle, stepWidth, type SidebarState } from "../sidebarWidth.ts";
 
@@ -222,7 +222,7 @@ const NO_LINE: PreviewLine = { text: "", working: false };
 const sameLine = (a: PreviewLine | undefined, b: PreviewLine): a is PreviewLine => !!a && a.text === b.text && a.working === b.working && !a.needs === !b.needs && !a.icon && !b.icon;
 
 /** A chat in the sidebar. It renders again only when its own chat or its line changes, not on every step of dragging the sidebar's edge. */
-const SideRow = memo(function SideRow({ chat, wide, active, line, sections, onNewSection }: { chat: Chat; wide: boolean; active: boolean; line: PreviewLine; sections: Section[]; onNewSection: () => void }) {
+const SideRow = memo(function SideRow({ chat, chats, wide, active, activeId, line, onNewSection }: { chat: Chat; chats: readonly Chat[]; wide: boolean; active: boolean; activeId: string | null; line: PreviewLine; onNewSection: () => void }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const unread = chat.unread > 0;
   const label = `${chat.name}${unread ? `, ${chat.unread} unread` : ""}${line.working ? ", working" : ""}${line.needs ? ", needs you" : ""}`;
@@ -254,13 +254,14 @@ const SideRow = memo(function SideRow({ chat, wide, active, line, sections, onNe
   );
   const url = chat.channel ? href({ view: "chat", channelId: chat.channel.id, threadId: null }) : undefined;
   return (
-    <div onContextMenu={(e) => (e.preventDefault(), onNewSection())}>
+    // right-click: the same menu as the wide sidebar, Pin and Unpin included (round 16)
+    <div onContextMenu={(e) => (e.preventDefault(), setMenu({ x: e.clientX, y: e.clientY }))}>
       {url ? (
         <a href={url} aria-label={label} title={wide ? undefined : label} aria-current={active ? "page" : undefined} data-bub-host="" className={cls}>{inner}</a>
       ) : (
         <button type="button" onClick={() => chat.agent && void openDm(chat.agent.id)} aria-label={label} title={wide ? undefined : label} data-bub-host="" className={cls}>{inner}</button>
       )}
-      {menu && chat.channel && <ChatMenu chat={chat} channel={chat.channel} at={menu} onClose={() => setMenu(null)} sections={sections} onNewSection={onNewSection} />}
+      {menu && <RailChatMenu chats={chats} chat={chat} at={menu} active={activeId} line={line} onClose={() => setMenu(null)} onNewFolder={onNewSection} />}
     </div>
   );
 });
@@ -361,7 +362,6 @@ function useMedia(query: string, fallback: boolean): boolean {
 export function Rail({ route, popup = null }: { route: Route; /** the pop-up open over the page, if any: its place shows as open */ popup?: Route | null }) {
   const me = useStore((s) => s.me)!;
   const computers = useStore((s) => s.computers);
-  const sections = useStore((s) => s.sections);
   const agents = useStore((s) => s.agents);
   const people = useStore((s) => s.members);
   const approvals = useStore((s) => s.approvals);
@@ -487,13 +487,14 @@ export function Rail({ route, popup = null }: { route: Route; /** the pop-up ope
 
   const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
   const active = route.view === "chat" ? route.channelId : null;
-  // the rail: pins first, then everyone else (no headers)
+  // the rail: pins first, a hairline, then everyone else (no headers)
   const [layout] = useSideLayout(chats);
-  const railChats = useMemo(() => {
+  const { railChats, railPins } = useMemo(() => {
     const placed = placeChats(layout, chats);
-    const order = [...placed.pins, ...placed.sections.flatMap((s) => s.keys)];
     const byKey = new Map(chats.map((c) => [c.key, c]));
-    return order.map((k) => byKey.get(k)!).filter(Boolean);
+    const pick = (keys: string[]) => keys.map((k) => byKey.get(k)!).filter(Boolean);
+    const pins = pick(placed.pins);
+    return { railPins: pins.length, railChats: [...pins, ...pick(placed.sections.flatMap((s) => s.keys))] };
   }, [layout, chats]);
   const setWide = () => (roomy ? setSide((s) => ({ ...s, collapsed: false })) : setPeek(true));
   // the line under each name: the same words as the phone's list. A line that reads the same keeps
@@ -667,8 +668,11 @@ export function Rail({ route, popup = null }: { route: Route; /** the pop-up ope
             <div className="r11-railtop shrink-0" />
             {plus(40)}
             <div className="side-list mt-4 flex min-h-0 w-full flex-1 flex-col items-center gap-2 overflow-y-auto overflow-x-hidden py-1">
-              {railChats.map((c) => (
-                <SideRow key={c.key} chat={c} wide={false} active={!!c.channel && c.channel.id === active} line={lines.get(c.key) ?? NO_LINE} sections={sections} onNewSection={() => setWide()} />
+              {railChats.map((c, i) => (
+                <div key={c.key} className="contents">
+                  {i === railPins && i > 0 && <div aria-hidden className="my-1 h-px w-8 shrink-0 bg-line" />}
+                  <SideRow chat={c} chats={chats} wide={false} active={!!c.channel && c.channel.id === active} activeId={active} line={lines.get(c.key) ?? NO_LINE} onNewSection={startFolder} />
+                </div>
               ))}
             </div>
             <div ref={footRef} className="shrink-0 pt-3">
