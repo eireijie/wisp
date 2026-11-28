@@ -1,4 +1,4 @@
-import { BUILTIN_SKILLS, BUILTIN_SKILL_SLUGS, catalogConnector, connectorSlug, fillTemplate, isMasked, maskSecret, type Connector, type ConnectorKind, type ConnectorSpec, type Skill, type SkillSource } from "@bubble-ai/core";
+import { BUILTIN_SKILLS, BUILTIN_SKILL_SLUGS, catalogConnector, connectorDoes, connectorSlug, fillTemplate, isMasked, maskSecret, type Connector, type ConnectorKind, type ConnectorSpec, type LinkedApps, type Skill, type SkillSource } from "@bubble-ai/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 import { ConnectorAuth } from "./connector-auth.ts";
@@ -21,6 +21,8 @@ type ConnectorRow = {
   env_json: string;
   enabled: number;
   all_agents: number;
+  all_agents_at: string | null;
+  node_id: string | null;
   created_by: string | null;
   created_at: string;
 };
@@ -36,7 +38,12 @@ export interface ConnectorInput {
   env?: Record<string, string>;
   enabled?: boolean;
   allAgents?: boolean;
+  /** a command that lives on this device (see Connector.nodeId) */
+  nodeId?: string | null;
 }
+
+/** How long a new app counts as just connected, for the one-time "You can now use …" line. */
+export const RECENT_CONNECT_MS = 7 * 86_400_000;
 
 /** A header value is a secret unless it only fills in `{{KEY}}`s (then the secret lives in env). */
 const literalHeader = (v: string) => !/\{\{\s*[A-Za-z_]\w*\s*\}\}/.test(v);
@@ -53,6 +60,14 @@ const plainFields = (catalogId: string | null) => new Set((catalogConnector(cata
 export class ConnectorStore {
   /** sign-ins to remote MCP servers */
   readonly auth: ConnectorAuth;
+  /** what an app hub (Composio) last said about the apps inside it, by connector */
+  readonly linked = new Map<string, LinkedApps>();
+  /**
+   * Whether this agent's harness runs on that device itself (so a command living there starts
+   * for it directly). The hub sets this; without it, an agent placed on the device counts.
+   */
+  runsOn: (agentId: string, nodeId: string) => boolean = (agentId, nodeId) =>
+    (this.db.prepare("SELECT node_id FROM agents WHERE id = ?").get(agentId) as { node_id: string | null } | undefined)?.node_id === nodeId;
 
   constructor(readonly db: Db) {
     this.auth = new ConnectorAuth(db);
@@ -117,6 +132,8 @@ export class ConnectorStore {
       allAgents: !!r.all_agents,
       createdBy: r.created_by,
       createdAt: r.created_at,
+      nodeId: r.node_id ?? null,
+      ...(catalogConnector(r.catalog_id ?? "")?.appsPage ? { linkedApps: this.linked.get(r.id) ?? null } : {}),
     };
   }
 
@@ -137,7 +154,7 @@ export class ConnectorStore {
     const cid = id("conn");
     this.db
       .prepare(
-        "INSERT INTO connectors (id, workspace_id, name, kind, catalog_id, command, args_json, url, headers_json, env_json, enabled, all_agents, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO connectors (id, workspace_id, name, kind, catalog_id, command, args_json, url, headers_json, env_json, enabled, all_agents, all_agents_at, node_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         cid,
@@ -152,6 +169,8 @@ export class ConnectorStore {
         JSON.stringify(dropBlank(c.env ?? {})),
         c.enabled === false ? 0 : 1,
         c.allAgents ? 1 : 0,
+        c.allAgents ? now() : null,
+        c.kind === "mcp-stdio" ? (c.nodeId ?? null) : null,
         by,
         now(),
       );
@@ -185,7 +204,7 @@ export class ConnectorStore {
       this.auth.forget(connectorId);
     }
     this.db
-      .prepare("UPDATE connectors SET name = ?, command = ?, args_json = ?, url = ?, headers_json = ?, env_json = ?, enabled = ?, all_agents = ? WHERE id = ?")
+      .prepare("UPDATE connectors SET name = ?, command = ?, args_json = ?, url = ?, headers_json = ?, env_json = ?, enabled = ?, all_agents = ?, all_agents_at = ?, node_id = ? WHERE id = ?")
       .run(
         patch.name ?? r.name,
         r.kind === "mcp-stdio" ? (patch.command ?? r.command) : null,
@@ -195,8 +214,12 @@ export class ConnectorStore {
         JSON.stringify(env),
         patch.enabled === undefined ? r.enabled : patch.enabled ? 1 : 0,
         patch.allAgents === undefined ? r.all_agents : patch.allAgents ? 1 : 0,
+        // turning "every agent" on is when they all got it
+        patch.allAgents && !r.all_agents ? now() : r.all_agents_at,
+        r.kind === "mcp-stdio" && patch.nodeId !== undefined ? patch.nodeId : r.node_id,
         connectorId,
       );
+    if (r.kind === "mcp-stdio" && patch.nodeId !== undefined && patch.nodeId !== r.node_id) this.db.prepare("DELETE FROM device_tools WHERE connector_id = ?").run(connectorId);
     return this.get(connectorId);
   }
 
@@ -214,18 +237,22 @@ export class ConnectorStore {
     for (const r of given) if (this.rowHoldsSecrets(r) && r.created_by !== by && r.created_by !== newOwner) this.attach(r.id, agentId, false);
   }
 
-  /** Give exactly these agents the connector. */
+  /** Give exactly these agents the connector. Ones that already had it keep when they got it. */
   setAgents(connectorId: string, agentIds: string[]) {
     this.db.transaction(() => {
-      this.db.prepare("DELETE FROM agent_connectors WHERE connector_id = ?").run(connectorId);
-      const ins = this.db.prepare("INSERT OR IGNORE INTO agent_connectors (agent_id, connector_id) VALUES (?, ?)");
-      for (const a of agentIds) ins.run(a, connectorId);
+      const want = new Set(agentIds);
+      for (const a of this.agentIds(connectorId)) if (!want.has(a)) this.attach(connectorId, a, false);
+      for (const a of want) this.attach(connectorId, a, true);
     })();
   }
 
   attach(connectorId: string, agentId: string, on: boolean) {
-    if (on) this.db.prepare("INSERT OR IGNORE INTO agent_connectors (agent_id, connector_id) VALUES (?, ?)").run(agentId, connectorId);
-    else this.db.prepare("DELETE FROM agent_connectors WHERE agent_id = ? AND connector_id = ?").run(agentId, connectorId);
+    if (on) this.db.prepare("INSERT OR IGNORE INTO agent_connectors (agent_id, connector_id, connected_at) VALUES (?, ?, ?)").run(agentId, connectorId, now());
+    else {
+      this.db.prepare("DELETE FROM agent_connectors WHERE agent_id = ? AND connector_id = ?").run(agentId, connectorId);
+      // given again later, it's news again
+      this.db.prepare("DELETE FROM connector_told WHERE agent_id = ? AND connector_id = ?").run(agentId, connectorId);
+    }
   }
 
   /**
@@ -274,15 +301,56 @@ export class ConnectorStore {
       .map((r) => this.view(r));
   }
 
-  /** The agent's enabled connectors, resolved for its device: `{{KEY}}`s filled, secrets in the clear. */
+  /**
+   * The agent's enabled connectors that run where it does, resolved for its device: `{{KEY}}`s
+   * filled, secrets in the clear. A command living on another device isn't among them (see deviceRows).
+   */
   specsFor(agentId: string): ConnectorSpec[] {
-    const rows = this.forAgentRows(agentId).filter((r) => r.enabled);
+    const slugs = this.slugs(agentId);
+    return this.localRows(agentId).map((r) => this.specOf(r, slugs.get(r.id)!));
+  }
+
+  private localRows(agentId: string): ConnectorRow[] {
+    return this.forAgentRows(agentId).filter((r) => r.enabled && (r.kind !== "mcp-stdio" || !r.node_id || this.runsOn(agentId, r.node_id)));
+  }
+
+  /** The agent's MCP name for each of its connectors ("github", "notes-2"), the same in every list. */
+  private slugs(agentId: string): Map<string, string> {
     const used = new Set<string>();
-    return rows.map((r) => {
-      const env = JSON.parse(r.env_json) as Record<string, string>;
+    const out = new Map<string, string>();
+    for (const r of this.forAgentRows(agentId).filter((x) => x.enabled)) {
       let name = connectorSlug(r.name);
       for (let i = 2; used.has(name); i++) name = `${connectorSlug(r.name)}-${i}`;
       used.add(name);
+      out.set(r.id, name);
+    }
+    return out;
+  }
+
+  /** One connector resolved for the device it runs on. */
+  specFor(connectorId: string): ConnectorSpec | null {
+    const r = this.row(connectorId);
+    return r ? this.specOf(r, connectorSlug(r.name)) : null;
+  }
+
+  /**
+   * The agent's enabled commands that live on another device: it reaches their tools through the
+   * hub (DeviceApps), with its own name for each.
+   */
+  deviceRows(agentId: string): { id: string; name: string; title: string; nodeId: string; catalogId: string | null; createdBy: string | null }[] {
+    const slugs = this.slugs(agentId);
+    return this.forAgentRows(agentId)
+      .filter((r) => r.enabled && r.kind === "mcp-stdio" && r.node_id && !this.runsOn(agentId, r.node_id))
+      .map((r) => ({ id: r.id, name: slugs.get(r.id)!, title: r.name, nodeId: r.node_id!, catalogId: r.catalog_id, createdBy: r.created_by }));
+  }
+
+  /** Connectors that live on this device (enabled commands), for it to list and run. */
+  onDevice(nodeId: string): string[] {
+    return (this.db.prepare("SELECT id FROM connectors WHERE node_id = ? AND kind = 'mcp-stdio' AND enabled = 1 ORDER BY created_at, rowid").all(nodeId) as { id: string }[]).map((r) => r.id);
+  }
+
+  private specOf(r: ConnectorRow, name: string): ConnectorSpec {
+    const env = JSON.parse(r.env_json) as Record<string, string>;
       if (r.kind === "mcp-stdio") return { name, kind: r.kind, command: fillTemplate(r.command ?? "", env), args: (JSON.parse(r.args_json) as string[]).map((a) => fillTemplate(a, env)), env };
       if (r.kind === "mcp-http") {
         const headers = Object.fromEntries(
@@ -296,17 +364,80 @@ export class ConnectorStore {
         if (token && !Object.keys(headers).some((k) => k.toLowerCase() === "authorization")) headers.Authorization = `Bearer ${token}`;
         return { name, kind: r.kind, url: fillTemplate(r.url ?? "", env), headers };
       }
-      return { name, kind: r.kind, env };
-    });
+    return { name, kind: r.kind, env };
   }
 
-  /** One line per connector the agent has, for its prompt. */
-  promptSection(agentId: string): string {
-    const specs = this.specsFor(agentId);
-    if (!specs.length) return "";
-    const lines = specs.map((s) => (s.kind === "secret" ? `- ${s.name}: set in your environment as ${Object.keys(s.env ?? {}).join(", ")}` : `- ${s.name}: MCP tools (named mcp__${s.name}__… or ${s.name}.…, depending on your harness)`));
+  /**
+   * The agent's apps, one line each saying what it does and how to reach it, for its prompt (and
+   * the connected_apps tool). `devices` are its apps living on other devices (DeviceApps.forAgent).
+   */
+  appLines(agentId: string, devices: DeviceAppLine[] = []): string[] {
+    const slugs = this.slugs(agentId);
+    const local = this.localRows(agentId).map((r) => {
+      const name = slugs.get(r.id)!;
+      const does = connectorDoes(r.catalog_id);
+      const label = oneLine(r.name) === name ? name : `${oneLine(r.name)} (${name})`;
+      if (r.kind === "secret") return `- ${label}: ${does ? `${does} ` : ""}A key in your environment: ${Object.keys(JSON.parse(r.env_json)).join(", ")}.`;
+      const linked = this.linked.get(r.id);
+      const hub = linked?.picked === false ? ` No apps are picked inside ${oneLine(r.name)} yet; if a task needs one, ask them to pick it on ${oneLine(r.name)}'s page.` : linked?.picked && linked.names.length ? ` Apps picked there: ${linked.names.slice(0, 12).join(", ")}.` : "";
+      return `- ${label}: ${does ?? "Tools from an MCP server your owner added."}${hub} Its tools are named mcp__${name}__… (or ${name}.…, depending on your harness).`;
+    });
+    const remote = devices.map((d) => {
+      const does = connectorDoes(d.catalogId);
+      const label = `${oneLine(d.title)} (${d.name}, on ${oneLine(d.device)})`;
+      if (d.unavailable) return `- ${label}: ${does ? `${does} ` : ""}${d.unavailable}`;
+      const tools = d.tools.slice(0, 15).map((t) => t.name);
+      return `- ${label}: ${does ? `${does} ` : ""}It lives on ${oneLine(d.device)}, so call its tools with device_app_call (app "${d.name}")${tools.length ? `: ${tools.join(", ")}${d.tools.length > tools.length ? ", …" : ""}` : "; list them with device_apps"}.`;
+    });
+    return [...local, ...remote];
+  }
+
+  /** The agent's apps for its prompt: what each does and how to reach it. */
+  promptSection(agentId: string, devices: DeviceAppLine[] = []): string {
+    const lines = this.appLines(agentId, devices);
+    if (!lines.length) return "";
     return [`## Your connected apps`, `Your owner connected these for you. Use them when they fit the task; never print secret values.`, ...lines].join("\n");
   }
+
+  /**
+   * Apps the agent got since it last ran (given to it, or turned on for every agent, after it was
+   * made and within RECENT_CONNECT_MS), that it hasn't been told about: for a one-time line.
+   */
+  recentlyConnected(agentId: string, at = Date.now()): { ids: string[]; line: string } {
+    const agent = this.db.prepare("SELECT created_at FROM agents WHERE id = ?").get(agentId) as { created_at: string } | undefined;
+    if (!agent) return { ids: [], line: "" };
+    const given = new Map((this.db.prepare("SELECT connector_id, connected_at FROM agent_connectors WHERE agent_id = ?").all(agentId) as { connector_id: string; connected_at: string | null }[]).map((r) => [r.connector_id, r.connected_at]));
+    const told = new Set((this.db.prepare("SELECT connector_id FROM connector_told WHERE agent_id = ?").all(agentId) as { connector_id: string }[]).map((r) => r.connector_id));
+    const born = Date.parse(agent.created_at);
+    const fresh = this.forAgentRows(agentId).filter((r) => {
+      if (!r.enabled || told.has(r.id)) return false;
+      const since = [given.get(r.id), r.all_agents ? r.all_agents_at : null].filter((x): x is string => !!x).map(Date.parse);
+      const t = since.length ? Math.min(...since) : NaN;
+      return t > born && at - t < RECENT_CONNECT_MS;
+    });
+    if (!fresh.length) return { ids: [], line: "" };
+    const what = fresh.map((r) => {
+      const does = connectorDoes(r.catalog_id);
+      return `${oneLine(r.name)}${does ? `: ${does.charAt(0).toLowerCase()}${does.slice(1)}` : "."}`;
+    });
+    return { ids: fresh.map((r) => r.id), line: `Recently connected: You can now use ${what.join(" You can now use ")}` };
+  }
+
+  /** The agent was told about these apps (its run's prompt had the line). */
+  markTold(agentId: string, connectorIds: string[]) {
+    const ins = this.db.prepare("INSERT OR IGNORE INTO connector_told (agent_id, connector_id, told_at) VALUES (?, ?, ?)");
+    for (const c of connectorIds) ins.run(agentId, c, now());
+  }
+}
+
+/** A device-local app as the prompt lists it. */
+export interface DeviceAppLine {
+  name: string;
+  title: string;
+  device: string;
+  catalogId: string | null;
+  unavailable: string | null;
+  tools: { name: string }[];
 }
 
 type SkillRow = {

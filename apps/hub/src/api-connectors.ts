@@ -9,6 +9,7 @@ import { registerShopApi } from "./api-shop.ts";
 import { ComputerError } from "./computers.ts";
 import { MAX_LEARNED, holdsSecret } from "./connectors.ts";
 import { checkConnector } from "./glance.ts";
+import { checkLinkedApps } from "./composio.ts";
 import { agentPolicy } from "./policy.ts";
 
 interface Helpers {
@@ -23,15 +24,17 @@ const HEADERS = z.record(z.string().regex(/^[A-Za-z0-9-]{1,64}$/, "header names 
 const URL_ = z.string().trim().url().max(2000).refine((u) => /^https?:\/\//.test(u), "must be an http(s) URL");
 const AGENT_IDS = z.array(z.string().min(1)).max(500);
 const NAME = z.string().trim().min(1).max(60);
+/** How long what an app hub said about its apps is trusted before the list asks again. */
+const LINKED_FRESH_MS = 3 * 60_000;
 
 const CONNECTOR = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("mcp-stdio"), name: NAME, catalogId: z.string().max(300).nullish(), command: z.string().trim().min(1).max(1000), args: z.array(z.string().max(4000)).max(100).default([]), env: ENV.default({}), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional(), allAgents: z.boolean().optional() }),
+  z.object({ kind: z.literal("mcp-stdio"), name: NAME, catalogId: z.string().max(300).nullish(), command: z.string().trim().min(1).max(1000), args: z.array(z.string().max(4000)).max(100).default([]), env: ENV.default({}), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional(), allAgents: z.boolean().optional(), nodeId: z.string().max(100).nullish() }),
   z.object({ kind: z.literal("mcp-http"), name: NAME, catalogId: z.string().max(300).nullish(), url: URL_, headers: HEADERS.default({}), env: ENV.default({}), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional(), allAgents: z.boolean().optional() }),
   z.object({ kind: z.literal("secret"), name: NAME, catalogId: z.string().max(300).nullish(), env: ENV.refine((o) => Object.values(o).some(Boolean), "add at least one value"), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional(), allAgents: z.boolean().optional() }),
 ]);
 
 const CONNECTOR_PATCH = z
-  .object({ name: NAME, command: z.string().trim().min(1).max(1000), args: z.array(z.string().max(4000)).max(100), url: URL_, headers: HEADERS, env: ENV, enabled: z.boolean(), agentIds: AGENT_IDS, allAgents: z.boolean() })
+  .object({ name: NAME, command: z.string().trim().min(1).max(1000), args: z.array(z.string().max(4000)).max(100), url: URL_, headers: HEADERS, env: ENV, enabled: z.boolean(), agentIds: AGENT_IDS, allAgents: z.boolean(), nodeId: z.string().max(100).nullable() })
   .partial()
   .strict();
 
@@ -129,6 +132,24 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     return false;
   }
   const changed = (c: Caller) => hub.broadcast(c.workspaceId, { type: "skills_changed" });
+
+  /**
+   * A command can live on a device the caller owns, or one its owner shared: it runs there, for
+   * agents on every device. Sends a 403 (or 400) otherwise.
+   */
+  function homeAllowed(c: Caller, nodeId: string | null | undefined, reply: FastifyReply): boolean {
+    if (!nodeId) return true;
+    const n = store.node(nodeId);
+    if (!n || n.workspaceId !== c.workspaceId) {
+      reply.code(400).send({ error: "that device isn't part of this workspace" });
+      return false;
+    }
+    if (n.ownerId && n.ownerId !== c.actor.id && !n.shared) {
+      reply.code(403).send({ error: `${n.name} is ${store.user(n.ownerId)?.name ?? "someone"}'s own device, so only they can put an app on it (or share it under Computers)` });
+      return false;
+    }
+    return true;
+  }
   const CONNECTOR_CATALOG_WITH_SIGN_IN = () => CONNECTOR_CATALOG.filter((e) => e.signIn);
 
   // --- connectors -------------------------------------------------------------------------------
@@ -137,6 +158,17 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     const c = need(req, reply, { user: true });
     if (!c) return;
     const list = connectors.list(c.workspaceId).map((conn) => withWarnings(conn.id));
+    // app hubs (Composio) checked over a few minutes ago look again in the background; a change refreshes the page
+    for (const conn of list) {
+      if (conn.linkedApps === undefined || !conn.auth?.signedIn) continue;
+      if (conn.linkedApps && Date.now() - Date.parse(conn.linkedApps.checkedAt) < LINKED_FRESH_MS) continue;
+      const was = JSON.stringify(conn.linkedApps ? [conn.linkedApps.picked, conn.linkedApps.names] : null);
+      // marked as checked now, so pages asking again meanwhile don't start another
+      connectors.linked.set(conn.id, { picked: conn.linkedApps?.picked ?? null, names: conn.linkedApps?.names ?? [], pickUrl: catalogConnector(conn.catalogId ?? "")!.appsPage!, checkedAt: new Date().toISOString() });
+      void checkLinkedApps(hub, conn.id).then((v) => {
+        if (JSON.stringify(v ? [v.picked, v.names] : null) !== was) changed(c);
+      });
+    }
     return c.viewer.role === "guest" ? list.map(guestView) : list;
   });
 
@@ -148,9 +180,12 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (body.kind === "mcp-stdio" && !isOwner(c)) return reply.code(403).send({ error: "Only an owner can add a connected app that runs a command" });
     if (body.kind === "mcp-http" && !(await addressAllowed(c, body.url, body.env, reply))) return;
     if (connectors.byName(c.workspaceId, body.name)) return reply.code(409).send({ error: `there's already a connected app named "${body.name}"` });
+    if (body.kind === "mcp-stdio" && !homeAllowed(c, body.nodeId, reply)) return;
     const agentIds = agentsIn(c, body.agentIds ?? [], reply);
     if (!agentIds || !deviceAllows(c, agentIds, reply)) return;
     const conn = connectors.create(c.workspaceId, c.actor.id, body);
+    // its device says which tools it has (in the background: it may have to start the server first)
+    if (conn.nodeId) void hub.deviceApps.refresh(conn.id).then(() => changed(c), () => changed(c));
     if (agentIds.length) connectors.setAgents(conn.id, agentIds);
     changed(c);
     // a remote server that wants people to sign in says so now, so the page can offer it
@@ -179,6 +214,9 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     const s = entry.signIn!;
     if (s.via === "app") return connectors.auth.apps.available(s.provider);
     if (signInReturnsTo(origin, s.localOnly)) return { ok: true };
+    const lan = lanHttp(origin);
+    if (lan && !s.localOnly)
+      return { ok: false, reason: `${entry.name}'s sign-in page only sends people back to an https address, and Bubble AI is open at ${lan}, a plain http address on your home network. Open Bubble AI on the server itself (localhost), or turn on Tailscale under Settings → Computers for an https address, then connect ${entry.name} again.` };
     return { ok: false, reason: s.localOnly ? `${entry.name} only signs in when Bubble AI is open on this computer (localhost).` : `${entry.name} only signs in when Bubble AI is open over https or on this computer.` };
   }
 
@@ -297,6 +335,8 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
       else ids = [await connectors.auth.finish(state, q.code, (id) => connectors.serverUrl(id))];
       const conns = ids.map((cid) => connectors.get(cid)).filter((x): x is Connector => !!x);
       for (const ws of new Set(conns.map((x) => x.workspaceId))) hub.broadcast(ws, { type: "skills_changed" });
+      // an app hub (Composio): find out now whether apps are picked inside it, for the connected card
+      for (const x of conns) if (catalogConnector(x.catalogId ?? "")?.appsPage) void checkLinkedApps(hub, x.id).then(() => hub.broadcast(x.workspaceId, { type: "skills_changed" }));
       return afterSignIn(reply, returnTo, true, `Signed in to ${conns.map((x) => x.name).join(" and ") || "the app"}. You can close this tab.`);
     } catch (e) {
       return afterSignIn(reply, returnTo, false, (e as Error).message);
@@ -367,6 +407,12 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (conn.kind === "mcp-http" && (body.url || body.env) && !(await addressAllowed(c, body.url ?? conn.url ?? "", body.env ?? {}, reply))) return;
     if (body.allAgents !== undefined && body.allAgents !== conn.allAgents && conn.createdBy !== c.actor.id && store.role(c.workspaceId, c.actor.id) !== "owner")
       return reply.code(403).send({ error: "Only the person who added this connected app, or the workspace owner, can turn All agents on or off" });
+    if (body.nodeId !== undefined && body.nodeId !== conn.nodeId) {
+      if (conn.kind !== "mcp-stdio") return reply.code(400).send({ error: "only an app that runs a command lives on a device" });
+      if (!homeAllowed(c, body.nodeId, reply)) return;
+      // moving it off someone's device is theirs to do too
+      if (conn.nodeId && !homeAllowed(c, conn.nodeId, reply)) return;
+    }
     if (body.name) {
       const other = connectors.byName(c.workspaceId, body.name);
       if (other && other.id !== conn.id) return reply.code(409).send({ error: `there's already a connected app named "${body.name}"` });
@@ -378,8 +424,9 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
       connectors.setAgents(conn.id, ids);
     }
     const addressBefore = connectors.serverUrl(conn.id);
-    connectors.update(conn.id, body);
+    const updated = connectors.update(conn.id, body);
     changed(c);
+    if (updated?.nodeId && (body.nodeId !== undefined || body.command || body.args || body.env)) void hub.deviceApps.refresh(conn.id).then(() => changed(c), () => changed(c));
     // a new address may want its own sign-in
     const address = connectors.serverUrl(conn.id);
     if (address && address !== addressBefore) await connectors.auth.probe(conn.id, address, connectors.serverHeaders(conn.id));
@@ -394,6 +441,22 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!conn) return;
     if (!canChange(c, conn, reply)) return;
     return checkConnector(hub, conn.id);
+  });
+
+  /**
+   * The apps picked inside an app hub (Composio), checked now: `linkedApps.picked` false means none
+   * yet, null that it couldn't tell. The connected card asks again when the person comes back from its page.
+   */
+  app.get("/api/connectors/:id/linked-apps", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const conn = ownConnector(c, req, reply);
+    if (!conn) return;
+    if (!catalogConnector(conn.catalogId ?? "")?.appsPage) return reply.code(400).send({ error: `${conn.name} has no apps inside it` });
+    const was = JSON.stringify(connectors.get(conn.id)?.linkedApps?.names ?? null) + String(connectors.get(conn.id)?.linkedApps?.picked);
+    const linked = await checkLinkedApps(hub, conn.id);
+    if (JSON.stringify(linked?.names ?? null) + String(linked?.picked) !== was) changed(c);
+    return { linkedApps: linked };
   });
 
   app.delete("/api/connectors/:id", async (req, reply) => {
@@ -672,5 +735,18 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
         return skills.get(s.id);
       },
     });
+  }
+}
+
+/** The address when it's plain http on a home or office network (192.168.1.20:3000), else null. */
+export function lanHttp(origin: string): string | null {
+  try {
+    const u = new URL(origin);
+    if (u.protocol !== "http:") return null;
+    const h = u.hostname;
+    const lan = /^(10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|169\.254\.\d+\.\d+|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d+\.\d+)$/.test(h) || h.endsWith(".local") || h.endsWith(".lan") || h.endsWith(".home");
+    return lan ? u.host : null;
+  } catch {
+    return null;
   }
 }

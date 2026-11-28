@@ -253,6 +253,8 @@ export const HubToNode = z.discriminatedUnion("type", [
   z.object({ type: z.literal("computer"), requestId: z.string(), computer: ComputerSpec, action: ComputerAction, agentId: z.string().optional(), screen: z.string().max(100).optional() }),
   /** the Apple mod: read or (after a person approved it) change Messages, Contacts, Calendar or Reminders on this Mac; answered with `result` */
   z.object({ type: z.literal("apple"), requestId: z.string(), op: AppleOp }),
+  /** an app that lives on this device (a connector's command): list its tools, or call one for an agent elsewhere */
+  z.object({ type: z.literal("device_mcp"), requestId: z.string(), connectorId: z.string().max(100), spec: ConnectorSpec, op: z.enum(["list", "call"]), tool: z.string().max(128).optional(), args: z.record(z.unknown()).optional() }),
   /** start or stop streaming a computer's screen to people watching it */
   z.object({ type: z.literal("screen_watch"), computer: ComputerSpec, on: z.boolean(), fps: z.number().min(0.2).max(10).optional() }),
   /** relay a computer's VNC server: binary frames carry the bytes (see tunnelFrame) */

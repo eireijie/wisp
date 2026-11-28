@@ -31,6 +31,7 @@ import { agentFolder } from "./agent-dir.ts";
 import { runFailed, withReason } from "./run-failure.ts";
 import { bringBack, mergeBranch, prepareCheckout, prepareClone } from "./git.ts";
 import { AppleBridge } from "./apple/index.ts";
+import { DeviceMcp } from "./device-mcp.ts";
 
 /** How often a device looks again at whether its harnesses are signed in (someone may do it in a terminal). */
 const SIGN_IN_CHECK_MS = 20_000;
@@ -132,6 +133,8 @@ export class NodeDaemon {
   /** the Apple mod's bridge to Messages, Contacts, Calendar and Reminders: Macs only */
   private apple = process.platform === "darwin" ? new AppleBridge() : null;
   private appleTimer: ReturnType<typeof setInterval> | null = null;
+  /** apps living here, run for agents on the owner's other devices */
+  private deviceMcp = new DeviceMcp((m) => this.log(m));
   /** the Apple status last sent with the capabilities */
   private appleSent = "";
   /** sign-ins running for those accounts */
@@ -436,6 +439,7 @@ export class NodeDaemon {
     this.closeTunnels();
     this.terminals.killAll();
     this.remoteServer.stop();
+    void this.deviceMcp.close();
     const end = Date.now() + wait;
     while (this.aborts.size && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
     this.ws?.close();
@@ -680,6 +684,13 @@ export class NodeDaemon {
           this.send({ type: "result", requestId, ok: false, error: (err as Error).message });
           void this.recheckApple().catch(() => {});
         },
+      );
+    } else if (msg.type === "device_mcp") {
+      const { requestId } = msg;
+      if (this.local.paused) return this.send({ type: "result", requestId, ok: false, error: `${this.cfg.name} is paused` });
+      this.deviceMcp.handle(msg.connectorId, msg.spec, msg.op, msg.tool, msg.args).then(
+        (result) => this.send({ type: "result", requestId, ok: true, result }),
+        (err) => this.send({ type: "result", requestId, ok: false, error: (err as Error).message.slice(0, 1000) }),
       );
     } else if (msg.type === "read_agent") {
       const agent = readDiscovered(msg.key, this.cfg.discoverHome);

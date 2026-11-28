@@ -825,6 +825,47 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     );
   }
 
+  // --- connected apps ---------------------------------------------------------------------------
+
+  server.registerTool(
+    "connected_apps",
+    { description: "List the apps your owner connected for you, what each one does, and how to use it (including ones that just got connected). Check it when a task may need an app.", inputSchema: {} },
+    safe(async () => {
+      const r = await client.connectorsMine();
+      return text([r.apps.length ? r.apps.join("\n") : "No connected apps yet. Your owner can connect some in Connect apps.", r.recent ?? ""].filter(Boolean).join("\n\n"));
+    }),
+  );
+
+  // apps that live on the owner's other devices (only there when this agent has some)
+  const onDevices = await client.deviceAppsMine().catch(() => []);
+  if (onDevices.length) {
+    const appList = onDevices.map((d) => `"${d.name}" (${d.title}, on ${d.device}${d.unavailable ? ", unavailable now" : ""})`).join(", ");
+    server.registerTool(
+      "device_apps",
+      { description: `List your apps that live on your owner's other devices, with their tools and whether each device is online. You have: ${appList}.`, inputSchema: {} },
+      safe(async () => {
+        const list = await client.deviceAppsMine();
+        return text(
+          list
+            .map((d) => [`${d.name} (${d.title}) on ${d.device}: ${d.unavailable ?? "available"}`, ...d.tools.map((t) => `  - ${t.name}: ${t.description.split("\n")[0].slice(0, 200)}${t.inputSchema ? ` args ${JSON.stringify((t.inputSchema as { properties?: unknown }).properties ?? {})}` : ""}`)].join("\n"))
+            .join("\n\n") || "You have no apps on other devices.",
+        );
+      }),
+    );
+    server.registerTool(
+      "device_app_call",
+      {
+        description: `Call a tool of an app that lives on another of your owner's devices; Bubble AI runs it there while that device is online. Apps: ${appList}. See device_apps for each app's tools and arguments. If the device is offline you'll be told at once: say so instead of retrying.`,
+        inputSchema: { app: z.string().describe("the app's name from device_apps"), tool: z.string(), arguments: z.record(z.unknown()).optional() },
+      },
+      safe(async ({ app, tool, arguments: args }) => {
+        const r = await client.deviceAppCall(app, tool, args ?? {});
+        const content = (r.content as Content[]).map((c) => (c.type === "text" ? { ...c, text: frameOutside(`${app} on another device`, c.text) } : c)).filter((c) => c.type === "text" || c.type === "image");
+        return { content: content.length ? content : [{ type: "text" as const, text: "(no output)" }], ...(r.isError ? { isError: true } : {}) };
+      }),
+    );
+  }
+
   // --- Apple (the Apple mod: only the apps and levels this agent has) ---------------------------
 
   const appleLv = await client.appleMine().catch(() => ({}) as Awaited<ReturnType<typeof client.appleMine>>);

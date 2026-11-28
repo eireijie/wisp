@@ -1,4 +1,4 @@
-import type { Agent, AppleApp, AppleLevel, AppleOp, Allowance, Approval, Channel, ComputerAction, ConnectionModel, HarnessSettings, HarnessSettingsChange, Message, ModelConnection, ModelLogin, ModelProvider, Routine, Followup, ChatLoop, Skill, StorageEntry, StorageFolder, StorageService, Watch, WatchService, WatchServiceInfo } from "@bubble-ai/core";
+import type { Agent, AppleApp, AppleLevel, AppleOp, Allowance, Approval, Channel, ComputerAction, ConnectionModel, DeviceApp, HarnessSettings, HarnessSettingsChange, Message, ModelConnection, ModelLogin, ModelProvider, Routine, Followup, ChatLoop, Skill, StorageEntry, StorageFolder, StorageService, Watch, WatchService, WatchServiceInfo } from "@bubble-ai/core";
 
 export interface WispClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
@@ -184,6 +184,18 @@ export class WispClient {
     return this.request<{ latitude: number; longitude: number; accuracyMeters: number; at: string; ageMinutes: number; near?: string }>("POST", "/api/apple/agent/location", {});
   }
   /** The storage this agent may use (the Storage mod), with its folders; empty when it has none. */
+  /** The agent's connected apps, a line each saying what it does and how to reach it, and the ones it just got. */
+  connectorsMine() {
+    return this.request<{ apps: string[]; recent: string | null }>("GET", "/api/connectors/mine");
+  }
+  /** The agent's apps that live on the owner's other devices, and whether each can be used now. */
+  deviceAppsMine() {
+    return this.request<DeviceApp[]>("GET", "/api/device-apps/mine");
+  }
+  /** Call a tool of an app living on another device (through the hub, while that device is online). */
+  deviceAppCall(app: string, tool: string, args: Record<string, unknown> = {}) {
+    return this.request<{ content: unknown[]; isError?: boolean }>("POST", "/api/device-apps/call", { app, tool, arguments: args });
+  }
   storageMine() {
     return this.request<{ id: string; name: string; service: StorageService; folders: StorageFolder[] }[]>("GET", "/api/storage/mine");
   }

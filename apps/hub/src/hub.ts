@@ -24,6 +24,7 @@ import { Logos } from "./logos.ts";
 import { PublicSkills } from "./skill-store.ts";
 import { Updates } from "./updates.ts";
 import { ConnectorStore, SkillStore } from "./connectors.ts";
+import { DeviceApps } from "./device-apps.ts";
 import { ModelConnections, modelsForHarness } from "./model-connections.ts";
 import type { Vault } from "@bubble-ai/vault";
 import type { Vaults } from "./vaults.ts";
@@ -106,6 +107,7 @@ export class Hub {
   readonly storage: Storage;
   /** Messages, Contacts, Calendar, Reminders and Location (the Apple mod) */
   readonly apple: Apple;
+  readonly deviceApps: DeviceApps;
   readonly routines: Routines;
   readonly schedules: TeamSchedules;
   readonly background: Background;
@@ -181,6 +183,12 @@ export class Hub {
     this.publicSkills = new PublicSkills(this);
     this.updates = new Updates(this);
     this.connectors = new ConnectorStore(store.db);
+    // a command living on a device starts for an agent whose harness runs on that device itself (not in a VM there)
+    this.connectors.runsOn = (agentId, nodeId) => {
+      const a = store.agent(agentId);
+      return !!a && a.nodeId === nodeId && this.harnessOnDevice(a);
+    };
+    this.deviceApps = new DeviceApps(this);
     this.models = new ModelConnections(store.db, (...a) => this.fetchImpl(...a));
     this.skills = new SkillStore(store.db);
     this.apns = new Apns(this);
@@ -674,6 +682,8 @@ export class Hub {
         this.computers.nodeBack(conn.nodeId);
         this.sendConnectionsKeep(conn);
         this.sendSharedSignins(conn.nodeId);
+        // the apps living on it say what tools they have, for agents on other devices
+        void this.deviceApps.refreshNode(conn.nodeId);
         return;
       }
       case "capabilities": {
@@ -2039,7 +2049,10 @@ export class Hub {
     await this.ensureBuiltinSkills([agent.id]);
     await this.ensureSharedSkills(agent.id);
     const skills = this.skills.promptSection(agent.id, { learn: agentPolicy(this, agent.workspaceId).learnSkills });
-    const connectors = this.connectors.promptSection(agent.id);
+    const connectors = this.connectors.promptSection(agent.id, this.deviceApps.lines(agent));
+    // apps it got since it last ran: said once, in the next run that isn't a background check
+    const recent = !background && run ? this.connectors.recentlyConnected(agent.id) : { ids: [], line: "" };
+    if (recent.ids.length && run?.id) this.connectors.markTold(agent.id, recent.ids);
     const storage = this.storage.promptSection(agent);
     const apple = this.apple.promptSection(agent);
     const soulNote = agent.settings.soulLocked
@@ -2073,7 +2086,7 @@ export class Hub {
       localTime,
       this.computerSection(agent.id),
       skills ? `\n${skills}` : "",
-      connectors ? `\n${connectors}` : "",
+      connectors ? `\n${connectors}${recent.line ? `\n${recent.line} Mention it if it helps with what they asked.` : ""}` : "",
       storage ? `\n${storage}` : "",
       apple ? `\n${apple}` : "",
       routines ? `\n${routines}` : "",

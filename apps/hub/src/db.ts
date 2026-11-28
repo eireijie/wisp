@@ -185,6 +185,16 @@ CREATE TABLE IF NOT EXISTS agent_connectors (
   connector_id TEXT NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
   PRIMARY KEY (agent_id, connector_id)
 );
+CREATE TABLE IF NOT EXISTS connector_told (
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  connector_id TEXT NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+  told_at TEXT NOT NULL,
+  PRIMARY KEY (agent_id, connector_id)
+);
+CREATE TABLE IF NOT EXISTS device_tools (
+  connector_id TEXT PRIMARY KEY REFERENCES connectors(id) ON DELETE CASCADE,
+  node_id TEXT NOT NULL, tools_json TEXT NOT NULL DEFAULT '[]', error TEXT, checked_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS skills (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL, slug TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
@@ -400,6 +410,11 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   // on for every agent in the workspace, including ones made later
   ["skills", "all_agents", "INTEGER NOT NULL DEFAULT 0"],
   ["connectors", "all_agents", "INTEGER NOT NULL DEFAULT 0"],
+  // when an agent got a connector, and when one went on for every agent: for its one-time "You can now use …" line
+  ["agent_connectors", "connected_at", "TEXT"],
+  ["connectors", "all_agents_at", "TEXT"],
+  // a command that lives on one device: agents elsewhere reach its tools through the hub while that device is online
+  ["connectors", "node_id", "TEXT"],
   // signed in through Bubble AI's own app with GitHub, Slack or Google (null: the server's own MCP sign-in)
   ["connector_auth", "provider", "TEXT"],
   // where the browser goes after signing in ("#/connectors", or "close")

@@ -1,3 +1,3 @@
 { "name": "@bubble-ai/node", "version": "0.0.1", "type": "module", "license": "Apache-2.0", "bin": { "bubble-ai": "src/cli.ts" },
-  "dependencies": { "@bubble-ai/core": "*", "@bubble-ai/adapters": "*", "@bubble-ai/mcp": "*", "@bubble-ai/sdk": "*", "@bubble-ai/update": "*", "ws": "^8.18.0", "tsx": "^4.19.0" },
+  "dependencies": { "@bubble-ai/core": "*", "@bubble-ai/adapters": "*", "@bubble-ai/mcp": "*", "@bubble-ai/sdk": "*", "@bubble-ai/update": "*", "@modelcontextprotocol/sdk": "^1.20.0", "ws": "^8.18.0", "tsx": "^4.19.0" },
   "optionalDependencies": { "node-pty": "^1.1.0" } }

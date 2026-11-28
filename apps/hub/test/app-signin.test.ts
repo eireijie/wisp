@@ -94,7 +94,7 @@ describe("which apps can sign in from here", () => {
 
     const lan = (await api("GET", `/api/connectors/sign-in?origin=${encodeURIComponent("http://192.168.1.5:8787")}`)).data;
     expect(lan.notion).toMatchObject({ signIn: false, key: true });
-    expect(lan.notion.reason).toMatch(/https or on this computer/);
+    expect(lan.notion.reason).toMatch(/a plain http address on your home network/);
     expect(lan.vercel.reason).toMatch(/on this computer/);
     // Google goes through the relay, so the hub's own address doesn't matter
     expect(lan.gmail.signIn).toBe(true);

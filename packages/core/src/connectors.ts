@@ -32,6 +32,47 @@ export interface Connector {
   allAgents: boolean;
   createdBy: string | null;
   createdAt: string;
+  /**
+   * A command that lives on one device (its id): it runs there, and agents on the owner's other
+   * devices use its tools through the hub while that device is online. Null: it runs wherever the agent does.
+   */
+  nodeId?: string | null;
+  /**
+   * Apps linked inside an app hub like Composio, as last checked: `picked` false means none yet
+   * (show "No apps picked yet · Pick apps"), true means some (`names`), null means it couldn't tell.
+   * Only on connectors that have apps inside them.
+   */
+  linkedApps?: LinkedApps | null;
+}
+
+/** See Connector.linkedApps. */
+export interface LinkedApps {
+  picked: boolean | null;
+  names: string[];
+  /** where the person picks apps: the hub's own page (Composio's) */
+  pickUrl: string;
+  checkedAt: string;
+}
+
+/** A tool a device-local connector offers, as its device reported it. */
+export interface DeviceTool {
+  name: string;
+  description: string;
+  inputSchema?: Record<string, unknown>;
+}
+
+/** A device-local app as an agent sees it: where it lives and whether it can be used now. */
+export interface DeviceApp {
+  /** the connector's MCP name (slugged), what device_app_call takes */
+  name: string;
+  title: string;
+  connectorId: string;
+  nodeId: string;
+  device: string;
+  online: boolean;
+  /** why it can't be used now, in words for the agent ("Sam's Mac is offline"), or null */
+  unavailable: string | null;
+  tools: DeviceTool[];
 }
 
 /** What travels to a device for one run: everything resolved, secrets included. */
@@ -154,6 +195,20 @@ export interface CatalogConnector {
   signInReads?: string;
   /** always recommended: listed first with a "Recommended" mark, and in every set of apps an agent suggests; the line says why */
   recommended?: string;
+  /** an app hub (Composio): the page where people pick the apps inside it */
+  appsPage?: string;
+}
+
+/**
+ * What a connected app does, in one short plain line for an agent's prompt ("Search and read
+ * email."): its catalog line without the "through …'s own MCP server" part; null for custom ones.
+ */
+export function connectorDoes(catalogId: string | null | undefined): string | null {
+  const d = catalogConnector(catalogId ?? "")?.description;
+  if (!d) return null;
+  const first = d.replace(/\s+/g, " ").trim().split(/(?<=\.)\s/)[0];
+  const short = first.replace(/,\s*through [^.]*\./i, ".").replace(/\s*\([^)]*\)/g, "");
+  return short.length > 140 ? `${short.slice(0, 139)}…` : short;
 }
 
 /** Popular MCP servers and keys people actually connect agents to. */
@@ -173,6 +228,7 @@ export const CONNECTOR_CATALOG: CatalogConnector[] = [
     docs: "https://docs.composio.dev/docs/composio-connect",
     signIn: { via: "mcp", url: "https://connect.composio.dev/mcp" },
     signInReads: "Uses the apps you connect in Composio",
+    appsPage: "https://connect.composio.dev",
     recommended: "Use Composio for more apps and easy sign-in.",
   },
   {
