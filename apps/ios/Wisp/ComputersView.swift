@@ -743,7 +743,7 @@ struct ScreenCodeField: View {
   static func ready(_ kind: String?, _ code: String) -> Bool { kind == nil || (kind == "pin" ? code.count == 6 : !code.isEmpty) }
 
   var body: some View {
-    SecureField(kind == "pin" ? "6-digit PIN" : "Password", text: $code)
+    RevealField(placeholder: kind == "pin" ? "6-digit PIN" : "Password", text: $code, label: "The screen's \(kind == "pin" ? "PIN" : "password")")
       .keyboardType(kind == "pin" ? .numberPad : .default)
       .textContentType(.oneTimeCode) // keeps iOS from offering to save it as a password
       .textInputAutocapitalization(.never)
@@ -759,7 +759,6 @@ struct ScreenCodeField: View {
       .padding(.horizontal, 14)
       .padding(.vertical, 11)
       .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemBackground)))
-      .accessibilityLabel("The screen's \(kind == "pin" ? "PIN" : "password")")
   }
 }
 

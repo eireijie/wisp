@@ -377,8 +377,9 @@ final class OnboardingTests: XCTestCase {
     XCTAssertEqual(start.connectors.map(\.id), ["cn1"])
     let request = try sent("POST", "/api/connectors/connect")
     let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
-    // only which apps, where to come back to, and who gets them: nothing the person typed
-    XCTAssertEqual(Set(body.keys), ["catalogIds", "origin", "returnTo", "agentIds"])
+    // only which apps, where to come back to, and who gets them (every agent, like the web): nothing the person typed
+    XCTAssertEqual(Set(body.keys), ["catalogIds", "origin", "returnTo", "allAgents"])
+    XCTAssertEqual(body["allAgents"] as? Bool, true)
     XCTAssertEqual(body["catalogIds"] as? [String], ["notion"]); XCTAssertEqual(body["returnTo"] as? String, "close"); XCTAssertEqual(body["origin"] as? String, "https://management.test:8443")
     // the browser sheet only opens web pages
     XCTAssertNil(BrowserPage("javascript:alert(1)")); XCTAssertNil(BrowserPage("wisp://pair")); XCTAssertNil(BrowserPage(nil))

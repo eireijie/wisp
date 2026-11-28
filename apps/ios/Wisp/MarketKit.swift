@@ -237,7 +237,7 @@ struct MarketField: View {
     VStack(alignment: .leading, spacing: 6) {
       if let label { MarketLabel(label) }
       Group {
-        if secure { SecureField(placeholder, text: $text) }
+        if secure { RevealField(placeholder: placeholder, text: $text) }
         else { TextField(placeholder, text: $text, axis: .vertical).lineLimit(lines) }
       }
       .font(.system(size: 15, design: mono ? .monospaced : .default))

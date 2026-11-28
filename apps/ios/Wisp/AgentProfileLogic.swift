@@ -38,7 +38,10 @@ enum AgentLine {
       }
     }
     if agent.computerId != nil { return "Ready" }
-    return agent.settings?.headless == true ? "Headless" : device?.name ?? "None yet"
+    if agent.settings?.headless == true { return "Headless" }
+    // its state, not the device's name: Runs on names the device (board 16c)
+    guard let device else { return "None yet" }
+    return device.online == true ? "Idle" : "Offline"
   }
 
   /** The Routines row: how many are on. */

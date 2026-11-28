@@ -146,7 +146,7 @@ private struct AdvancedLoop: View {
   }
 }
 
-// MARK: - Make it yours
+// MARK: - Introduce yourself (was Make it yours)
 
 struct OnboardingYoursStep: View {
   var name: String
@@ -161,26 +161,27 @@ struct OnboardingYoursStep: View {
   @FocusState private var aboutFocused: Bool
   @ReduceMotion private var reduceMotion
 
-  private var first: String { OnboardingText.first(person) }
-  private var message: String { SetupGoals.sample(goals, talk: talk, when: checkIn, about: about, person: person) }
+  /** what goes to it, word for word */
+  private var message: String { SetupGoals.introMessage(agent: name, person: person, goals: goals, about: about, talk: talk, when: checkIn) }
 
   /**
-   * Make it yours (2026-11-27, round 7, board 6): what it should help with in the person's own words,
-   * anything it should know about them, how it talks and when it checks in, and the message it would
-   * send them by name, changing as they pick. On Continue the picks go to the agent as their first
-   * message and the agent suggests the apps to connect.
+   * Introduce yourself (2026-11-28, board 16b): the person meets their agent. What it should help
+   * with, anything about them, how it talks and when it checks in write their own first message,
+   * shown on the right like any message they send. "Send to Juno" sends exactly that; it answers in
+   * its chat and suggests the apps to connect.
    */
   var body: some View {
     ObScreen(top: 56, focus: aboutFocused ? "about" : nil) {
       VStack(spacing: 0) {
         ObSlot(size: 56)
-        Text("What should \(name) help with\(first.isEmpty ? "" : ", \(first)")?").obTitle(23)
+        Text("Introduce yourself to \(name)").obTitle(23)
           .padding(.top, 12)
-        Text("Pick anything. You can change it later by just telling \(name).")
+        Text("Tap what fits. It becomes your first message.")
           .font(.system(size: 14)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
           .padding(.top, 4)
 
+        ObLabel(text: "I'd like help with").padding(.top, 14)
         VStack(spacing: 6) {
           ForEach(SetupGoals.all) { g in
             let on = goals.contains(g.id)
@@ -201,70 +202,67 @@ struct OnboardingYoursStep: View {
             .accessibilityIdentifier("ob-goal-\(g.id)")
           }
         }
-        .padding(.top, 20)
+        .padding(.top, 4)
         .animation(Motion.pick(Motion.fade, reduceMotion), value: goals)
 
-        // the example wraps instead of being cut off at phone width
+        ObLabel(text: "About me").padding(.top, 8)
         // the hint wraps instead of being cut short at phone width
         TextField("", text: $about, axis: .vertical)
           .font(.system(size: 15)).foregroundStyle(Palette.text)
           .lineLimit(1...4)
           .background(alignment: .topLeading) {
             if about.isEmpty {
-              Text("Anything \(name) should know about you? (I'm a student, I work weekends, I love hiking…)")
+              Text("I work weekends, I'm a student, I love hiking…")
                 .font(.system(size: 15)).foregroundStyle(Palette.faint)
                 .fixedSize(horizontal: false, vertical: true)
                 .allowsHitTesting(false).accessibilityHidden(true)
             }
           }
-          .frame(minHeight: about.isEmpty ? 40 : nil, alignment: .topLeading)
-          .accessibilityLabel("Anything \(name) should know about you?")
+          .frame(minHeight: about.isEmpty ? 22 : nil, alignment: .topLeading)
           .focused($aboutFocused)
           .submitLabel(.done)
           .onChange(of: about) { _, v in if v.count > 300 { about = String(v.prefix(300)) } }
           .padding(.horizontal, 14).padding(.vertical, 12)
           .frame(maxWidth: .infinity, alignment: .leading)
           .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.field))
-          .accessibilityLabel("Anything \(name) should know about you?")
+          .accessibilityLabel("About me")
           .accessibilityIdentifier("ob-about")
           .id(OnboardingFocus.id)
-          .padding(.top, 14)
+          .padding(.top, 4)
 
         VStack(alignment: .leading, spacing: 6) {
-          ObLabel(text: "\(name) talks")
-          ObSegmented(label: "\(name) talks", options: SetupTalk.allCases.map { ($0, $0.label) }, selection: $talk)
-          ObLabel(text: "Checks in").padding(.top, 6)
-          ObSegmented(label: "Checks in", options: SetupCheckIn.allCases.map { ($0, $0.label) }, selection: $checkIn)
+          ObLabel(text: "Talk to me")
+          ObSegmented(label: "Talk to me", options: SetupTalk.allCases.map { ($0, $0.label) }, selection: $talk)
+          ObLabel(text: "Check in").padding(.top, 6)
+          ObSegmented(label: "Check in", options: SetupCheckIn.allCases.map { ($0, $0.label) }, selection: $checkIn)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 14)
-
-        // what it would actually send, changing as you pick
-        HStack(alignment: .bottom, spacing: 8) {
-          GhostView(look: look, seed: name, size: 30)
-          Text(message).font(.system(size: 15)).foregroundStyle(Palette.text)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 12).padding(.vertical, 9)
-            .background(UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 4, bottomTrailingRadius: 16, topTrailingRadius: 16, style: .continuous).fill(Palette.card))
-            .overlay(UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 4, bottomTrailingRadius: 16, topTrailingRadius: 16, style: .continuous).strokeBorder(Palette.hairline))
-            .id(message)
-            .transition(reduceMotion ? .opacity : .asymmetric(insertion: .scale(scale: 0.96, anchor: .bottomLeading).combined(with: .opacity), removal: .opacity))
-          Spacer(minLength: 24)
-        }
-        .padding(.top, 18)
-        .animation(Motion.pick(Motion.soft, reduceMotion), value: message)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(name) would send: \(message)")
-        .accessibilityIdentifier("ob-yours-preview")
+        .padding(.top, 8)
       }
     } bottom: {
+      // your own first message, on the right like any you send, pinned just above Send (the picks
+      // scroll under it), so it's in view before the tap; it is what gets sent, word for word
+      HStack {
+        Spacer(minLength: 40)
+        Bubble(side: .mine, tail: true) {
+          // a long one keeps its end (the latest picks) in view
+          Text(message).font(.system(size: 15)).lineLimit(6).truncationMode(.head)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .contentTransition(.opacity)
+      }
+      .padding(.bottom, 8)
+      .animation(Motion.pick(Motion.soft, reduceMotion), value: message)
+      .accessibilityElement(children: .combine)
+      .accessibilityLabel("Your message: \(message)")
+      .accessibilityIdentifier("ob-yours-preview")
       Button {
         aboutFocused = false
         onNext()
       } label: {
         HStack(spacing: 8) {
           if busy { ProgressView().controlSize(.small).tint(Palette.ground) }
-          Text("Continue")
+          Text("Send to \(name)")
         }
       }
       .buttonStyle(ObWide()).disabled(busy).accessibilityIdentifier("ob-yours-next")

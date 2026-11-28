@@ -66,6 +66,19 @@ struct AppConnector: Decodable, Identifiable {
   var signIn: CatalogSignIn?
   /** always recommended (Composio): its one line ("Use Composio for more apps and easy sign-in.") */
   var recommended: String?
+  /** the apps picked inside an app hub like Composio, as last checked (round 16); only on those */
+  var linkedApps: LinkedApps?
+  /** connected, but no apps picked inside it yet: the card says so, with Pick apps */
+  var noAppsPicked: Bool { linkedApps?.picked == false }
+}
+
+/** What an app hub (Composio) last said about the apps inside it: `picked` false is none yet, nil is couldn't tell. */
+struct LinkedApps: Decodable, Hashable {
+  var picked: Bool?
+  var names: [String]?
+  /** the hub's own page where the person picks apps */
+  var pickUrl: String?
+  var checkedAt: String?
 }
 struct ConnectorField: Decodable, Identifiable {
   var key: String

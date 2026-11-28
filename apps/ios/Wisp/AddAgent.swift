@@ -213,6 +213,8 @@ struct AddAgent: View {
               .accessibilityIdentifier("new-colour-\(c.name.lowercased())")
             }
           }
+          // where it runs, on every New agent (board 16c), not only under more options
+          CardGroup { RunsOnRow(selection: runsOn, id: "new-runs-on") { pickRunsOn($0) } }
           HStack(spacing: 5) {
             Text("Or").foregroundStyle(Palette.faint)
             Button { editingLook = true } label: { Text("change its shape").underline() }.accessibilityIdentifier("new-look")
@@ -341,6 +343,22 @@ struct AddAgent: View {
         RowLabel(title: "Device", value: node?.name ?? "None", leading: { rowIcon("laptopcomputer") })
       }
       .accessibilityIdentifier("new-device")
+    }
+  }
+
+  /** the quick sheet's Runs on: the shared computer, or the device it works right on */
+  private var runsOn: RunsOn? {
+    if draft.place == .shared { return .shared }
+    return (draft.nodeId ?? firstNode).map { .device($0) }
+  }
+
+  private func pickRunsOn(_ choice: RunsOn) {
+    switch choice {
+    case .shared: draft.place = .shared
+    case .device(let id):
+      pickDevice(id)
+      // on its own screen when that device can lend one, else right on the device without a computer
+      draft.place = AgentPlace.screen.usable(node: node, computers: store.computers) ? .screen : .none
     }
   }
 

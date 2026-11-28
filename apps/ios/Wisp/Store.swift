@@ -813,6 +813,11 @@ final class Store {
       Task { do { try await refreshAgents() } catch { recordSyncError(error) } }
     case "lead_changed":
       Task { do { try await refreshTaskLead() } catch { recordSyncError(error) } }
+    case "prefs_changed":
+      // your own prefs changed on the hub (it pins your first agent for you, round 16)
+      Task {
+        if let me: Me = try? await fetch({ try await $0.get("/api/me") }) { prefs = me.prefs }
+      }
     case "tasks_changed":
       Task { do { try await refreshTasks() } catch { recordSyncError(error) } }
     case "flows_changed":

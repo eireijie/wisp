@@ -141,11 +141,14 @@ struct AgentShortList: View {
       VStack(alignment: .leading, spacing: 6) {
         Text("Set up").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 14)
         CardGroup {
+          if store.canManage && !compact { AgentRunsOnRow(agent: current, action: action) }
           link("Apps and skills", id: "agent-apps", icon: "powerplug", value: AgentLine.count(appCount + skillCount)) { AgentAppsPage(agent: current) }
           if store.features.routines {
             link("Routines", id: "agent-routines", icon: "clock", value: routinesValue) { RoutinesView(agent: current) }
           }
           link("Memory", id: "agent-memory", icon: "book", value: noteCount > 0 ? (compact ? "\(noteCount)" : "\(noteCount) \(noteCount == 1 ? "note" : "notes")") : nil) { AgentMemoryPage(agent: current) }
+          // everything else, in one list (board 16c)
+          link("All settings", id: "agent-all-settings", icon: "slider.horizontal.3") { AgentAllSettings(agent: current) }
         }
       }
       VStack(alignment: .leading, spacing: 8) {
@@ -245,9 +248,8 @@ struct AgentEditPage: View {
       .accessibilityLabel("Bubble look").accessibilityIdentifier("edit-look")
 
       caption("Name")
+      NameField(placeholder: current.name, text: $name, id: "edit-name")
       CardGroup {
-        TextField(current.name, text: $name).font(.system(size: 16)).foregroundStyle(Palette.text)
-          .padding(.horizontal, 14).frame(height: 48).accessibilityIdentifier("edit-name")
         HStack(spacing: 2) {
           Text("@").foregroundStyle(Palette.faint)
           TextField("handle", text: Binding(get: { handle }, set: { handle = ManagementText.typingHandle($0.replacingOccurrences(of: "@", with: "")) }))
@@ -575,5 +577,36 @@ struct AgentLibraryPage: View {
 
   private func open(_ f: LibraryFile) {
     action.run { preview = try await store.localFile(f.id, name: f.name) }
+  }
+}
+
+/**
+ * A name you can tell is editable (board 16, "Rename"): a field with a hairline border and a pencil
+ * on the right. While typing, the border darkens and the pencil hides.
+ */
+struct NameField: View {
+  var placeholder: String
+  @Binding var text: String
+  var id: String? = nil
+  @FocusState private var focused: Bool
+
+  var body: some View {
+    HStack(spacing: 8) {
+      TextField(placeholder, text: $text)
+        .accessibilityIdentifier(id ?? "")
+        .font(.system(size: 16)).foregroundStyle(Palette.text)
+        .focused($focused)
+        .submitLabel(.done)
+        .accessibilityLabel("Name")
+      if !focused {
+        Image(systemName: "pencil").font(.system(size: 14)).foregroundStyle(Palette.faint)
+          .accessibilityHidden(true)
+      }
+    }
+    .padding(.horizontal, 14).frame(height: 48)
+    .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(focused ? Palette.text.opacity(0.55) : Palette.hairline, lineWidth: focused ? 1.5 : 1))
+    .contentShape(Rectangle())
+    .onTapGesture { focused = true }
   }
 }

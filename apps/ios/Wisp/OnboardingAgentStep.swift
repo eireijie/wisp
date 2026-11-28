@@ -16,6 +16,8 @@ struct OnboardingAgentStep: View {
   @State private var busy = false
   @State private var error: String?
   @State private var loaded = false
+  /** where it runs (board 16c): the shared computer unless a device is picked */
+  @State private var runsOn: RunsOn = .shared
   @FocusState private var naming: Bool
   @ReduceMotion private var reduceMotion
 
@@ -53,6 +55,10 @@ struct OnboardingAgentStep: View {
         .padding(.top, 14)
         .animation(Motion.pick(Motion.pop, reduceMotion), value: look.color)
         .accessibilityElement(children: .contain).accessibilityLabel("Colour")
+        if existing == nil, store.nodes.contains(where: \.usable) {
+          CardGroup { RunsOnRow(selection: runsOn, id: "ob-runs-on") { runsOn = $0 } }
+            .padding(.top, 22)
+        }
         if let error {
           Text(error).font(.system(size: 14)).foregroundStyle(Palette.red).multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true).padding(.top, 16).obPop()
@@ -100,6 +106,11 @@ struct OnboardingAgentStep: View {
                               "instructions": AnyEncodable(draft.instructions),
                               "settings": AnyEncodable(["appearance": AnyEncodable(look)] as Fields)]
         if let device { fields["nodeId"] = AnyEncodable(device.id) }
+        if case .device(let id) = runsOn, let patch = RunsOn.patch(runsOn, sharedComputerId: nil, computers: store.computers, nodes: store.nodes) {
+          // right on the picked device (its screen when it has one), not the shared computer
+          fields.merge(patch) { _, new in new }
+          fields["harness"] = AnyEncodable(AddAgent.preferredHarness(store, node: id) ?? harness)
+        }
         agent = try await store.createAgent(fields)
       }
       OnboardingAnswers.save(workspaceId) { $0.agentId = agent.id }

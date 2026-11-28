@@ -179,11 +179,10 @@ struct ConnectProviderView: View {
   private func keyEntry(_ info: ModelProviderInfo) -> some View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Paste a \(label) API key.").font(.system(size: 15)).foregroundStyle(Palette.muted)
-      SecureField(info.keyPrefix.map { "\($0)…" } ?? "API key", text: $key)
+      RevealField(placeholder: info.keyPrefix.map { "\($0)…" } ?? "API key", text: $key, label: "API key", id: "key-field")
         .font(.system(size: 15, design: .monospaced)).textInputAutocapitalization(.never).autocorrectionDisabled()
         .padding(.horizontal, 12).frame(height: 40)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.field))
-        .accessibilityIdentifier("key-field")
       HStack(spacing: 12) {
         Button { connectKey() } label: {
           HStack(spacing: 6) {

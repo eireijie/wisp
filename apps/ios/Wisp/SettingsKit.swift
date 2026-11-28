@@ -96,14 +96,16 @@ struct FieldRow: View {
       .frame(minWidth: 96, alignment: .leading)
       .layoutPriority(1)
       Group {
-        if secure { SecureField("", text: $text, prompt: Text(prompt).foregroundStyle(Palette.faint)) }
-        else { TextField("", text: $text, prompt: Text(prompt).foregroundStyle(Palette.faint)) }
+        if secure { RevealField(text: $text, prompt: Text(prompt).foregroundStyle(Palette.faint), alignment: .trailing, label: title, id: id) }
+        else {
+          TextField("", text: $text, prompt: Text(prompt).foregroundStyle(Palette.faint))
+            .accessibilityLabel(title)
+            .accessibilityIdentifier(id ?? "")
+        }
       }
       .multilineTextAlignment(.trailing).font(.system(size: 15)).foregroundStyle(Palette.text)
       .keyboardType(keyboard).textContentType(contentType)
       .textInputAutocapitalization(.never).autocorrectionDisabled()
-      .accessibilityLabel(title)
-      .accessibilityIdentifier(id ?? "")
     }
     .padding(.horizontal, 14).frame(minHeight: subtitle == nil ? 48 : 56)
   }

@@ -138,6 +138,10 @@ struct Agent: Codable, Identifiable, Hashable {
     var effort: String?
     var fast: Bool?
     var soulLocked: Bool?
+    /** its harness may load the device owner's own plugins and helpers (off unless set; only that owner turns it on) */
+    var ownPlugins: Bool?
+    /** its people's own computers it may use, by device id: "ask" first or "tell" after; left out it can't */
+    var useDevices: [String: String]?
     var anyoneCanAsk: Bool?
     var role: String?
     var roleNotes: String?

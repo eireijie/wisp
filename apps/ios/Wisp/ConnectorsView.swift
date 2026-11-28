@@ -124,6 +124,16 @@ struct ConnectorDetail: View {
           MarketPill(text: current.enabled == false ? "Off" : current.needsSignIn ? "Sign in" : "On", tone: current.enabled == false ? .grey : current.needsSignIn ? .warn : .green)
         }
       }
+      if current.noAppsPicked {
+        CardGroup {
+          HStack(spacing: 12) {
+            Text("No apps picked yet").font(.system(size: 15)).foregroundStyle(Palette.text)
+            Spacer(minLength: 8)
+            PickAppsButton(connector: current)
+          }
+          .padding(.horizontal, 14).frame(minHeight: 52)
+        }
+      }
       InlineError(error: current.auth?.error)
       ForEach(current.warnings ?? [], id: \.self) { Text($0).font(.footnote).foregroundStyle(MarketColor.warn) }
       MarketLabel("Who can use it")

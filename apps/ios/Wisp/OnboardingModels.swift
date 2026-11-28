@@ -566,6 +566,32 @@ enum SetupGoals {
       .filter { !$0.isEmpty }.joined(separator: " ")
   }
 
+  /**
+   * Introduce yourself (board 16b): the person's own first message, written from their picks, and
+   * exactly what's sent. "Hi Juno, I'm Sam. I'd like help keeping my days on track and staying on top
+   * of my messages. About me: I work weekends. Keep it friendly, and check in each morning."
+   */
+  static func introMessage(agent: String, person: String, goals: [String], about: String, talk: SetupTalk, when: SetupCheckIn) -> String {
+    let first = OnboardingText.first(person)
+    let hi = agent.trimmed.isEmpty ? "Hi" : "Hi \(agent.trimmed)"
+    let greet = first.isEmpty ? "\(hi)!" : "\(hi), I'm \(first)."
+    let want = picked(goals).map(\.want)
+    let help = want.isEmpty ? "I'm not sure yet what I'd like help with." : "I'd like help \(OnboardingText.list(want))."
+    let known = String(tidy(about).prefix(300))
+    let me = known.isEmpty ? "" : "About me: \(stop(known))"
+    let style = switch talk {
+    case .short: "Keep it short"
+    case .friendly: "Keep it friendly"
+    case .thorough: "Be thorough"
+    }
+    let check = switch when {
+    case .morning: "check in each morning."
+    case .evening: "check in each evening."
+    case .needed: "only check in when it matters."
+    }
+    return [greet, help, me, "\(style), and \(check)"].filter { !$0.isEmpty }.joined(separator: " ")
+  }
+
   /** "What I do" from the goals: "Helps with keeping my days on track.", or the plain default. */
   static func role(_ goals: [String]) -> String {
     let want = picked(goals).map(\.want)

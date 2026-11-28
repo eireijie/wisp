@@ -60,10 +60,17 @@ extension Store {
 
   func connectApps(_ catalogIds: [String]) async throws -> ConnectStart {
     guard let origin = hubOrigin else { throw API.Failure(status: 0, message: "Bubble AI isn't connected.") }
-    let body: Fields = ["catalogIds": AnyEncodable(catalogIds), "origin": AnyEncodable(origin), "returnTo": AnyEncodable("close"), "agentIds": AnyEncodable([String]())]
+    let body: Fields = ["catalogIds": AnyEncodable(catalogIds), "origin": AnyEncodable(origin), "returnTo": AnyEncodable("close"), "allAgents": AnyEncodable(true)]
     let start: ConnectStart = try await fetch { try await $0.post("/api/connectors/connect", body) }
     try? await refreshConnectors()
     return start
+  }
+
+  /** Back from an app hub's own page (Composio's Pick apps): ask which apps are picked now, and show it. */
+  func recheckLinkedApps(_ connectorId: String) async {
+    struct Answer: Decodable { var linkedApps: LinkedApps? }
+    let _: Answer? = try? await fetch { try await $0.get("/api/connectors/\(connectorId)/linked-apps") }
+    try? await refreshConnectors()
   }
 
   /** One read to check a key works. A hub that can't say counts as unchecked, not as wrong. */

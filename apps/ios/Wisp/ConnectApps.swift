@@ -283,6 +283,9 @@ struct ConnectCard: View {
   private func row(_ a: ConnectSuggestion) -> some View {
     let state = connecting.state(a.id)
     let failed: String? = if case .failed(let why) = state { why } else { nil }
+    // an app hub (Composio) that's on but has nothing picked inside it yet (board 16)
+    let hub = store.connectors.first { $0.catalogId == a.id && $0.noAppsPicked }
+    let empty = state == .on && hub != nil
     return HStack(spacing: 12) {
       if a.recommended == true { LineTile(symbol: "square.stack.3d.up", size: 36) } else { AppTile(name: a.name, ids: [a.id], size: 36) }
       VStack(alignment: .leading, spacing: 2) {
@@ -291,13 +294,19 @@ struct ConnectCard: View {
           HStack(spacing: 6) { name(a); if a.recommended == true { RecommendedMark() } }
           VStack(alignment: .leading, spacing: 2) { name(a); if a.recommended == true { RecommendedMark() } }
         }
-        Text(failed ?? a.why).font(.system(size: 13)).foregroundStyle(failed == nil ? Palette.muted : Palette.red)
-          .fixedSize(horizontal: false, vertical: true)
+        if empty {
+          // connected, but it reaches nothing until apps are picked on Composio's own page
+          Text("No apps picked yet").font(.system(size: 13)).foregroundStyle(Palette.muted)
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+          Text(failed ?? a.why).font(.system(size: 13)).foregroundStyle(failed == nil ? Palette.muted : Palette.red)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
       Spacer(minLength: 6)
       switch state {
       case .on:
-        DoneMark(word: "Connected").foregroundStyle(Palette.statusOnline)
+        if empty, let hub { PickAppsButton(connector: hub) } else { DoneMark(word: "Connected").foregroundStyle(Palette.statusOnline) }
       case .out:
         HStack(spacing: 6) {
           ProgressView().controlSize(.small).accessibilityLabel("Finish signing in")
@@ -326,5 +335,30 @@ struct ConnectAppsSheet: View {
         .chatDestinations()
     }
     .presentationDragIndicator(.hidden)
+  }
+}
+
+/**
+ * "Pick apps" (board 16): opens the app hub's own page (Composio's) where the person picks which apps
+ * it reaches. Back in Bubble AI, it asks the hub again, so the card stops saying "No apps picked yet".
+ */
+struct PickAppsButton: View {
+  @Environment(Store.self) private var store
+  @Environment(\.openURL) private var openURL
+  @Environment(\.scenePhase) private var scenePhase
+  var connector: AppConnector
+  @State private var away = false
+
+  var body: some View {
+    if let url = connector.linkedApps?.pickUrl.flatMap(URL.init(string:)) {
+      GoPill(title: "Pick apps") { away = true; openURL(url) }
+        .accessibilityLabel("Pick apps in \(connector.name)")
+        .accessibilityIdentifier("pick-apps")
+        .onChange(of: scenePhase) { _, phase in
+          guard phase == .active, away else { return }
+          away = false
+          Task { await store.recheckLinkedApps(connector.id) }
+        }
+    }
   }
 }

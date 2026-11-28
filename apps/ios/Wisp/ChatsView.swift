@@ -70,7 +70,7 @@ enum ChatList {
 
 /**
  * Home (round 11, board 8 option C): your initials at the top left (you and settings) and + at the top
- * right, both on Liquid Glass; every agent and team as a tile (pinned ones first); then your chats in
+ * right, both on Liquid Glass; what you pinned as tiles (only those, board 16c); then your chats in
  * folders that fold shut. Search pulls down from the top. Pins and folders (the hub's sections) are
  * kept in the hub (UserPrefs.sidebar), the same as on the desktop. Press and hold a chat for its menu
  * (board 11).
@@ -316,8 +316,8 @@ struct ChatsView: View {
     if let notice {
       plain(SuggestionBanner(symbol: "pin", text: notice, onClose: { self.notice = nil }, closeLabel: "OK").padding(.horizontal, -12).padding(.bottom, 8))
     }
-    // every agent and team as a tile: pinned ones first, then the rest as the list has them (hidden ones stay out)
-    let tiles = placed.pins.compactMap { byKey[$0] } + all.filter { e in !placed.pins.contains(e.key) && placed.sections.contains { $0.keys.contains(e.key) } }
+    // only what's pinned is a tile (board 16c); everything else is a chat row below. Pin and Unpin are in the hold menu.
+    let tiles = placed.pins.compactMap { byKey[$0] }
     if !tiles.isEmpty { plain(pinGrid(tiles, layout: l).tourTarget("pins").tourTarget("yourturn")) }
     let firstNeeds = all.first(where: needsYou)?.id
     do {
@@ -372,7 +372,7 @@ struct ChatsView: View {
         }
         .buttonStyle(.press)
         .liftOnHold { lifted = LiftedChat(entry: e, frame: $0) }
-        .accessibilityLabel("\(e.name)\(l.pins.contains(e.key) ? ", pinned" : "")\(isUnread(e, l) ? ", unread" : "")\(needsYou(e) ? ", needs you" : "")")
+        .accessibilityLabel("\(e.name), pinned\(isUnread(e, l) ? ", unread" : "")\(needsYou(e) ? ", needs you" : "")")
         .accessibilityIdentifier("pin")
       }
     }

@@ -19,7 +19,7 @@ struct OnboardingFlow: View {
   var workspaceId: String
   /** the flow is over: open this chat (nil: there's no agent yet) */
   var onFinish: (_ channelId: String?) -> Void
-  enum Step: String, CaseIterable { case agent, start, ai, yours }
+  enum Step: String, CaseIterable { case agent, start, ai, yours, away }
   @State private var step = Step.agent
   @State private var forward = true
   @State private var stage = HostStage()
@@ -34,12 +34,14 @@ struct OnboardingFlow: View {
   @State private var checkIn = SetupCheckIn.morning
   /** its AI answered: the first run's own extras (a morning plan) can switch on at the end */
   @State private var answered = false
+  /** the hub has no address that works away from home and the person can turn one on: the last page is Tailscale (board 16) */
+  @State private var needsAway = false
   @ReduceMotion private var reduceMotion
 
   private var agent: Agent? { agentId.flatMap { store.agent($0) } }
   private var name: String { agent?.name ?? "your agent" }
   private var person: String { store.me?.preferredName ?? store.me?.name ?? "" }
-  private var steps: [Step] { path == .advanced ? Step.allCases : [.agent, .start, .ai] }
+  private var steps: [Step] { (path == .advanced ? [.agent, .start, .ai, .yours] : [.agent, .start, .ai]) + (needsAway ? [.away] : []) }
   private var progress: Double { Double((steps.firstIndex(of: step) ?? 0) + 1) / Double(steps.count + 1) }
   private var backTo: Step? {
     guard !busy else { return nil }
@@ -49,6 +51,8 @@ struct OnboardingFlow: View {
     case .ai: return .start
     // once its AI has answered, its chat is open: there's no going back to choose again
     case .yours: return answered ? nil : .ai
+    // the first message has gone: nothing before this to change
+    case .away: return nil
     }
   }
 
@@ -100,13 +104,15 @@ struct OnboardingFlow: View {
       if let agentId {
         OnboardingAIStep(workspaceId: workspaceId, agentId: agentId, onBusy: { busy = $0 }) { ok in
           answered = ok
-          if path == .advanced { go(.yours) } else { Task { await finish() } }
+          if path == .advanced { go(.yours) } else { Task { await afterLastPage() } }
         }
       }
     case .yours:
       OnboardingYoursStep(name: name, person: person, look: agent?.settings?.appearance ?? look, goals: $goals, about: $about, talk: $talk, checkIn: $checkIn, busy: busy) {
         Task { await saveYours() }
       }
+    case .away:
+      OnboardingAwayStep { Task { await finish() } }
     }
   }
 
@@ -155,8 +161,20 @@ struct OnboardingFlow: View {
 
   // MARK: moving on
 
+  /** After the last of the usual pages: Tailscale when this Bubble AI is only reachable at home, else its chat. */
+  private func afterLastPage() async {
+    if needsAway { go(.away) } else { await finish() }
+  }
+
+  /** Owners only (they're the ones who can turn it on), and never for a Cloud server, which has its own address. */
+  private func checkAway() async {
+    guard store.isOwner, let info = try? await store.reach() else { return }
+    needsAway = OnboardingAway.needed(info)
+  }
+
   private func load() {
     guard !loaded else { return }
+    Task { await checkAway() }
     let saved = OnboardingAnswers.load(workspaceId)
     if let id = saved.agentId, store.agent(id) != nil { agentId = id }
     if let p = saved.path.flatMap(SetupPath.init(rawValue:)) { path = p }
@@ -181,9 +199,11 @@ struct OnboardingFlow: View {
     OnboardingAnswers.save(workspaceId) { $0.goals = goals; $0.talk = talk.rawValue; $0.checkIn = checkIn.rawValue }
     let instructions = SetupGoals.instructions(agent: agent.name, person: person, goals: goals, talk: talk, when: checkIn, about: about)
     _ = try? await store.updateAgent(agent.id, ["instructions": AnyEncodable(instructions), "settings": AnyEncodable(["role": AnyEncodable(SetupGoals.role(goals))] as Fields)])
-    try? await store.sendSetupPicks(agent.id, text: SetupGoals.picksMessage(goals, about: about), goals: goals)
+    // the message they saw on the right is the one that goes, word for word
+    let text = SetupGoals.introMessage(agent: agent.name, person: person, goals: goals, about: about, talk: talk, when: checkIn)
+    try? await store.sendSetupPicks(agent.id, text: text, goals: goals)
     busy = false
-    await finish()
+    await afterLastPage()
   }
 
   /** The end: its chat opens (Show me around follows there). Closed before an agent exists: nothing opens. */
