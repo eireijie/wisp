@@ -506,7 +506,7 @@ function ThinksWith({ agent, nodes }: { agent: FullAgent; nodes: NodeInfo[] }) {
         </Line>
         {custom && (
           <Line label="Model id">
-            <InPlace value={model} onSave={setModel} label="Model id" placeholder={agent.harness === "codex" ? "gpt-6.1-sol" : "claude-opus-5-5"} className="h-8 w-48 border border-line bg-panel text-[13px] text-ink" />
+            <InPlace look="bare" value={model} onSave={setModel} label="Model id" placeholder={agent.harness === "codex" ? "gpt-6.1-sol" : "claude-opus-5-5"} className="h-8 w-48 border border-line bg-panel text-[13px] text-ink" />
           </Line>
         )}
         <Line label="Harness">

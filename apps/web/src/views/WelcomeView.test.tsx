@@ -7,7 +7,8 @@ import { api } from "../api.ts";
 import { askableOn, finishedSteps, firstRunAgent, makeFirstAgent, NO_NODE, welcomeScreen } from "./WelcomeView.tsx";
 import { AgentStep, JOBS, nextLook, saveNamedAgent, shapeOf, suggestedName } from "./onboarding/AgentStep.tsx";
 import { AIStep, checkAI, foundOn } from "./onboarding/AIStep.tsx";
-import { picksMessage, sampleMessage, yoursInstructions } from "./onboarding/BubbleSetup.tsx";
+import { introMessage, picksMessage, YoursStep, yoursInstructions } from "./onboarding/BubbleSetup.tsx";
+import { AwayStep, awayStepWanted, awayTicks } from "./onboarding/AwayStep.tsx";
 import { lookOf, pointAgentAt } from "./onboarding/firstAgent.ts";
 import { TRACK } from "../components/SetupShell.tsx";
 import { devicesLine, serverAddress, stepsFinished } from "../onboarding.ts";
@@ -56,7 +57,8 @@ describe("the first run is three screens", () => {
   });
   it("marks the agent step done only when there is an agent", () => {
     expect(finishedSteps(false)).toEqual([]);
-    expect(finishedSteps(true)).toEqual(["anywhere", "address", "agent", "devices"]);
+    // away from home is its own page now: never ticked off without being shown
+    expect(finishedSteps(true)).toEqual(["address", "agent", "devices"]);
     expect(stepsFinished(false)).toEqual(["devices"]);
     expect(stepsFinished(true)).toEqual(["agent", "devices"]);
     expect(devicesLine(null)).not.toMatch(/Say hi/);
@@ -293,19 +295,60 @@ describe("making an agent on a device", () => {
   });
 });
 
-describe("Make it yours: the sample message", () => {
-  it("greets the person by first name and follows the picks, the talk style and what they wrote", () => {
-    expect(sampleMessage(["days", "people"], "short", "morning", "", "Yug Patel")).toBe("Morning, Yug! The dentist is at 10, so I moved the gym to 6.");
-    expect(sampleMessage(["days", "people"], "friendly", "evening", "I work weekends.", "Yug")).toBe("Evening, Yug. The dentist is at 10, so I moved the gym to 6. Also, it's your mom's birthday Saturday. Want me to find a gift? (I'll keep in mind: I work weekends.)");
-    expect(sampleMessage(["money"], "thorough", "needed", "", "Yug")).toBe("Hey Yug, your phone bill ($64) is due Thursday. I've already drafted what I can; say go and I'll handle it.");
-    expect(sampleMessage([], "friendly", "morning", "", "")).toBe("Morning! Tell me what's on your mind and I'll take it from there.");
+describe("Introduce yourself: your first message", () => {
+  it("is written from the picks, in the person's own voice, and ends with the talk style and check-ins", () => {
+    expect(introMessage("Juno", "Sam Lee", ["days", "msgs"], "I work weekends and I’m training for a half marathon", "friendly", "morning")).toBe(
+      "Hi Juno, I'm Sam. I'd like help keeping my days on track and staying on top of my messages. About me: I work weekends and I’m training for a half marathon. Keep it friendly, and check in each morning.",
+    );
+    expect(introMessage("Juno", "Sam", ["money"], "", "short", "evening")).toBe("Hi Juno, I'm Sam. I'd like help keeping an eye on money and bills. Keep it short, and check in each evening.");
+    expect(introMessage("Juno", "", [], "", "thorough", "needed")).toBe("Hi Juno. I'm not sure yet what I'd like help with. Be thorough, and only check in when it matters.");
+  });
+  it("shows that message on the right as yours, and the button sends it to the agent", () => {
+    const html = renderToStaticMarkup(
+      createElement(YoursStep, { name: "Juno", person: "Sam", goals: ["days"], onGoals: () => {}, about: "", onAbout: () => {}, talk: "friendly", onTalk: () => {}, when: "morning", onWhen: () => {}, onNext: () => {} }),
+    );
+    expect(html).toContain("Introduce yourself to Juno");
+    expect(html).toContain("Tap what fits. It becomes your first message.");
+    for (const t of ["I’d like help with", "About me", "Talk to me", "Check in"]) expect(html).toContain(t);
+    expect(html).toMatch(/class="bubble me[^"]*" data-testid="intro-message">Hi Juno, I&#x27;m Sam\. I&#x27;d like help keeping my days on track\. Keep it friendly, and check in each morning\.</);
+    expect(html).toContain("Send to Juno");
+    expect(html).not.toContain("Make it yours");
   });
 });
 
-describe("Make it yours: what the agent hears", () => {
-  it("sends the picks and the about-you text in plain words", () => {
-    expect(picksMessage(["days", "people"], "I'm a student and I work weekends.")).toBe("I'd like help with: keeping my days on track and remembering the people I care about. About me: I'm a student and I work weekends.");
-    expect(picksMessage(["business"], "  ")).toBe("I'd like help with: running my business.");
+describe("Use Bubble AI away from home", () => {
+  const info = (state: AccessInfo["tailscale"]["state"], extra: Partial<AccessInfo> = {}, serving = false): AccessInfo =>
+    ({ publicUrl: null, lan: [], download: "https://tailscale.com/download/mac", hubPlatform: "darwin", tailscale: { state, dnsName: "sam-mac.tail3e1.ts.net.", serving, funnel: false }, ...extra }) as AccessInfo;
+  const home = { protocol: "http:", hostname: "127.0.0.1" };
+  it("shows for the owner of a hub at home with no away address, and never for a cloud server", () => {
+    expect(awayStepWanted({ owner: true, info: info("missing"), failed: false, loc: home })).toBe(true);
+    expect(awayStepWanted({ owner: true, info: null, failed: false, loc: { protocol: "http:", hostname: "192.168.1.20" } })).toBe(true);
+    expect(awayStepWanted({ owner: false, info: info("missing"), failed: false, loc: home })).toBe(false);
+    // an older hub with no reach API
+    expect(awayStepWanted({ owner: true, info: null, failed: true, loc: home })).toBe(false);
+    // already on
+    expect(awayStepWanted({ owner: true, info: info("running", { publicUrl: "https://sam-mac.tail3e1.ts.net" }, true), failed: false, loc: home })).toBe(false);
+    // a cloud server opened at its public IP or a domain already has an address
+    expect(awayStepWanted({ owner: true, info: info("missing"), failed: false, loc: { protocol: "http:", hostname: "203.0.113.9" } })).toBe(false);
+    expect(awayStepWanted({ owner: true, info: info("missing"), failed: false, loc: { protocol: "https:", hostname: "bubble.example.com" } })).toBe(false);
+  });
+  it("ticks each part as Tailscale reports it", () => {
+    expect(awayTicks(info("missing"))).toEqual({ installed: false, signedIn: false, on: false });
+    expect(awayTicks(info("needs-login"))).toEqual({ installed: true, signedIn: false, on: false });
+    expect(awayTicks(info("running"))).toEqual({ installed: true, signedIn: true, on: false });
+    expect(awayTicks(info("running", { publicUrl: "https://sam-mac.tail3e1.ts.net" }, true))).toEqual({ installed: true, signedIn: true, on: true });
+  });
+  it("has the three rows, the phone note, Continue and Only at home for now", () => {
+    const html = renderToStaticMarkup(createElement(AwayStep, { onDone: () => {} }));
+    for (const t of ["Use Bubble AI away from home", "Install Tailscale on this", "Sign in to Tailscale", "Turn on your address", "Put Tailscale on your phone too, with the same account.", "Only at home for now"]) expect(html).toContain(t);
+    expect(html).toMatch(/<button type="button" disabled="" class="ob-primary[^"]*">Continue<\/button>/);
+  });
+});
+
+describe("Introduce yourself: what the agent hears", () => {
+  it("puts the picks and the about-you text in plain words", () => {
+    expect(picksMessage(["days", "people"], "I'm a student and I work weekends.")).toBe("I'd like help keeping my days on track and remembering the people I care about. About me: I'm a student and I work weekends.");
+    expect(picksMessage(["business"], "  ")).toBe("I'd like help running my business.");
     expect(picksMessage([], "")).toBe("I'm not sure yet what I'd like help with.");
   });
   it("puts the about-you text, the talk style and the check-ins in its instructions", () => {

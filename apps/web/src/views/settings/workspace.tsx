@@ -674,7 +674,7 @@ export function OrgoPage() {
               if (key.trim() && (await put({ orgoApiKey: key.trim() }))) setKey("");
             }}
           >
-            <Input className="flex-1 min-w-48 font-mono" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={s?.orgo.configured ? "Replace the key" : "sk_..."} aria-label="Orgo API key" />
+            <Input wrapClassName="flex-1 min-w-48" className="font-mono" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={s?.orgo.configured ? "Replace the key" : "sk_..."} aria-label="Orgo API key" />
             <Button variant="primary" disabled={busy || !key.trim()}>
               {s?.orgo.configured ? "Replace" : "Connect"}
             </Button>

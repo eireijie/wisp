@@ -5,6 +5,7 @@ import "@xterm/xterm/css/xterm.css";
 import { RotateCw, X } from "lucide-react";
 import { api } from "../api.ts";
 import { cx } from "./ui.tsx";
+import { PasswordInput } from "./PasswordInput.tsx";
 
 /**
  * One shell, drawn with xterm.js and streamed through the hub from the computer it runs on. Leaving
@@ -295,9 +296,9 @@ function Overlay({ status, target, onCode, onRetry, fixes }: { status: Status; t
       ) : status.state === "code" ? (
         <form onSubmit={submit} className="m-auto flex w-full max-w-[260px] flex-col items-center gap-2.5">
           <span className="text-[#f2f2f4]">Enter {target.name}'s {target.code === "password" ? "password" : "PIN"}</span>
-          <input
+          <PasswordInput
             autoFocus
-            type="password"
+            tone="dark"
             inputMode={target.code === "pin" ? "numeric" : undefined}
             value={value}
             onChange={(e) => setValue(e.target.value)}

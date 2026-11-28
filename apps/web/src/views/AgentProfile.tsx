@@ -614,7 +614,7 @@ export function RolePart({ agent }: { agent: Agent }) {
   return (
     <div className={cx(CARD, "px-3.5 py-2")}>
       {canEdit ? (
-        <InPlace
+        <InPlace look="bare"
           value={agent.settings.role ?? ""}
           onSave={async (role) => {
             await api("PATCH", `/api/agents/${agent.id}`, { settings: { role } });

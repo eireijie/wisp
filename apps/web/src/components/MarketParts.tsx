@@ -1,4 +1,5 @@
 import { useId, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { PasswordInput } from "./PasswordInput.tsx";
 import {
   AppWindow,
   BadgeCheck,
@@ -275,7 +276,8 @@ export function Circle({ label, children, className, wrap, ...p }: { label: stri
 
 export const fieldCls = "h-[50px] w-full rounded-2xl border border-control-line bg-control px-4 text-base text-ink outline-none placeholder:text-faint focus:ring-3 focus:ring-ring/30";
 
-export function TextBox({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) {
+export function TextBox({ className, wrapClassName, ...p }: InputHTMLAttributes<HTMLInputElement> & { wrapClassName?: string }) {
+  if (p.type === "password") return <PasswordInput {...p} wrapClassName={wrapClassName} className={cx(fieldCls, className)} />;
   return <input {...p} className={cx(fieldCls, className)} />;
 }
 

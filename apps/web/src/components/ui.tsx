@@ -7,6 +7,7 @@ import { type Agent } from "@bubble-ai/core";
 import { defaultAppearance } from "@bubble-ai/core/src/appearance.ts";
 import { Ghost, type GhostMood } from "./Ghost.tsx";
 import { MotionMark } from "./MotionMark.tsx";
+import { PasswordInput } from "./PasswordInput.tsx";
 import { familyColor } from "../ghostFamily.ts";
 import { useStore } from "../store.ts";
 import { agentMood } from "../ghostMood.ts";
@@ -50,9 +51,12 @@ export function IconButton({ icon, label, labelAlways, tone = "default", classNa
   );
 }
 
-export function Input({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...p} className={cx("h-9 w-full rounded-[8px] border border-input bg-transparent px-3 text-sm outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30", className)} />;
+export function Input({ className, wrapClassName, ...p }: InputHTMLAttributes<HTMLInputElement> & { wrapClassName?: string }) {
+  if (p.type === "password") return <PasswordInput {...p} wrapClassName={wrapClassName} className={cx(inputCls, className)} />;
+  return <input {...p} className={cx(inputCls, className)} />;
 }
+
+const inputCls = "h-9 w-full rounded-[8px] border border-input bg-transparent px-3 text-sm outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30";
 
 export function Textarea({ className, ...p }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...p} className={cx("w-full rounded-[10px] border border-input bg-transparent px-3 py-2 text-sm outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30", className)} />;

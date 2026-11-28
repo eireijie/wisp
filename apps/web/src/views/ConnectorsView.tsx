@@ -333,7 +333,7 @@ export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved
               ) : (
                 <div key={i} className="flex items-center gap-2">
                   <TextBox className="w-2/5 font-mono" value={r.key} onChange={(e) => setRow(i, { key: e.target.value.replace(/[^A-Za-z0-9_]/g, "_") })} placeholder="NAME" aria-label="Variable name" />
-                  <TextBox className="flex-1 font-mono" type="password" autoComplete="off" value={r.value} onChange={(e) => setRow(i, { value: e.target.value })} placeholder={r.saved ? `Saved (${r.saved})` : "••••••••"} aria-label="Value" />
+                  <TextBox wrapClassName="flex-1" className="font-mono" type="password" autoComplete="off" value={r.value} onChange={(e) => setRow(i, { value: e.target.value })} placeholder={r.saved ? `Saved (${r.saved})` : "••••••••"} aria-label="Value" />
                   <Circle label="Remove" className="circle-sm" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
                     <Trash2 size={15} />
                   </Circle>

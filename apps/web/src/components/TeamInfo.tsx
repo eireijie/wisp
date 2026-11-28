@@ -1,6 +1,6 @@
 import { noChartLine, agentRulesOf } from "./channel-rules.ts";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Play, Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, PenLine, Play, Plus, X } from "lucide-react";
 import { hasSteps, workSteps, type AccessLevel, type Agent, type ChannelNotify, type ChannelTeam } from "@bubble-ai/core";
 import { api } from "../api.ts";
 import { go, href } from "../router.ts";
@@ -103,6 +103,8 @@ export function TeamPanel({ channel, sheet: initial = "details", onClose }: { ch
   const canManage = role === "owner" || role === "member";
   const canEdit = canManage && !channel.archivedAt;
   const [icon, setIcon] = useState(false);
+  // "Rename" in More goes back to the top with the name being edited
+  const [renaming, setRenaming] = useState(false);
   const team = channel.settings.team;
   const stepped = hasSteps(team);
   const steps = stepped ? workSteps(team?.steps ?? []).length : 0;
@@ -137,7 +139,7 @@ export function TeamPanel({ channel, sheet: initial = "details", onClose }: { ch
               ) : (
                 <ChatAvatar chat={{ kind: "team", agent: null, channel }} size={64} />
               )}
-              <NameLabel channel={channel} canEdit={canEdit} />
+              <NameLabel channel={channel} canEdit={canEdit} rename={renaming} onRenameStarted={() => setRenaming(false)} />
               <div className="max-w-full [&_input]:text-center">
                 <TopicLabel channel={channel} canEdit={canEdit} />
               </div>
@@ -157,7 +159,7 @@ export function TeamPanel({ channel, sheet: initial = "details", onClose }: { ch
         {sheet === "how" && <HowSheet channel={channel} canEdit={canEdit} agentCount={agentNames.length} />}
         {sheet === "schedule" && <ScheduleSheet channel={channel} canEdit={canEdit} />}
         {sheet === "knows" && <KnowsSheet channel={channel} canEdit={canEdit} />}
-        {sheet === "more" && <MoreSheet channel={channel} members={members} canManage={canManage} onSheet={setSheet} onClose={onClose} />}
+        {sheet === "more" && <MoreSheet channel={channel} members={members} canManage={canManage} onSheet={setSheet} onClose={onClose} onRename={() => (setRenaming(true), setSheet("details"))} />}
         {sheet === "rules" && <RulesSheet channel={channel} canEdit={canEdit} />}
         {sheet === "pins" && <ChannelPins channel={channel} onClose={onClose} />}
       </div>
@@ -166,13 +168,13 @@ export function TeamPanel({ channel, sheet: initial = "details", onClose }: { ch
   );
 }
 
-/** One row of the panel: its label, the current value, a chevron. */
-function PanelRow({ label, value, onClick, danger }: { label: string; value?: ReactNode; onClick?: () => void; danger?: boolean }) {
+/** One row of the panel: its label, the current value, a chevron (or another icon at the end, for an action). */
+function PanelRow({ label, value, onClick, danger, end }: { label: string; value?: ReactNode; onClick?: () => void; danger?: boolean; end?: ReactNode }) {
   return (
     <button type="button" onClick={onClick} className={ROW}>
       <span className={cx("shrink-0 font-medium", danger && "text-bad")}>{label}</span>
       <span className="min-w-0 flex-1 truncate text-right text-[13px] text-muted">{value}</span>
-      {!danger && <ChevronRight size={15} className="shrink-0 text-faint" aria-hidden />}
+      {end ?? (!danger && <ChevronRight size={15} className="shrink-0 text-faint" aria-hidden />)}
     </button>
   );
 }
@@ -205,9 +207,12 @@ function SwitchRow({ label, on, onChange, disabled }: { label: string; on: boole
   );
 }
 
-/** The team's name; click it to rename the team. */
-function NameLabel({ channel, canEdit }: { channel: ChannelInfo; canEdit: boolean }) {
+/** The team's name with a faint pencil after it; click it (or Rename in More) to rename the team. */
+function NameLabel({ channel, canEdit, rename, onRenameStarted }: { channel: ChannelInfo; canEdit: boolean; rename?: boolean; onRenameStarted?: () => void }) {
   const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (rename) (setEditing(true), onRenameStarted?.());
+  }, [rename, onRenameStarted]);
   const [value, setValue] = useState(channel.name);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setValue(channel.name), [channel.name]);
@@ -236,12 +241,13 @@ function NameLabel({ channel, canEdit }: { channel: ChannelInfo; canEdit: boolea
           onKeyDown={(e) => (e.key === "Enter" ? (e.currentTarget as HTMLInputElement).blur() : e.key === "Escape" && (e.stopPropagation(), setValue(channel.name), setEditing(false)))}
           maxLength={80}
           aria-label="Team name"
-          className={cx(cls, "w-56 rounded-md bg-hover px-1.5 text-center outline-none")}
+          className={cx(cls, "w-56 rounded-[10px] bg-transparent px-2 text-center outline-none shadow-[inset_0_0_0_1.5px_var(--ink)]")}
         />
       ) : (
         <h2 className={cls}>
-          <button type="button" onClick={() => setEditing(true)} title="Rename" className="max-w-full truncate rounded-md px-1.5 hover:bg-hover">
-            {channel.name}
+          <button type="button" onClick={() => setEditing(true)} title="Rename" aria-label={`${channel.name}. Rename`} className="inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 hover:bg-hover">
+            <span className="truncate">{channel.name}</span>
+            <PenLine size={15} strokeWidth={1.8} className="shrink-0 text-faint" aria-hidden />
           </button>
         </h2>
       )}
@@ -491,7 +497,7 @@ function RulesSheet({ channel, canEdit }: { channel: ChannelInfo; canEdit: boole
 }
 
 /** The rest of a team: its rules, who answers, pins, who it reports to, what it tells you, and archiving, leaving or deleting it. */
-function MoreSheet({ channel, members, canManage, onSheet, onClose }: { channel: ChannelInfo; members: ChannelMember[] | null; canManage: boolean; onSheet: (s: TeamSheet) => void; onClose: () => void }) {
+function MoreSheet({ channel, members, canManage, onSheet, onClose, onRename }: { channel: ChannelInfo; members: ChannelMember[] | null; canManage: boolean; onSheet: (s: TeamSheet) => void; onClose: () => void; onRename: () => void }) {
   const names = useNames();
   const agents = useStore((s) => s.agents);
   const notify = useStore((s) => s.channels.find((c) => c.id === channel.id)?.notify ?? channel.notify);
@@ -544,6 +550,7 @@ function MoreSheet({ channel, members, canManage, onSheet, onClose }: { channel:
         <PanelRow label="Context and access" onClick={() => setDialog("context")} />
       </div>
       <div className={CARD}>
+        {canEdit && !isProtected(channel) && <PanelRow label="Rename" onClick={onRename} end={<PenLine size={15} strokeWidth={1.8} className="shrink-0 text-faint" aria-hidden />} />}
         {canManage && <PanelRow label={channel.archivedAt ? "Unarchive" : "Archive"} onClick={() => (channel.archivedAt ? run(setArchived(channel, false)) : setDialog("archive"))} />}
         {channel.joined && channel.name !== "general" && <PanelRow label="Leave" onClick={() => setDialog("leave")} />}
         {canManage && <PanelRow danger label="Delete" onClick={() => setDialog("delete")} />}

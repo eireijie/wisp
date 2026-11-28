@@ -41,7 +41,10 @@
 .ob-seg button { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 13px; color: var(--muted); outline: none; transition: background-color .24s, color .24s, box-shadow .24s; }
 .ob-seg button[aria-checked="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .08), inset 0 0 0 1px var(--line); font-weight: 600; }
 .ob-seg button:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--wisp) 45%, transparent); }
-/* Make it yours on a phone: the choices share the row evenly, so a label that needs two lines gets them neatly */
+/* Introduce yourself: Talk to me and Check in fill the row (board 16b) */
+.ob-seg-wide { display: flex; padding: 3px; border-radius: 10px; }
+.ob-seg-wide button { flex: 1 1 0; height: 30px; border-radius: 8px; }
+/* Introduce yourself on a phone: the choices share the row evenly, so a label that needs two lines gets them neatly */
 @media (max-width: 639px) {
   .ob-seg-fill { display: flex; width: 100%; }
   .ob-seg-fill button { flex: 1 1 0; height: auto; min-height: 30px; padding: 4px 6px; line-height: 16px; }

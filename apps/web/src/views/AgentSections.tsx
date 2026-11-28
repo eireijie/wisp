@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronRight, Plug, Plus, Wand2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Pencil, Plug, Plus, Wand2 } from "lucide-react";
 import type { AccessRule, Agent, Connector, Skill } from "@bubble-ai/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
@@ -103,8 +103,12 @@ export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChang
   );
 }
 
-/** Text edited where it stands: it saves when you leave the field or press Enter; Escape puts it back. A save that fails puts it back too. */
-export function InPlace({ value, onSave, label, placeholder, maxLength, className }: { value: string; onSave: (v: string) => Promise<unknown>; label: string; placeholder?: string; maxLength?: number; className?: string }) {
+/**
+ * Text edited where it stands: it saves when you leave the field or press Enter; Escape puts it back. A save that fails puts it back too.
+ * By default it looks like a field you can tell is editable: a hairline border and a pencil at the end; while typing the border
+ * darkens and the pencil hides. `look="bare"` keeps it a plain line for spots that already sit in a box.
+ */
+export function InPlace({ value, onSave, label, placeholder, maxLength, className, look = "field" }: { value: string; onSave: (v: string) => Promise<unknown>; label: string; placeholder?: string; maxLength?: number; className?: string; look?: "field" | "bare" }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   const save = async () => {
@@ -116,7 +120,7 @@ export function InPlace({ value, onSave, label, placeholder, maxLength, classNam
       setDraft(value);
     }
   };
-  return (
+  const input = (
     <input
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
@@ -128,8 +132,19 @@ export function InPlace({ value, onSave, label, placeholder, maxLength, classNam
       aria-label={label}
       placeholder={placeholder}
       maxLength={maxLength}
-      className={cx("min-w-0 rounded-md bg-transparent px-1.5 outline-none placeholder:text-faint hover:bg-hover focus:bg-hover", className)}
+      className={
+        look === "bare"
+          ? cx("min-w-0 rounded-md bg-transparent px-1.5 outline-none placeholder:text-faint hover:bg-hover focus:bg-hover", className)
+          : cx(className, "h-12! w-full min-w-0 flex-1 rounded-[12px] bg-transparent! pl-3.5! pr-10! text-[16px]! outline-none placeholder:text-faint")
+      }
     />
+  );
+  if (look === "bare") return input;
+  return (
+    <span data-inplace-field className="group/ip relative flex w-full min-w-0 items-center rounded-[12px] bg-card shadow-[inset_0_0_0_1px_var(--line)] focus-within:shadow-[inset_0_0_0_1.5px_var(--ink)]">
+      {input}
+      <Pencil size={16} strokeWidth={1.8} aria-hidden className="pointer-events-none absolute right-3.5 text-muted group-focus-within/ip:hidden" />
+    </span>
   );
 }
 

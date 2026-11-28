@@ -233,13 +233,13 @@ A hub in Docker can't update itself: pull the new image and recreate the contain
 
 ## Reaching it from your phone
 
-**Tailscale is built in.** Setup's first step, **Use Bubble AI from anywhere**, and **Settings → Access** walk the owner through it with buttons: install Tailscale on the computer running Bubble AI, sign in, then **Turn on the address**, which runs `tailscale serve` for the hub and gives it `https://<computer>.<tailnet>.ts.net`. From then on every link Bubble AI hands out (invites, devices joining, install commands, phone pairing) uses that address. **Let people without Tailscale in** turns on Tailscale Funnel for the same address, for a friend who isn't on your tailnet. On Linux, if Tailscale refuses Bubble AI's changes, run `sudo tailscale set --operator=$USER` once. A hub in Docker can't see Tailscale on its host; use one of the other ways below.
+**Tailscale is built in.** First-run setup has a step right after the agent's AI is picked, **Use Bubble AI away from home**, and **Settings → Computers → Away from home** has the same: install Tailscale on the computer running Bubble AI, sign in on Tailscale's own page, and the address turns on by itself (each part ticks off as it finishes). **Only at home for now** skips it. A cloud server, or a hub already opened at a public or Tailscale address, skips the step, since it already has an address. Turning the address on runs `tailscale serve` for the hub and gives it `https://<computer>.<tailnet>.ts.net`. From then on every link Bubble AI hands out (invites, devices joining, install commands, phone pairing) uses that address. **Let people without Tailscale in** turns on Tailscale Funnel for the same address, for a friend who isn't on your tailnet. On Linux, if Tailscale refuses Bubble AI's changes, run `sudo tailscale set --operator=$USER` once. A hub in Docker can't see Tailscale on its host; use one of the other ways below.
 
 The Bubble AI apps for iPhone and Android pair with your hub by QR code: in Bubble AI on a computer, open **Settings → Computers → Phone → Start pairing** and scan the code with the app. The code carries Bubble AI's Tailscale address when it's on, then the address you opened Bubble AI at plus the hub machine's Wi-Fi and Tailscale addresses, and the phone uses the first one it can reach.
 
 The PWA needs HTTPS to install on iPhone and to use notifications. Pick one:
 
-- **Tailscale (private, easiest):** use Settings → Access (above), or by hand: install Tailscale on the hub, then run `tailscale serve --bg 4747`. Open `https://<hub>.<tailnet>.ts.net` on any device in your tailnet.
+- **Tailscale (private, easiest):** use Settings → Computers → Away from home (above), or by hand: install Tailscale on the hub, then run `tailscale serve --bg 4747`. Open `https://<hub>.<tailnet>.ts.net` on any device in your tailnet.
 - **Your own domain:** put Caddy or nginx in front of port 4747. Caddy example: `wisp.example.com { reverse_proxy localhost:4747 }`. WebSockets (`/ws`, `/ws/node`) must be proxied too; Caddy does that automatically.
 - **Cloudflare Tunnel:** `cloudflared tunnel --url http://localhost:4747`.
 

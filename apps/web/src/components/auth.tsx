@@ -3,6 +3,7 @@ import { Moon, Sun } from "lucide-react";
 import { useAppearance } from "../theme.ts";
 import { MotionMark } from "./MotionMark.tsx";
 import { cx } from "./ui.tsx";
+import { PasswordInput } from "./PasswordInput.tsx";
 
 /**
  * Everything before you're in the app (sign in, join, setup, authorize) shares one look: the
@@ -53,7 +54,8 @@ export function AuthField({ label, hint, children }: { label?: string; hint?: Re
 }
 
 export function AuthInput({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...p} className={cx("h-12 w-full rounded-xl border border-line bg-card px-[18px] text-body text-ink outline-none placeholder:text-faint focus:border-ring", className)} />;
+  const cls = cx("h-12 w-full rounded-xl border border-line bg-card px-[18px] text-body text-ink outline-none placeholder:text-faint focus:border-ring", className);
+  return p.type === "password" ? <PasswordInput {...p} className={cls} /> : <input {...p} className={cls} />;
 }
 
 /** The big pill: filled (primary) or a raised control (secondary). */

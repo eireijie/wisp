@@ -5,6 +5,7 @@ import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { PROVIDERS, connectWays, siteName } from "../models.ts";
 import { cx } from "./ui.tsx";
+import { PasswordInput } from "./PasswordInput.tsx";
 import { SegBar } from "./RunParts.tsx";
 import { canReadClipboard, pasteHereLine, readClipboard } from "../harness-signin.ts";
 import { copyText } from "../clipboard.ts";
@@ -233,8 +234,7 @@ function KeyForm({ provider, big, onDone }: { provider: ModelProvider; big?: boo
   };
   return (
     <form onSubmit={submit} className={cx(card, "space-y-2.5")}>
-      <input
-        type="password"
+      <PasswordInput
         value={key}
         onChange={(e) => (setKey(e.target.value), setError(null))}
         placeholder={info.keyPrefix ? `${info.keyPrefix}…` : `${info.label} API key`}

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { SetupProblem, setupField } from "../components/SetupShell.tsx";
+import { PasswordInput } from "../components/PasswordInput.tsx";
 import { BubbleSlot, Stage } from "./onboarding/Stage.tsx";
 import { DrawnCheck } from "../components/onboarding/obMotion.tsx";
 import { api } from "../api.ts";
@@ -227,7 +228,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
                 </span>
               )}
             </span>
-            <input className={setupField} type="password" value={form.password} onChange={set("password")} autoComplete="new-password" minLength={8} placeholder="Password" aria-label="Password" required />
+            <PasswordInput className={setupField} value={form.password} onChange={set("password")} autoComplete="new-password" minLength={8} placeholder="Password" aria-label="Password" required />
             {form.password && <Meter strength={passwordStrength(form.password)} short={form.password.length < 8} />}
             <SetupProblem>{error}</SetupProblem>
           </div>

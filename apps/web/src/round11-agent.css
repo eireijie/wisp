@@ -48,3 +48,8 @@ a.r11-li:hover, button.r11-li:hover, a.r11-li:focus-visible, button.r11-li:focus
 /* Edit › Voice calls: the voice rows, on the board's card */
 .r11-voice > div { background: var(--r11-card); border-radius: 16px; }
 .r11-voice > div > button, .r11-voice > div > label { min-height: 48px; font-size: 15px; }
+
+/* Round 16, board 16: the Name in Edit is its own bordered field with a pencil (InPlace), so the group around it drops its box. */
+.r11-grp:has(> .r11-li > [data-inplace-field]) { background: none; border-radius: 0; overflow: visible; }
+.r11-li:has(> [data-inplace-field]) { padding: 0; border: 0; }
+.r11-page [data-inplace-field] { background: var(--r11-card); }
