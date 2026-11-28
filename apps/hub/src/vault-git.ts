@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import zlib from "node:zlib";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { accessChecker, atLeast, type Decision, type Viewer } from "@bubble-ai/core";
-import { VaultError, isHiddenPath } from "@bubble-ai/vault";
+import { VaultError, isHiddenPath, trustVaultGit } from "@bubble-ai/vault";
 import type { Hub } from "./hub.ts";
 
 /**
@@ -30,7 +30,7 @@ const run = promisify(execFile);
 const ZERO = "0".repeat(40);
 // Git for Windows can't open os.devNull (\\.\nul) as a config file, but maps "/dev/null" itself
 const NO_CONFIG = { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: process.platform === "win32" ? "/dev/null" : os.devNull, GIT_TERMINAL_PROMPT: "0" };
-const git = (cwd: string, args: string[]) => run("git", args, { cwd, env: { ...process.env, ...NO_CONFIG }, maxBuffer: 256 * 1024 * 1024 });
+const git = (cwd: string, args: string[]) => run("git", args, { cwd, env: trustVaultGit({ ...process.env, ...NO_CONFIG }), maxBuffer: 256 * 1024 * 1024 });
 
 export const GIT_PATH = "/git/vault.git";
 
@@ -135,7 +135,7 @@ function backend(root: string, req: { method: string; pathInfo: string; query: s
   if (req.encoding) env.HTTP_CONTENT_ENCODING = req.encoding;
   if (req.protocol) env.HTTP_GIT_PROTOCOL = req.protocol;
   return new Promise((resolve, reject) => {
-    const child = spawn("git", ["http-backend"], { env, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn("git", ["http-backend"], { env: trustVaultGit(env), stdio: ["pipe", "pipe", "pipe"] });
     const timer = setTimeout(() => child.kill(), 15 * 60_000);
     child.on("close", () => clearTimeout(timer));
     child.stdin.on("error", () => undefined);
